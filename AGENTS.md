@@ -1,15 +1,68 @@
 # AI Agent Instructions for This Repository
 
-This repository includes an MCP (Model Context Protocol) server for TODO and knowledge graph management, with automatic discovery in VS Code, Cursor, and Windsurf.
+This repository contains **Mimir** - a production-ready MCP (Model Context Protocol) server that provides **Graph-RAG TODO tracking** with **multi-agent orchestration capabilities**. The system combines hierarchical task management with associative memory networks, backed by Neo4j for persistent storage.
 
 ---
 
 ## 🚀 Quick Start
 
-**The MCP server is automatically configured!** Just:
-1. Run `npm install && npm run build`
-2. Open this workspace in VS Code/Cursor/Windsurf
-3. MCP tools will be automatically available
+**✅ PRODUCTION READY** - The system is fully implemented and tested:
+
+1. **Install & Build**: `npm install && npm run build`
+2. **Start Neo4j**: `docker-compose up -d` (removes existing containers automatically)
+3. **Use as MCP Server**: Connect via stdio transport
+4. **Use as Global Commands**: Available as `mimir`, `mimir-chain`, `mimir-execute` (via npm link)
+
+---
+
+## 🎯 Current Implementation Status (v1.0.0)
+
+### ✅ **COMPLETED** - Core Infrastructure
+- **Neo4j Graph Database**: Persistent storage with full CRUD operations
+- **MCP Server**: 26 tools (22 graph + 4 file indexing) 
+- **File Indexing**: Automatic file watching and indexing with .gitignore support
+- **Multi-Agent Locking**: Optimistic locking for concurrent agent execution
+- **Context Isolation**: Filtered context delivery per agent type (PM/Worker/QC)
+- **LangChain 1.0.1 Migration**: Updated to latest LangChain with LangGraph
+- **Global CLI Tools**: npm-linked binaries for system-wide usage
+- **Docker Deployment**: Production-ready containerization
+
+### ✅ **COMPLETED** - Advanced Multi-Agent Features (Phase 2)
+- **Worker Agent Context Isolation**: 90%+ context reduction for focused execution
+- **QC Agent Verification System**: Adversarial validation with feedback loops  
+- **Agent Performance Metrics**: Task completion tracking and scoring
+- **Optimistic Locking**: Race condition prevention for concurrent agents
+
+### 🔄 **IN PROGRESS** - Documentation & Migration Cleanup
+- **Documentation Updates**: Aligning docs with current implementation
+- **Migration Artifacts**: Cleaning up from old repository structure
+
+---
+
+## 📚 Architecture Overview
+
+### Core Components
+
+**1. Graph Database (Neo4j)**
+- Persistent storage for nodes (TODOs, files, concepts) and relationships
+- Full-text search with indexing
+- Multi-hop graph traversal for associative memory
+- Atomic transactions with ACID compliance
+
+**2. MCP Tools (26 total)**
+- **Graph Operations**: 12 single + 5 batch + 4 locking + 1 context isolation
+- **File Indexing**: 4 tools for automatic file watching and indexing
+- **Multi-Agent Support**: Optimistic locking and context filtering
+
+**3. Agent Orchestration**
+- **PM Agent**: Research, planning, task breakdown with full context
+- **Worker Agents**: Ephemeral execution with filtered context (90% reduction)
+- **QC Agent**: Adversarial validation with requirement verification
+
+**4. Context Management**
+- **Memory Offloading**: Store rich context in graph nodes vs. conversation
+- **Associative Recall**: Find related information through graph relationships  
+- **Context Filtering**: Agent-specific context delivery (PM/Worker/QC)
 
 ---
 
@@ -61,7 +114,49 @@ This repository includes an MCP (Model Context Protocol) server for TODO and kno
 
 ---
 
-## �� Context Management Protocol
+## 🔧 Available MCP Tools (26 Total)
+
+**Graph Operations - Single Node Management (12 tools):**
+- `graph_add_node` - Create nodes (todo, file, concept, person, project, etc.)
+- `graph_get_node` - Retrieve node by ID with full context
+- `graph_update_node` - Update node properties (merge operation)
+- `graph_delete_node` - Delete node and cascade relationships
+- `graph_add_edge` - Create relationships between nodes
+- `graph_delete_edge` - Remove specific relationships
+- `graph_query_nodes` - Filter nodes by type/properties
+- `graph_search_nodes` - Full-text search across all nodes
+- `graph_get_edges` - Get relationships connected to a node
+- `graph_get_neighbors` - Find connected nodes (with depth traversal)
+- `graph_get_subgraph` - Extract connected subgraph (multi-hop)
+- `graph_clear` - Clear data from graph (by type or ALL)
+
+**Graph Operations - Batch Processing (5 tools):**
+- `graph_add_nodes` - Bulk create multiple nodes
+- `graph_update_nodes` - Bulk update multiple nodes
+- `graph_delete_nodes` - Bulk delete multiple nodes
+- `graph_add_edges` - Bulk create multiple relationships
+- `graph_delete_edges` - Bulk delete multiple relationships
+
+**Graph Operations - Multi-Agent Locking (4 tools):**
+- `graph_lock_node` - Acquire exclusive lock on node (with timeout)
+- `graph_unlock_node` - Release lock on node
+- `graph_query_available_nodes` - Query unlocked nodes only
+- `graph_cleanup_locks` - Clean up expired locks
+
+**File Indexing System (4 tools):**
+- `watch_folder` - Start watching directories for file changes
+- `unwatch_folder` - Stop watching directories
+- `index_folder` - Manual bulk indexing of directory
+- `list_watched_folders` - View active file watchers
+
+**Context Management (1 tool):**
+- `get_task_context` - Get filtered context by agent type (PM/Worker/QC)
+
+---
+
+## 🎯 Usage Patterns
+
+## 🎯 Usage Patterns
 
 ### This System is Two Things:
 
@@ -69,8 +164,6 @@ This repository includes an MCP (Model Context Protocol) server for TODO and kno
 **2. Memory System** - Store context, recall on-demand, build associative knowledge networks
 
 **Core Paradigm:** Your conversation is **working memory** (7±2 items, temporary). This MCP server is your **long-term memory** (unlimited, persistent, associative). Store TODO tasks with rich context, track them through completion, and build knowledge graphs of relationships.
-
-**📘 See [MEMORY_GUIDE.md](docs/architecture/MEMORY_GUIDE.md) for comprehensive memory strategies**
 
 ### When to Use MCP Tools
 
@@ -85,21 +178,21 @@ This repository includes an MCP (Model Context Protocol) server for TODO and kno
 ### Standard Workflow (Single Agent)
 
 **For TODO Tracking:**
-1. **Create TODOs**: `create_todo` for tasks/phases with rich context
+1. **Create TODOs**: `graph_add_node` with type="todo" for tasks/phases with rich context
 2. **Track Progress**: Update status (`pending` → `in_progress` → `completed`)
-3. **Add Notes**: `add_todo_note` for timestamped observations as work progresses
-4. **Organize**: Use parent-child relationships for hierarchical task breakdown
+3. **Add Context**: Store file paths, errors, decisions in node properties
+4. **Organize**: Use `graph_add_edge` with "depends_on"/"part_of" relationships
 
 **For Memory Management:**
-1. **Store Context**: `create_todo` + `context` field to offload file paths, errors, decisions
-2. **Reference by ID**: Use "Working on todo-1-xxx" instead of repeating details in every message
-3. **Recall On-Demand**: `get_todo(id)` to retrieve stored context when actively working
-4. **Search When Lost**: `graph_search_nodes('keyword')` to find forgotten TODO context
-5. **Build Knowledge Graph**: `graph_add_node` for entities, `graph_add_edge` for relationships
+1. **Store Context**: `graph_add_node` + properties field to offload file paths, errors, decisions
+2. **Reference by ID**: Use "Working on node-1-xxx" instead of repeating details in every message
+3. **Recall On-Demand**: `graph_get_node(id)` to retrieve stored context when actively working
+4. **Search When Lost**: `graph_search_nodes('keyword')` to find forgotten context
+5. **Build Knowledge Graph**: Link related entities with `graph_add_edge`
 
 **Combined Approach:** Store TODOs with rich context, track them to completion, link them to knowledge graph entities (files, concepts, dependencies)
 
-### Multi-Agent Orchestration (NEW - v3.0+)
+### Multi-Agent Orchestration (✅ IMPLEMENTED)
 
 **🎯 Goal:** Agent-scoped context management with ephemeral workers and adversarial validation
 
@@ -129,7 +222,7 @@ PM Agent (Long-lived)          Worker Agents (Ephemeral)        QC Agent (Valida
 **Worker Agent Workflow:**
 1. **Claim Task**: Atomically lock task (prevents duplicate work)
    ```javascript
-   graph_lock_node({taskId: 'task-id', agentId: 'worker-1', timeoutMs: 300000})
+   graph_lock_node({nodeId: 'task-id', agentId: 'worker-1', timeoutMs: 300000})
    ```
 2. **Pull Filtered Context**: Use `get_task_context` for automatic 90%+ context reduction
    ```javascript
@@ -139,7 +232,7 @@ PM Agent (Long-lived)          Worker Agents (Ephemeral)        QC Agent (Valida
    - Strips 90%+ of PM research, planningNotes, alternatives, full subgraph
 3. **Execute**: Complete task with focused context (zero prior conversation history)
 4. **Store Output**: `graph_update_node({id: 'task-id', properties: {workerOutput, status: 'awaiting_qc'}})`
-5. **Release Lock**: `graph_unlock_node({taskId: 'task-id', agentId: 'worker-1'})`
+5. **Release Lock**: `graph_unlock_node({nodeId: 'task-id', agentId: 'worker-1'})`
 6. **Terminate**: Worker exits immediately (context naturally pruned)
 
 **QC Agent Workflow:**
@@ -167,11 +260,10 @@ PM Agent (Long-lived)          Worker Agents (Ephemeral)        QC Agent (Valida
 ```javascript
 // Optimistic Locking Pattern
 try {
-  lock_todo({
-    id: 'task-id',
-    agent_id: 'worker-1',
-    version: current_version + 1,
-    timeout: 300 // 5 min auto-expiry
+  graph_lock_node({
+    nodeId: 'task-id',
+    agentId: 'worker-1',
+    timeoutMs: 300000 // 5 min auto-expiry
   })
 } catch (VersionConflictError) {
   // Another worker claimed task - retry with different task
@@ -184,9 +276,9 @@ try {
 ❌ Not tracking tasks with TODOs (losing sight of what's pending/in-progress/completed)  
 ❌ Repeating file lists in every message (store in TODO context once, recall by ID)  
 ❌ Restating error messages already stored in TODOs (memory duplication)  
-❌ Asking user "what were we working on?" (check `list_todos(status='in_progress')` first)  
+❌ Asking user "what were we working on?" (check `graph_query_nodes({type: 'todo', filters: {status: 'in_progress'}})` first)  
 ❌ Abandoning TODO tracker after 20+ messages (exactly when task tracking is most valuable!)  
-❌ Not using parent-child TODOs for complex projects (flat lists instead of hierarchical structure)
+❌ Not using graph relationships for complex projects (flat lists instead of hierarchical structure)
 
 **Multi-Agent:**
 ❌ Workers accessing PM's full research context (context bloat)  
@@ -197,57 +289,14 @@ try {
 
 ---
 
-## 🔧 Available MCP Tools
-
-This workspace provides **26 MCP tools** automatically:
-
-**Graph Operations - Single (12 tools):**
-- `graph_add_node` - Create entity (file/person/concept/project/todo)
-- `graph_get_node` - Retrieve entity by ID
-- `graph_update_node` - Update entity properties
-- `graph_delete_node` - Delete entity (cascades to edges)
-- `graph_add_edge` - Link entities with relationships
-- `graph_delete_edge` - Remove relationship between entities
-- `graph_query_nodes` - Filter by type/properties
-- `graph_search_nodes` - Full-text search across all nodes
-- `graph_get_edges` - Get all edges connected to a node
-- `graph_get_neighbors` - Find nodes connected to a given node
-- `graph_get_subgraph` - Extract connected subgraph (multi-hop traversal)
-- `graph_clear` - Clear data from graph (by type or ALL)
-
-**Graph Operations - Batch (5 tools):**
-- `graph_add_nodes` - Bulk create multiple nodes
-- `graph_update_nodes` - Bulk update multiple nodes
-- `graph_delete_nodes` - Bulk delete multiple nodes
-- `graph_add_edges` - Bulk create multiple relationships
-- `graph_delete_edges` - Bulk delete multiple relationships
-
-**Graph Operations - Multi-Agent Locking (4 tools):**
-- ⚡ `graph_lock_node` - Acquire exclusive lock on node (optimistic locking)
-- ⚡ `graph_unlock_node` - Release lock on node
-- ⚡ `graph_query_available_nodes` - Query unlocked nodes (filter by lock status)
-- ⚡ `graph_cleanup_locks` - Clean up expired locks
-
-**File Indexing (4 tools):**
-- `watch_folder` - Start watching directories for file changes
-- `unwatch_folder` - Stop watching directories
-- `index_folder` - Manual bulk indexing of directory
-- `list_watched_folders` - View active file watchers
-
-**Context Isolation (1 tool):**
-- ⚡ `get_task_context` - Get filtered context by agent type (PM/worker/QC) - implements 90%+ context reduction for workers
-
----
-
-## 📋 Quick Checklist for Agents
+##  Quick Checklist for Agents
 
 Before starting work:
 
-- [ ] Read [CVS Health Instructions](./.agents/cvs.instructions.md) for enterprise policies
 - [ ] Verify MCP server is built (`npm run build`)
 - [ ] Understand context offloading workflow (see above)
 - [ ] Know when to use TODOs vs. knowledge graph
-- [ ] Set up periodic refresh (every 15 messages: `list_todos()`)
+- [ ] Set up periodic refresh (every 15 messages: check active todos)
 
 ---
 
@@ -256,19 +305,18 @@ Before starting work:
 ### Context Drift Prevention
 
 **Every 15 messages, you MUST:**
-1. Call `list_todos(status='in_progress')` to sync
+1. Call `graph_query_nodes({type: 'todo', filters: {status: 'in_progress'}})` to sync
 2. Review progress on current TODO
 3. Update TODO status if completed
-4. Add progress note via `add_todo_note`
+4. Add progress notes via `graph_update_node`
 
 ### After Context Summarization
 
 **IMMEDIATELY:**
-1. Call `list_todos(status='in_progress')`
-2. Call `get_todo(id)` for each active TODO
-3. Call `graph_get_stats()` to verify graph state
-4. Use `graph_search_nodes('keyword')` if details are missing
-5. **NEVER** ask user "what were we working on?"
+1. Call `graph_query_nodes({type: 'todo', filters: {status: 'in_progress'}})`
+2. Call `graph_get_node(id)` for each active TODO
+3. Use `graph_search_nodes('keyword')` if details are missing
+4. **NEVER** ask user "what were we working on?"
 
 ---
 
@@ -282,17 +330,9 @@ Before starting work:
 
 ---
 
-## 📞 Support & Questions
-
-- **Technical Issues**: See [REPOSITORY_MCP_SETUP.md](./REPOSITORY_MCP_SETUP.md) troubleshooting section
-- **Enterprise Policies**: Contact `ai-governance@cvshealth.com`
-- **Feature Requests**: GitHub Issues or `ai-support@cvshealth.com`
-
----
-
-**Last Updated:** 2025-10-07  
-**Version:** 2.0.0  
-**Maintainer:** CVS Health Enterprise AI Team
+**Last Updated:** 2025-10-18  
+**Version:** 1.0.0  
+**Maintainer:** Mimir Development Team
 
 ---
 

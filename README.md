@@ -1,41 +1,389 @@
-# TODO Tracker + External Memory System for AI Agents
+# Mimir - Graph-RAG TODO Tracker with Multi-Agent Orchestration
 
-A Model Context Protocol (MCP) server combining **TODO tracking** with **external memory** for AI agents. Track tasks hierarchically while storing rich context in structured memories (TODOs) and associative memory networks (Knowledge Graph). Manage complex projects with full task tracking, context offloading, and intelligent recall—preventing context window overload while maintaining complete visibility into work progress.
+A production-ready Model Context Protocol (MCP) server that provides **Graph-RAG TODO tracking** with **multi-agent orchestration capabilities**. Combines hierarchical task management with associative memory networks, backed by Neo4j for persistent storage.
 
-## Core Features: TODO Tracking + Memory System
+## ✅ Current Status (v1.0.0)
 
-### 🎯 TODO Tracking with Rich Context
-- **Task Management**: Create, update, and track TODOs with status/priority
-- **Hierarchical Organization**: Parent-child relationships for project/phase/task breakdown
-- **Progress Tracking**: Move tasks through pending → in_progress → completed → blocked
-- **Rich Context Storage**: Every TODO stores detailed context (files, errors, decisions, dependencies)
-- **Timestamped Notes**: Add observations as work progresses without overwriting
-- **Incremental Updates**: Append new findings to existing TODO context
+**PRODUCTION READY** - Fully implemented and tested:
+- **Neo4j Graph Database**: Persistent storage with ACID compliance
+- **26 MCP Tools**: 22 graph operations + 4 file indexing tools
+- **Multi-Agent Locking**: Optimistic locking for concurrent execution
+- **Context Isolation**: 90%+ context reduction for worker agents
+- **File Indexing**: Automatic file watching with .gitignore support
+- **Global CLI Tools**: `mimir`, `mimir-chain`, `mimir-execute`
+- **Docker Deployment**: Production containerization
+- **LangChain 1.0.1**: Latest LangChain with LangGraph integration
 
-**Think:** Traditional TODO tracker + rich context storage for every task
+## 🚀 Quick Start
 
-### 🕸️ Associative Memories (Knowledge Graph)
-- **Entity Networks**: Model files, concepts, people, projects as connected memories
-- **Relationship Mapping**: Build associative networks like human memory connections
-- **Multi-Hop Reasoning**: Traverse memory clusters with subgraph extraction
-- **Associative Recall**: Find memories by relationship, not just ID
+### Prerequisites
+- Node.js 18+ 
+- Docker & Docker Compose
+- Git
 
-**Think:** Associative memory network—like how your brain links related concepts
+### Installation & Setup
 
-### 🔍 Memory Operations
-- **Store & Recall**: Offload context to external memory, retrieve on-demand
-- **Search & Filter**: Find memories by content, type, status, or relationships
-- **Intelligent Ranking**: Get best matches first (relevance, recency, trust, importance)
-- **Batch Operations**: Bulk memory storage and linking for efficiency
+#### 1. Clone and Install Dependencies
+```bash
+# Clone the repository
+git clone <repo-url>
+cd mimir
 
-### 🔄 Context Management
-- **Pull → Prune → Pull**: Research-backed context cycling
-- **Memory Hierarchy**: Project/Phase/Task context tiers (hot/warm/cold)
-- **Context Verification**: Trust scoring and provenance tracking
-- **Time-based Decay**: Natural memory decay (24h/7d/permanent)
-- **Persistent Storage**: Memories survive restarts with atomic writes
+# Install project dependencies
+npm install
 
-**Think:** Your working memory stays clean, long-term memory persists through restarts
+# Install global TypeScript tools
+npm install -g ts-node typescript
+
+# Build the project
+npm run build
+```
+
+#### 2. GitHub CLI & Authentication Setup
+```bash
+# Install GitHub CLI (if not already installed)
+brew install gh  # macOS
+# or: sudo apt install gh  # Ubuntu
+# or: winget install GitHub.CLI  # Windows
+
+# Authenticate with GitHub (one-time setup)
+gh auth login
+
+# Verify authentication
+gh auth status
+```
+
+**Note**: On first authentication, you'll see a prompt like:
+```
+! First copy your one-time code: "ABCD-EFGH"
+Press Enter to open https://github.com/login/device in your browser...
+```
+Follow the instructions to complete authentication.
+
+#### 3. Copilot API Proxy Setup
+```bash
+# Install copilot-api globally (OpenAI-compatible proxy)
+npm install -g copilot-api
+
+# Start Copilot proxy server (runs in background)
+copilot-api start &
+
+# Verify it's running
+curl http://localhost:4141/v1/models
+```
+
+**First-time setup**: The copilot-api will also prompt for authentication similar to GitHub CLI.
+
+#### 4. Test LLM Connection
+```bash
+# Test Node.js connection to Copilot API
+node -e "const {ChatOpenAI} = require('@langchain/openai'); const llm = new ChatOpenAI({openAIApiKey: 'dummy-key-not-used', configuration: {baseURL: 'http://localhost:4141/v1'}}); llm.invoke('Hello!').then(r => console.log('✅ Copilot Response:', r.content));"
+```
+
+**Expected output:**
+```
+✅ Copilot Response: Hi! How can I assist you today?
+```
+
+#### 5. Start Neo4j Database
+```bash
+# Start Neo4j database
+docker-compose up -d
+
+# Verify Neo4j is running
+curl http://localhost:7474
+```
+
+#### 6. Optional: Install Global Commands
+```bash
+# Make mimir commands available globally
+npm link
+
+# Test global commands
+mimir-chain --help
+```
+
+### Folder Configuration & File Indexing
+
+#### Initial Folder Setup
+The system can automatically index and watch folders for changes. By default, Docker Compose mounts your workspace:
+
+```yaml
+# docker-compose.yml (already configured)
+volumes:
+  - .:/workspace  # Mounts current directory as /workspace
+```
+
+#### Adding Folders for Indexing
+Use the `watch_folder` MCP tool to add directories for automatic indexing:
+
+```javascript
+// Example: Index a project folder
+await mcp.call('watch_folder', {
+  path: '/workspace/src',           // Must be under mounted path
+  recursive: true,                  // Watch subdirectories
+  debounce_ms: 500,                // File change debounce
+  file_patterns: ['*.ts', '*.js', '*.md']  // File types to index
+});
+
+// Example: Index multiple project folders
+await mcp.call('watch_folder', {
+  path: '/workspace/docs',
+  recursive: true,
+  file_patterns: ['*.md', '*.txt']
+});
+```
+
+#### Folder Path Requirements
+- **Root Path**: All watched folders must be under `/workspace` (Docker mount)
+- **Sub-folders**: You can add any sub-folder: `/workspace/src`, `/workspace/docs`, etc.
+- **Recursive**: Set `recursive: true` to watch subdirectories automatically
+- **File Patterns**: Use glob patterns to filter file types: `['*.ts', '*.js']`
+
+#### Managing Watched Folders
+```javascript
+// List currently watched folders
+await mcp.call('list_watched_folders');
+
+// Stop watching a folder
+await mcp.call('unwatch_folder', {
+  path: '/workspace/src'
+});
+
+// Manually index a folder (one-time)
+await mcp.call('index_folder', {
+  path: '/workspace/new-project',
+  recursive: true
+});
+```
+
+#### File Indexing Features
+- **Automatic Detection**: Files are indexed on add/change/delete
+- **Gitignore Support**: Respects `.gitignore` files automatically
+- **Content Analysis**: Extracts file content, metadata, and relationships
+- **Graph Storage**: Files stored as nodes with content searchable via `graph_search_nodes`
+
+### Usage
+
+**As MCP Server (stdio transport):**
+```bash
+node build/index.js
+```
+
+**As Global CLI Tools:**
+```bash
+mimir-chain "Create a todo tracking system"
+mimir-execute chain-output.md
+```
+
+**As HTTP Server:**
+```bash
+npm run start:http  # Starts on port 3000
+```
+
+## 📊 Architecture
+
+### Core Components
+
+**1. Neo4j Graph Database**
+- Persistent storage for nodes (todos, files, concepts) and relationships
+- Full-text search with indexing  
+- Multi-hop graph traversal for associative memory
+- Atomic transactions with ACID compliance
+
+**2. MCP Tools (26 total)**
+- **Graph Operations**: 12 single + 5 batch + 4 locking + 1 context isolation
+- **File Indexing**: 4 tools for automatic file watching and indexing
+
+**3. Multi-Agent Support**
+- **Optimistic Locking**: Race condition prevention
+- **Context Isolation**: Agent-specific filtered context delivery
+- **Ephemeral Workers**: Clean context management
+
+## 🛠️ Available Tools
+
+### Graph Operations - Single Node Management (12 tools)
+- `graph_add_node` - Create nodes (todo, file, concept, etc.)
+- `graph_get_node` - Retrieve node by ID with full context
+- `graph_update_node` - Update node properties (merge operation)
+- `graph_delete_node` - Delete node and cascade relationships
+- `graph_add_edge` - Create relationships between nodes
+- `graph_delete_edge` - Remove specific relationships
+- `graph_query_nodes` - Filter nodes by type/properties
+- `graph_search_nodes` - Full-text search across all nodes
+- `graph_get_edges` - Get relationships connected to a node
+- `graph_get_neighbors` - Find connected nodes (with depth traversal)
+- `graph_get_subgraph` - Extract connected subgraph (multi-hop)
+- `graph_clear` - Clear data from graph (by type or ALL)
+
+### Graph Operations - Batch Processing (5 tools)
+- `graph_add_nodes` - Bulk create multiple nodes
+- `graph_update_nodes` - Bulk update multiple nodes  
+- `graph_delete_nodes` - Bulk delete multiple nodes
+- `graph_add_edges` - Bulk create multiple relationships
+- `graph_delete_edges` - Bulk delete multiple relationships
+
+### Graph Operations - Multi-Agent Locking (4 tools)
+- `graph_lock_node` - Acquire exclusive lock on node (with timeout)
+- `graph_unlock_node` - Release lock on node
+- `graph_query_available_nodes` - Query unlocked nodes only
+- `graph_cleanup_locks` - Clean up expired locks
+
+### File Indexing System (4 tools)
+- `watch_folder` - Start watching directories for file changes
+- `unwatch_folder` - Stop watching directories
+- `index_folder` - Manual bulk indexing of directory
+- `list_watched_folders` - View active file watchers
+
+### Context Management (1 tool)
+- `get_task_context` - Get filtered context by agent type (PM/Worker/QC)
+
+## 🔧 Troubleshooting Setup
+
+### GitHub Authentication Issues
+```bash
+# If authentication fails
+gh auth logout
+gh auth login
+
+# Check authentication status
+gh auth status
+
+# Verify token permissions
+gh auth token
+```
+
+### Copilot API Issues
+```bash
+# If copilot-api won't start
+killall copilot-api  # Stop any existing instances
+copilot-api start    # Start fresh
+
+# Check if proxy is running
+curl http://localhost:4141/v1/models
+
+# If port 4141 is busy
+lsof -ti:4141 | xargs kill  # Kill process using port 4141
+copilot-api start --port 4142  # Use different port
+```
+
+### Neo4j Connection Issues
+```bash
+# Check if Neo4j container is running
+docker ps | grep neo4j
+
+# Restart Neo4j if needed
+docker-compose down
+docker-compose up -d
+
+# Check Neo4j logs
+docker-compose logs neo4j
+
+# Test Neo4j connection
+curl http://localhost:7474
+```
+
+### Build Issues
+```bash
+# If TypeScript compilation fails
+npm run build
+
+# Check for missing dependencies
+npm install
+
+# Clear build cache
+rm -rf build/
+npm run build
+```
+
+### LLM Connection Test Failures
+If the Node.js test fails:
+
+1. **Check Copilot API**: Ensure `curl http://localhost:4141/v1/models` returns JSON
+2. **Check GitHub Auth**: Run `gh auth status` to verify authentication
+3. **Check Dependencies**: Ensure `@langchain/openai` is installed
+4. **Try Alternative**: Use different port if 4141 is occupied
+
+```bash
+# Alternative test with custom port
+node -e "const {ChatOpenAI} = require('@langchain/openai'); const llm = new ChatOpenAI({openAIApiKey: 'dummy', configuration: {baseURL: 'http://localhost:4142/v1'}}); llm.invoke('test').then(r => console.log('Success:', r.content)).catch(e => console.error('Failed:', e.message));"
+```
+
+## 💡 Usage Patterns
+
+### Single Agent Workflow
+```javascript
+// 1. Create a task
+const task = await graph_add_node({
+  type: "todo",
+  properties: {
+    title: "Implement user auth",
+    description: "Add JWT authentication to API",
+    status: "pending",
+    priority: "high",
+    context: {
+      files: ["src/auth.ts", "src/routes.ts"],
+      requirements: ["JWT tokens", "Password hashing", "Session management"]
+    }
+  }
+});
+
+// 2. Work on the task
+await graph_update_node({
+  id: task.id,
+  properties: { status: "in_progress", startedAt: Date.now() }
+});
+
+// 3. Add progress notes
+await graph_update_node({
+  id: task.id, 
+  properties: {
+    notes: "Implemented JWT middleware, need to add password hashing",
+    progress: 60
+  }
+});
+
+// 4. Complete the task
+await graph_update_node({
+  id: task.id,
+  properties: { status: "completed", completedAt: Date.now() }
+});
+```
+
+### Multi-Agent Workflow
+```javascript
+// PM Agent: Create task breakdown
+const project = await graph_add_node({type: "project", properties: {...}});
+const task1 = await graph_add_node({type: "todo", properties: {...}});
+await graph_add_edge({source: task1.id, target: project.id, type: "part_of"});
+
+// Worker Agent: Claim and execute
+const locked = await graph_lock_node({
+  nodeId: task1.id, 
+  agentId: "worker-1", 
+  timeoutMs: 300000
+});
+
+const context = await get_task_context({
+  taskId: task1.id, 
+  agentType: "worker"  // Gets filtered context (90% reduction)
+});
+
+// Execute task with clean context...
+await graph_update_node({
+  id: task1.id,
+  properties: {workerOutput: result, status: "awaiting_qc"}
+});
+
+await graph_unlock_node({nodeId: task1.id, agentId: "worker-1"});
+
+// QC Agent: Verify output
+const qcContext = await get_task_context({
+  taskId: task1.id,
+  agentType: "qc"
+});
+// Verify and approve/reject...
+```
 
 ## Documentation
 
@@ -84,20 +432,98 @@ A Model Context Protocol (MCP) server combining **TODO tracking** with **externa
 - 📈 **[Claudette vs BeastMode](docs/results/CLAUDETTE_VS_BEASTMODE.md)** - Comparison
 - 🐳 **[Docker Migration Prompts](docs/results/DOCKER_MIGRATION_PROMPTS.md)** - Migration example
 
-## 🚀 Future Roadmap
+## � Docker Deployment
 
-### Phase 4: Deployment Infrastructure (v3.1 - Q1 2026)
-- **Remote Centralized Server**: Deploy as centralized memory service
-- **Multi-tenancy**: Support for distributed agent teams
-- **Database Persistence**: PostgreSQL/Redis backend
-- **Docker & Kubernetes**: Production-ready deployments
-- **Authentication & Authorization**: JWT-based security
+### Development (with Neo4j)
+```bash
+# Start Neo4j only
+docker-compose up -d
 
-### Phase 5: Enterprise Features (v3.2 - Q2 2026)
-- **Complete Audit Trail**: Enterprise-level compliance tracking
-- **Agent Activity Monitoring**: Real-time agent behavior analysis
-- **Validation Chain**: End-to-end validation with provenance
-- **Compliance Reporting**: Automated compliance reports (GDPR/SOC2)
+# Run MCP server locally
+npm run build
+npm start
+```
+
+### Production (full containerization)
+```bash
+# Build and start all services
+npm run docker:up
+
+# View logs
+npm run docker:logs
+
+# Execute commands inside container
+npm run docker:exec
+```
+
+### Environment Variables
+```bash
+# Neo4j Configuration
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=password
+
+# Optional: HTTP Server
+PORT=3000
+HOST=0.0.0.0
+```
+
+## 🔧 Development
+
+### Commands
+```bash
+npm run build          # Compile TypeScript
+npm run start          # Start MCP server (stdio)
+npm run start:http     # Start HTTP server
+npm run test           # Run test suite
+npm run test:coverage  # Run tests with coverage
+npm run docker:up      # Start Docker environment
+npm run docker:down    # Stop Docker environment
+```
+
+### Project Structure
+```
+src/
+├── index.ts              # Main MCP server entry point
+├── http-server.ts        # HTTP transport server
+├── managers/             # Core business logic
+│   ├── GraphManager.ts   # Neo4j graph operations
+│   └── ContextManager.ts # Multi-agent context filtering
+├── tools/                # MCP tool definitions
+│   ├── graph.tools.ts    # Graph operation tools
+│   └── fileIndexing.tools.ts # File watching tools
+├── types/                # TypeScript type definitions
+├── indexing/             # File indexing system
+└── orchestrator/         # Multi-agent orchestration
+    ├── agent-chain.ts    # Agent chaining system
+    ├── task-executor.ts  # Task execution engine
+    └── llm-client.ts     # LangChain integration
+```
+
+## 🤖 Multi-Agent Orchestration
+
+The system supports advanced multi-agent workflows with:
+
+- **PM Agents**: Research and planning with full context
+- **Worker Agents**: Ephemeral execution with filtered context (90% reduction)
+- **QC Agents**: Adversarial validation and quality control
+- **Optimistic Locking**: Prevents race conditions between agents
+- **Context Isolation**: Agent-specific context delivery
+
+### Agent Tools
+```bash
+# Create agent configurations
+npm run create-agent
+
+# Chain multiple agents
+npm run chain
+
+# Execute specific tasks  
+npm run execute
+
+# Validate agent performance
+npm run validate
+```
 - **Rate Limiting & Quotas**: Resource management per team
 
 **📋 Full roadmap:** See [Implementation Roadmap](docs/architecture/MULTI_AGENT_ROADMAP.md) for detailed implementation plans
