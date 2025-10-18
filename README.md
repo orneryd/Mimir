@@ -16,102 +16,109 @@ A production-ready Model Context Protocol (MCP) server that provides **Graph-RAG
 
 ## 🚀 Quick Start
 
-### Prerequisites
+### One-Command Installation
+
+**Complete setup in one command:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/orneryd/GRAPH-RAG-TODO/main/install.sh | bash
+```
+
+### Alternative: Clone & Setup
+
+```bash
+git clone https://github.com/orneryd/GRAPH-RAG-TODO.git
+cd GRAPH-RAG-TODO
+./scripts/setup.sh
+```
+
+**What this does:**
+- ✅ Validates prerequisites (Node.js 18+, Docker, Git)
+- ✅ Installs all dependencies (including dev dependencies)
+- ✅ Builds the TypeScript project
+- ✅ Sets up GitHub CLI authentication
+- ✅ Configures Copilot API proxy
+- ✅ Starts Neo4j database
+- ✅ Creates global commands (`mimir`, `mimir-chain`, `mimir-execute`)
+- ✅ Verifies installation
+
+**Prerequisites** (auto-detected with installation instructions if missing):
 - Node.js 18+ 
 - Docker & Docker Compose
-- Git
+- Git 2.20+
 
-### Installation & Setup
+### Manual Setup (Alternative)
+
+If you prefer step-by-step setup or need to troubleshoot:
 
 #### 1. Clone and Install Dependencies
 ```bash
-# Clone the repository
-git clone <repo-url>
-cd mimir
-
-# Install project dependencies
-npm install
-
-# Install global TypeScript tools
-npm install -g ts-node typescript
-
-# Build the project
-npm run build
+git clone https://github.com/orneryd/GRAPH-RAG-TODO.git
+cd GRAPH-RAG-TODO
+npm run setup:complete  # Runs automated setup script
 ```
 
-#### 2. GitHub CLI & Authentication Setup
+#### 2. Individual Setup Steps
 ```bash
-# Install GitHub CLI (if not already installed)
-brew install gh  # macOS
-# or: sudo apt install gh  # Ubuntu
-# or: winget install GitHub.CLI  # Windows
+npm run setup:deps      # Install dependencies
+npm run setup:auth      # GitHub authentication  
+npm run setup:services  # Start Docker services
+npm run setup:global    # Setup global commands
+npm run setup:verify    # Verify installation
 
-# Authenticate with GitHub (one-time setup)
-gh auth login
-
-# Verify authentication
-gh auth status
 ```
 
-**Note**: On first authentication, you'll see a prompt like:
-```
-! First copy your one-time code: "ABCD-EFGH"
-Press Enter to open https://github.com/login/device in your browser...
-```
-Follow the instructions to complete authentication.
+### Verification & Testing
 
-#### 3. Copilot API Proxy Setup
+After setup completes, verify everything is working:
+
 ```bash
-# Install copilot-api globally (OpenAI-compatible proxy)
-npm install -g copilot-api
-
-# Start Copilot proxy server (runs in background)
-copilot-api start &
-
-# Verify it's running
-curl http://localhost:4141/v1/models
-```
-
-**First-time setup**: The copilot-api will also prompt for authentication similar to GitHub CLI.
-
-#### 4. Test LLM Connection
-```bash
-# Test Node.js connection to Copilot API
-node -e "const {ChatOpenAI} = require('@langchain/openai'); const llm = new ChatOpenAI({openAIApiKey: 'dummy-key-not-used', configuration: {baseURL: 'http://localhost:4141/v1'}}); llm.invoke('Hello!').then(r => console.log('✅ Copilot Response:', r.content));"
-```
-
-**Expected output:**
-```
-✅ Copilot Response: Hi! How can I assist you today?
-```
-
-#### 5. Start Neo4j Database
-```bash
-# Start Neo4j database
-docker-compose up -d
-
-# Verify Neo4j is running
-curl http://localhost:7474
-```
-
-#### 6. Optional: Install Global Commands
-```bash
-# Make mimir commands available globally
-npm link
+# Quick verification
+npm run setup:verify
 
 # Test global commands
+mimir --help
 mimir-chain --help
+mimir-execute --help
+
+# Check services
+curl http://localhost:7474        # Neo4j browser
+curl http://localhost:4141/v1/models  # Copilot API
+
+# View service logs
+docker-compose logs neo4j
+docker-compose logs mcp-server
 ```
+
+### Next Steps
+
+Once setup is complete:
+
+1. **Read the Documentation**: Check `AGENTS.md` for AI agent instructions
+2. **Try the Examples**: See usage examples in the sections below
+3. **Neo4j Browser**: Visit http://localhost:7474 (user: `neo4j`, password: `password`)
+4. **Start Development**: Use `mimir` commands or integrate with your AI workflow
 
 ### Folder Configuration & File Indexing
 
 #### Initial Folder Setup
-The system can automatically index and watch folders for changes. By default, Docker Compose mounts your workspace:
+The system can automatically index and watch folders for changes. By default, Docker Compose mounts your home workspace:
 
 ```yaml
 # docker-compose.yml (already configured)
 volumes:
-  - .:/workspace  # Mounts current directory as /workspace
+  - ${HOST_WORKSPACE_ROOT:-~/src}:/workspace:ro  # Mounts your src folder as /workspace
+```
+
+**Customizing the mount path:**
+```bash
+# Option 1: Set environment variable (recommended)
+export HOST_WORKSPACE_ROOT=~/projects
+docker-compose up -d
+
+# Option 2: Edit docker-compose.yml directly
+# Change the line to your preferred path:
+# - ${HOST_WORKSPACE_ROOT:-/path/to/your/workspace}:/workspace:ro
 ```
 
 #### Adding Folders for Indexing
@@ -238,63 +245,94 @@ npm run start:http  # Starts on port 3000
 ### Context Management (1 tool)
 - `get_task_context` - Get filtered context by agent type (PM/Worker/QC)
 
-## 🔧 Troubleshooting Setup
+## 🔧 Troubleshooting
 
-### GitHub Authentication Issues
+### Setup Script Issues
+
+**If setup.sh fails:**
 ```bash
-# If authentication fails
-gh auth logout
-gh auth login
+# Run setup script with debug output
+bash -x ./scripts/setup.sh
 
-# Check authentication status
-gh auth status
-
-# Verify token permissions
-gh auth token
+# Check individual steps
+npm run setup:verify        # Check prerequisites
+npm run setup:deps          # Install dependencies only
+npm run setup:services      # Start Docker services only
+npm run setup:global        # Setup global commands only
 ```
 
-### Copilot API Issues
+**Missing Prerequisites:**
+The setup script will detect and provide installation instructions for:
+- Node.js 18+ (will show platform-specific install commands)
+- Docker 20+ (will show Docker Desktop or CLI installation)  
+- Git 2.20+ (will show git installation for your OS)
+
+### Common Issues
+
+**Port Conflicts:**
 ```bash
-# If copilot-api won't start
-killall copilot-api  # Stop any existing instances
-copilot-api start    # Start fresh
+# If ports 7474 (Neo4j) or 4141 (Copilot) are busy
+sudo lsof -ti:7474 | xargs kill    # Kill Neo4j port
+sudo lsof -ti:4141 | xargs kill    # Kill Copilot port
 
-# Check if proxy is running
-curl http://localhost:4141/v1/models
-
-# If port 4141 is busy
-lsof -ti:4141 | xargs kill  # Kill process using port 4141
-copilot-api start --port 4142  # Use different port
+# Or use different ports
+export NEO4J_HTTP_PORT=7475
+export COPILOT_API_PORT=4142
 ```
 
-### Neo4j Connection Issues
+**Docker Permission Issues:**
 ```bash
-# Check if Neo4j container is running
-docker ps | grep neo4j
+# Linux: Add user to docker group
+sudo usermod -aG docker $USER
+# Then log out and back in
 
-# Restart Neo4j if needed
-docker-compose down
-docker-compose up -d
-
-# Check Neo4j logs
-docker-compose logs neo4j
-
-# Test Neo4j connection
-curl http://localhost:7474
+# macOS: Ensure Docker Desktop is running
+open -a Docker
 ```
 
-### Build Issues
+**npm Global Command Issues:**
 ```bash
-# If TypeScript compilation fails
+# If global commands aren't available
+npm config set prefix ~/.npm-global
+export PATH=~/.npm-global/bin:$PATH
+echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.bashrc  # or ~/.zshrc
+
+# Alternative: Use npx
+npx mimir --help
+```
+
+**Build Failures:**
+```bash
+# Clean rebuild
+rm -rf node_modules build
+npm install --include=dev
 npm run build
 
-# Check for missing dependencies
-npm install
-
-# Clear build cache
-rm -rf build/
-npm run build
+# Check TypeScript version
+npx tsc --version  # Should be 5.x
 ```
+
+### Getting Help
+
+**Check Service Status:**
+```bash
+npm run setup:verify     # Overall health check
+docker-compose ps        # Container status
+docker-compose logs      # Service logs
+curl http://localhost:7474  # Neo4j health
+curl http://localhost:4141/v1/models  # Copilot API health
+```
+
+**Debug Information:**
+- **Node.js Version**: `node --version` (need 18+)
+- **Docker Version**: `docker --version` (need 20+)
+- **Platform**: macOS, Linux, or Windows
+- **Error Messages**: Full output from setup script
+
+**Resources:**
+- **Documentation**: Check `AGENTS.md` for usage patterns
+- **Examples**: See usage examples in sections below
+- **Issues**: Report problems at https://github.com/orneryd/GRAPH-RAG-TODO/issues
 
 ### LLM Connection Test Failures
 If the Node.js test fails:

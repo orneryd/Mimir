@@ -44,7 +44,7 @@ services:
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
-      - ${HOST_WORKSPACE_ROOT:-/Users/timothysweet/src}:/workspace:ro
+      - ${HOST_WORKSPACE_ROOT:-~/src}:/workspace:ro
     ports:
       - "3000:3000"
     healthcheck:

@@ -1,0 +1,40 @@
+# Test Docker environment for setup script validation
+# This creates a minimal environment with just the base prerequisites
+
+FROM node:20-slim
+
+# Install basic system tools and prerequisites
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    git \
+    sudo \
+    gnupg2 \
+    software-properties-common \
+    apt-transport-https \
+    ca-certificates \
+    lsb-release \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Docker CLI from get.docker.com (simpler and more reliable)
+RUN curl -fsSL https://get.docker.com | sh || echo "Docker install skipped for testing"
+
+# Create a non-root user for testing
+RUN useradd -m -s /bin/bash testuser \
+    && echo "testuser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers \
+    && mkdir -p /home/testuser/.npm-global \
+    && chown -R testuser:testuser /home/testuser
+
+# Set up npm global directory for testuser
+USER testuser
+RUN echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.bashrc \
+    && echo 'export NPM_CONFIG_PREFIX=~/.npm-global' >> ~/.bashrc
+
+WORKDIR /workspace
+
+# Set environment variables
+ENV PATH="/home/testuser/.npm-global/bin:$PATH"
+ENV NPM_CONFIG_PREFIX="/home/testuser/.npm-global"
+
+# Default command
+CMD ["/bin/bash"]
