@@ -10,10 +10,11 @@ COPY package*.json ./
 
 # Install ALL dependencies (including dev deps for building)
 # Remove package-lock.json to avoid any auth issues
+# Use --legacy-peer-deps to handle peer dependency conflicts (zod v3 vs v4)
 RUN rm -f package-lock.json && \
     npm config set registry https://registry.npmjs.org/ && \
     npm config delete //registry.npmjs.org/:_authToken || true && \
-    npm install --no-audit --no-fund
+    npm install --legacy-peer-deps --no-audit --no-fund
 
 # Copy source and build
 COPY . .

@@ -1,9 +1,9 @@
 {
-  "defaultProvider": "ollama",
+  "defaultProvider": "copilot",
   "providers": {
     "ollama": {
       "baseUrl": "http://localhost:11434",
-      "defaultModel": "gpt-oss",
+      "defaultModel": "qwen3:8b",
       "models": {
         "gpt-oss": {
           "name": "gpt-oss",
@@ -48,13 +48,45 @@
             "temperature": 0.0,
             "numPredict": -1
           }
+        },
+        "qwen3:8b": {
+          "name": "qwen3:8b",
+          "contextWindow": 40960,
+          "description": "8B params general model with advanced agentic capabilities, tool calling, and strong reasoning",
+          "recommendedFor": ["pm", "qc"],
+          "config": {
+            "numCtx": 40960,
+            "temperature": 0.0,
+            "numPredict": -1
+          }
+        },
+        "nomic-embed-text": {
+          "name": "nomic-embed-text",
+          "contextWindow": 8192,
+          "description": "Text embedding model for RAG search and file indexing (137M params, 768 dimensions)",
+          "recommendedFor": ["embeddings", "rag", "search"],
+          "config": {
+            "numCtx": 8192,
+            "temperature": 0.0,
+            "numPredict": -1
+          }
         }
       }
     },
     "copilot": {
       "baseUrl": "http://localhost:4141/v1",
-      "defaultModel": "gpt-4o",
+      "defaultModel": "gpt-4.1",
       "models": {
+        "gpt-4.1": {
+          "name": "gpt-4.1",
+          "contextWindow": 128000,
+          "description": "OpenAI GPT-4.1 via GitHub Copilot (latest, best performance)",
+          "recommendedFor": ["pm", "worker", "qc"],
+          "config": {
+            "maxTokens": -1,
+            "temperature": 0.0
+          }
+        },
         "gpt-4o": {
           "name": "gpt-4o",
           "contextWindow": 128000,
@@ -70,24 +102,29 @@
   },
   "agentDefaults": {
     "pm": {
-      "provider": "ollama",
-      "model": "gpt-oss",
-      "rationale": "PM agents need strong reasoning for task decomposition and planning"
+      "provider": "copilot",
+      "model": "gpt-4.1",
+      "rationale": "PM agents need strong reasoning for task decomposition and planning - GPT-4.1 provides superior performance"
     },
     "worker": {
-      "provider": "ollama",
-      "model": "gpt-oss",
-      "rationale": "Worker agents execute tasks with consistent quality"
+      "provider": "copilot",
+      "model": "gpt-4.1",
+      "rationale": "Worker agents execute tasks with GPT-4.1 for consistent high-quality output"
     },
     "qc": {
+      "provider": "copilot",
+      "model": "gpt-4.1",
+      "rationale": "QC agents validate output with GPT-4.1 for strict consistency and accuracy"
+    },
+    "embeddings": {
       "provider": "ollama",
-      "model": "gpt-oss",
-      "rationale": "QC agents validate output with strict consistency"
+      "model": "nomic-embed-text",
+      "rationale": "Local embeddings for RAG search and file indexing - keep embeddings local for privacy and cost"
     }
   },
   "features": {
     "pmModelSuggestions": false,
     "_comment": "When true, PM agent can suggest specific models for tasks based on available models. When false/missing, always use agentDefaults."
   },
-  "_comment": "RAG/Vector embeddings will use separate configuration when implemented. This config is for agent LLM inference only."
+  "_comment": "RAG/Vector embeddings will use Ollama (local models) while agent LLM inference uses Copilot GPT-4.1. This provides best of both worlds: powerful cloud LLMs for reasoning + local embeddings for privacy/cost."
 }

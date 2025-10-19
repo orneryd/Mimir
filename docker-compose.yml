@@ -25,6 +25,31 @@ services:
     networks:
       - mcp_network
 
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: ollama_server
+  #   ports:
+  #     - "11434:11434"  # Ollama API
+  #   volumes:
+  #     - ./data/ollama:/root/.ollama  # Persist models
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD", "ollama", "list"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #     start_period: 30s
+  #   networks:
+  #     - mcp_network
+    # Uncomment if you have GPU support (NVIDIA)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
   mcp-server:
     build:
       context: .
@@ -41,6 +66,7 @@ services:
       - FILE_WATCH_POLLING=true
       - FILE_WATCH_INTERVAL=1000
       - WORKSPACE_ROOT=/workspace
+      # - OLLAMA_BASE_URL=http://ollama:11434  # Use containerized Ollama
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
@@ -56,6 +82,8 @@ services:
     depends_on:
       neo4j:
         condition: service_healthy
+      # ollama:
+      #   condition: service_healthy
     networks:
       - mcp_network
 

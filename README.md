@@ -16,6 +16,22 @@ A production-ready Model Context Protocol (MCP) server that provides **Graph-RAG
 
 ## 🚀 Quick Start
 
+### Prerequisites Check
+
+**⚠️ IMPORTANT: Docker Memory Configuration**
+
+Before starting, ensure Docker has enough memory allocated:
+
+```bash
+# Check your current Docker resources
+./scripts/check-docker-resources.sh
+
+# If memory < 16 GB, increase it:
+# macOS/Windows: Docker Desktop → Settings → Resources → Memory: 16 GB
+```
+
+📖 **See [docs/DOCKER_RESOURCES.md](docs/DOCKER_RESOURCES.md) for detailed instructions**
+
 ### One-Command Installation
 
 **Complete setup in one command:**
@@ -29,6 +45,11 @@ curl -fsSL https://raw.githubusercontent.com/orneryd/GRAPH-RAG-TODO/main/install
 ```bash
 git clone https://github.com/orneryd/GRAPH-RAG-TODO.git
 cd GRAPH-RAG-TODO
+
+# Check Docker resources first
+./scripts/check-docker-resources.sh
+
+# Run setup
 ./scripts/setup.sh
 ```
 
@@ -44,7 +65,7 @@ cd GRAPH-RAG-TODO
 
 **Prerequisites** (auto-detected with installation instructions if missing):
 - Node.js 18+ 
-- Docker & Docker Compose
+- Docker & Docker Compose (with **16 GB RAM** allocated)
 - Git 2.20+
 
 ### Manual Setup (Alternative)

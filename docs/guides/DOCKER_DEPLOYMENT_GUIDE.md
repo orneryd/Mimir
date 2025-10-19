@@ -71,12 +71,16 @@ cp .env.example .env
 ### Step 3: Build and Start
 
 ```bash
-# Build the Docker image
-docker-compose build
+# Build the Docker image with consistent tag
+docker build . -t mimir
+docker-compose up -d
 
-# Start the server
+# Or use docker-compose build (also uses 'mimir' tag via compose config)
+docker-compose build
 docker-compose up -d
 ```
+
+**Note**: Always use `-t mimir` when building manually to avoid creating multiple unnamed images.
 
 ### Step 4: Verify Health
 
@@ -517,8 +521,13 @@ docker stats
 ### Maintenance
 
 ```bash
-# Rebuild from scratch
+# Rebuild from scratch with consistent tag
+docker build . -t mimir --no-cache
+docker-compose up -d
+
+# Or use docker-compose
 docker-compose build --no-cache
+docker-compose up -d
 
 # Pull latest base images
 docker-compose pull
@@ -646,14 +655,19 @@ SESSION=$(curl -s -i -X POST http://localhost:3000/mcp \
 
 1. **Authentication issues** (enterprise environments):
    ```bash
-   # Use BuildKit secrets
-   DOCKER_BUILDKIT=1 docker build --secret id=npmrc,src=$HOME/.npmrc -t mcp-server:latest .
+   # Use BuildKit secrets with consistent tag
+   DOCKER_BUILDKIT=1 docker build --secret id=npmrc,src=$HOME/.npmrc -t mimir .
    ```
 
 2. **Network issues**:
    ```bash
    # Clear Docker build cache
    docker builder prune
+   
+   # Rebuild with consistent tag
+   docker build . -t mimir
+   docker-compose up -d
+   ```
    
    # Rebuild
    docker-compose build --no-cache

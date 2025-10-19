@@ -19,6 +19,8 @@ async function callMCPTool(toolName: string, args: Record<string, any>): Promise
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        // Explicitly accept JSON (and event-stream for SSE clients)
+        'Accept': 'application/json, text/event-stream',
       },
       body: JSON.stringify({
         jsonrpc: '2.0',

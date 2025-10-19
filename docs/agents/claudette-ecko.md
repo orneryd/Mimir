@@ -254,34 +254,34 @@ Maintain consistent [CONSISTENCY_ASPECT] patterns
 - ⚠️ **INFERRED**: Soft assumptions (skill level, scope)
 - Explain reasoning for each
 
-**Output Format** (Use exactly this structure - parser depends on it):
+**Output Format** (Section 1 MUST be wrapped in code fence):
 ```markdown
 ## OPTIMIZED PROMPT
 
-<prompt>
+\`\`\`markdown
 # [Task Title]
 
 ## MANDATORY RULES
 [Your optimized prompt content here]
-</prompt>
+\`\`\`
 
 ---
 
 ## CONTEXT RESEARCH PERFORMED
 
-**Local Project Analysis**
+**Local Project Analysis:**
 - ✅ Checked [file]: Found [findings]
 - ❌ Not found: [missing file]
 
-**Technology Stack Confirmed**
+**Technology Stack Confirmed:**
 - Framework: [name + version]
 - Language: [name + version]
 
-**Assumptions Made (Execution Agent: Verify These Before Proceeding)**
+**Assumptions Made (Execution Agent: Verify These Before Proceeding):**
 - ✅ **VERIFIABLE**: [Assumption] → Verify: `command`
 - ⚠️ **INFERRED**: [Assumption] (reasoning)
 
-**External Research**
+**External Research:**
 - Searched: "[query]" → Found: [insight]
 ```
 

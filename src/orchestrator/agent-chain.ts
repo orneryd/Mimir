@@ -14,6 +14,8 @@ import { CopilotAgentClient, AgentConfig } from './llm-client.js';
 import { CopilotModel } from './types.js';
 import { planningTools } from './tools.js';
 import { LLMConfigLoader } from '../config/LLMConfigLoader.js';
+import { createGraphManager } from '../managers/index.js';
+import type { GraphManager } from '../managers/GraphManager.js';
 import path from 'path';
 
 /**
@@ -66,6 +68,7 @@ export class AgentChain {
   private pmAgent: CopilotAgentClient;
   private eckoAgent: CopilotAgentClient;
   private agentsDir: string;
+  private graphManager: GraphManager | null = null;
 
   constructor(agentsDir: string = 'docs/agents') {
     this.agentsDir = agentsDir;
@@ -73,17 +76,23 @@ export class AgentChain {
     // Initialize PM Agent with limited tools (prevents OpenAI 128 tool limit)
     this.pmAgent = new CopilotAgentClient({
       preamblePath: path.join(agentsDir, 'claudette-pm.md'),
-      agentType: 'pm', // Use PM agent defaults from config
+      provider: 'copilot', // Explicitly set provider
+      model: 'gpt-4.1', // Explicitly set model
+      copilotBaseUrl: 'http://localhost:4141/v1', // Explicitly set base URL
       temperature: 0.0,
+      maxTokens: -1,
       tools: planningTools, // Filesystem + 5 graph search tools = 12 tools
     });
 
-    // Initialize Ecko Agent (Prompt Architect) with limited tools
+    // Initialize Ecko Agent (Prompt Architect) WITHOUT tools - it only optimizes prompts
     this.eckoAgent = new CopilotAgentClient({
       preamblePath: path.join(agentsDir, 'claudette-ecko.md'),
-      agentType: 'pm', // Ecko uses PM-level reasoning capacity
+      provider: 'copilot', // Explicitly set provider
+      model: 'gpt-4.1', // Explicitly set model
+      copilotBaseUrl: 'http://localhost:4141/v1', // Explicitly set base URL
       temperature: 0.0,
-      tools: planningTools, // Filesystem + 5 graph search tools = 12 tools
+      maxTokens: -1,
+      tools: [], // NO TOOLS - Ecko just analyzes text and outputs optimized specs
     });
   }
 
@@ -93,11 +102,100 @@ export class AgentChain {
   async initialize(): Promise<void> {
     console.log('🔗 Initializing Agent Chain...\n');
     
+    // Initialize GraphManager
+    try {
+      this.graphManager = await createGraphManager();
+    } catch (error) {
+      console.warn('⚠️  Could not connect to Neo4j:', error instanceof Error ? error.message : String(error));
+      console.warn('   Continuing without graph context...\n');
+    }
+    
     await this.pmAgent.loadPreamble(path.join(this.agentsDir, 'claudette-pm.md'));
     console.log('✅ PM Agent loaded\n');
     
     await this.eckoAgent.loadPreamble(path.join(this.agentsDir, 'claudette-ecko.md'));
     console.log('✅ Ecko Agent loaded\n');
+  }
+
+  /**
+   * Clean up resources (close Neo4j connection)
+   */
+  async cleanup(): Promise<void> {
+    if (this.graphManager) {
+      try {
+        await this.graphManager.close();
+        console.log('✅ Neo4j connection closed');
+      } catch (error) {
+        console.warn('⚠️  Error closing Neo4j:', error instanceof Error ? error.message : String(error));
+      }
+    }
+  }
+
+  /**
+   * Gather context from knowledge graph for a given query
+   */
+  private async gatherGraphContext(userRequest: string): Promise<string> {
+    if (!this.graphManager) {
+      return '## Knowledge Graph: Not available (Neo4j not connected)';
+    }
+
+    console.log('🔍 Gathering context from knowledge graph...');
+    const contextParts: string[] = [];
+    
+    try {
+      // Search for related concepts
+      console.log('  - Searching for related concepts...');
+      const searchQuery = userRequest.substring(0, 100);
+      const searchResults = await this.graphManager.searchNodes(searchQuery, { limit: 5 });
+      if (searchResults.length > 0) {
+        contextParts.push('## Related Concepts from Knowledge Graph:');
+        searchResults.forEach((node, i) => {
+          const props = node.properties;
+          const summary = props.title || props.name || props.description || JSON.stringify(props).substring(0, 80);
+          contextParts.push(`${i + 1}. [${node.type}] ${summary}`);
+          console.log(`    Found: [${node.type}] ${summary.substring(0, 60)}...`);
+        });
+      }
+    } catch (error) {
+      console.warn('  ⚠️  Graph search error:', error instanceof Error ? error.message : String(error));
+      contextParts.push('## Graph Search: No results (error occurred)');
+    }
+
+    try {
+      // Check for completed TODOs
+      console.log('  - Checking completed TODOs...');
+      const completedTodos = await this.graphManager.queryNodes('todo', { status: 'completed' });
+      if (completedTodos.length > 0) {
+        contextParts.push('\n## Recently Completed Work:');
+        completedTodos.slice(0, 5).forEach((node, i) => {
+          const title = node.properties.title || 'Untitled';
+          const desc = node.properties.description ? ` - ${node.properties.description.substring(0, 80)}` : '';
+          contextParts.push(`${i + 1}. ${title}${desc}`);
+          console.log(`    ✓ ${title}`);
+        });
+      }
+    } catch (error) {
+      console.warn('  ⚠️  Query completed todos error:', error instanceof Error ? error.message : String(error));
+    }
+
+    try {
+      // Check for existing files
+      console.log('  - Checking indexed files...');
+      const files = await this.graphManager.queryNodes('file');
+      if (files.length > 0) {
+        contextParts.push('\n## Indexed Files in Project:');
+        contextParts.push(`Total: ${files.length} files`);
+        const fileList = files.slice(0, 15).map(f => f.properties.path || 'unknown');
+        contextParts.push(`Sample: ${fileList.join(', ')}`);
+        console.log(`    Found ${files.length} indexed files`);
+      }
+    } catch (error) {
+      console.warn('  ⚠️  Query files error:', error instanceof Error ? error.message : String(error));
+    }
+
+    const contextSummary = contextParts.join('\n');
+    console.log(`✅ Context gathered (${contextParts.length} sections, ${contextSummary.length} chars)\n`);
+    return contextParts.length > 0 ? contextSummary : '## No relevant context found in knowledge graph';
   }
 
   /**
@@ -111,269 +209,104 @@ export class AgentChain {
     const startTime = Date.now();
 
     console.log('\n' + '='.repeat(80));
-    console.log('🚀 AGENT CHAIN EXECUTION');
+    console.log('🚀 AGENT CHAIN EXECUTION (Ecko → PM)');
     console.log('='.repeat(80));
     console.log(`📝 User Request: ${userRequest}\n`);
 
-    // STEP 1: PM Agent - Initial Analysis & Task Identification
+    // Gather context from knowledge graph ONCE
+    const graphContext = await this.gatherGraphContext(userRequest);
+
+    // STEP 1: Ecko Agent - Request Analysis & Optimization
     console.log('\n' + '-'.repeat(80));
-    console.log('STEP 1: PM Agent - Initial Analysis');
+    console.log('STEP 1: Ecko Agent - Request Optimization');
     console.log('-'.repeat(80) + '\n');
 
-    const pmStep1Start = Date.now();
-    
-    // Inject available models list if PM model suggestions feature is enabled
-    const llmConfig = LLMConfigLoader.getInstance();
-    const modelListSection = llmConfig.formatAvailableModelsForPM();
-    
-    const pmStep1Input = `${modelListSection}
-
-## 🔍 SEARCH EXISTING CONTEXT FIRST
-
-Before planning, search the knowledge graph for relevant existing work:
-
-\`\`\`
-graph_search_nodes("${userRequest.substring(0, 50)}")
-graph_query_nodes({ type: 'todo', filters: { status: 'completed' } })
-\`\`\`
-
-This helps you:
-- Avoid duplicating existing work
-- Build on completed tasks
-- Reference existing implementations
+    const eckoStep1Start = Date.now();
+    const eckoStep1Input = `${graphContext}
 
 ---
+
+## USER REQUEST
 
 ${userRequest}
 
-INSTRUCTIONS:
-1. Analyze the user's request
-2. Break it down into major phases (2-5 phases)
-3. For each phase, identify 2-5 concrete tasks
-4. For each task, write a BRIEF description (1-2 sentences)
-5. Output the task list in this format:
-
-## Phase 1: [Phase Name]
-### Task 1.1: [Task Title]
-**Brief Description**: [1-2 sentences]
-
-### Task 1.2: [Task Title]
-**Brief Description**: [1-2 sentences]
-
-## Phase 2: [Phase Name]
-...
-
-DO NOT write full prompts yet. Just identify tasks and brief descriptions.
-We will optimize prompts in the next step.`;
-
-    const pmStep1Result = await this.pmAgent.execute(pmStep1Input);
-    
-    steps.push({
-      agentName: 'PM Agent',
-      agentRole: 'Task Identification',
-      input: pmStep1Input,
-      output: pmStep1Result.output,
-      toolCalls: pmStep1Result.toolCalls,
-      tokens: pmStep1Result.tokens,
-      duration: Date.now() - pmStep1Start,
-    });
-
-    console.log(`\n✅ PM identified tasks in ${((Date.now() - pmStep1Start) / 1000).toFixed(2)}s`);
-    console.log(`📊 Tool calls: ${pmStep1Result.toolCalls}`);
-    console.log(`🎯 Output preview:\n${pmStep1Result.output.substring(0, 300)}...\n`);
-
-    // STEP 2: Extract individual tasks for Ecko optimization
-    const tasks = this.parseTasksFromPM(pmStep1Result.output);
-    console.log(`\n📋 Extracted ${tasks.length} tasks for optimization\n`);
-
-    // STEP 3: Ecko Agent - Optimize each task prompt (parallel potential, but sequential for now)
-    console.log('\n' + '-'.repeat(80));
-    console.log('STEP 2: Ecko Agent - Prompt Optimization');
-    console.log('-'.repeat(80) + '\n');
-
-    const optimizedTasks: Array<{ id: string; title: string; description: string; optimizedPrompt: string }> = [];
-
-    for (const task of tasks.slice(0, 3)) { // Limit to first 3 tasks for demo
-      console.log(`\n🔧 Optimizing: ${task.title}...\n`);
-      
-      const eckoStepStart = Date.now();
-      const eckoInput = `## 🔍 SEARCH GRAPH FOR RELEVANT PATTERNS
-
-Before optimizing this prompt, search the knowledge graph for relevant examples:
-
-\`\`\`
-graph_search_nodes("${task.title.substring(0, 40)}")
-graph_query_nodes({ type: 'file' })
-\`\`\`
-
-Use any relevant patterns, conventions, or examples you find.
-
 ---
 
-${task.description}
+## YOUR TASK
 
-CONTEXT:
-- This is for a worker agent who will execute with zero prior context
-- The worker needs all necessary details to complete the task autonomously
-- Project context: ${userRequest}
+Analyze the user request and knowledge graph context above.
 
-Optimize this into a complete, self-contained prompt for a worker agent.`;
+Provide an optimized specification that:
+1. Clarifies what needs to be built/done
+2. References relevant existing work or files from the graph
+3. Defines key requirements and constraints
+4. Establishes success criteria
+5. Notes any assumptions or clarifications
 
-      const eckoResult = await this.eckoAgent.execute(eckoInput);
-      
-      steps.push({
-        agentName: 'Ecko Agent',
-        agentRole: `Prompt Optimization - ${task.title}`,
-        input: eckoInput,
-        output: eckoResult.output,
-        toolCalls: eckoResult.toolCalls,
-        tokens: eckoResult.tokens,
-        duration: Date.now() - eckoStepStart,
-      });
+Keep it concise and actionable.`;
 
-      optimizedTasks.push({
-        id: task.id,
-        title: task.title,
-        description: task.description,
-        optimizedPrompt: eckoResult.output,
-      });
+    const eckoStep1Result = await this.eckoAgent.execute(eckoStep1Input);
+    
+    steps.push({
+      agentName: 'Ecko Agent',
+      agentRole: 'Request Optimization',
+      input: eckoStep1Input,
+      output: eckoStep1Result.output,
+      toolCalls: eckoStep1Result.toolCalls,
+      tokens: eckoStep1Result.tokens,
+      duration: Date.now() - eckoStep1Start,
+    });
 
-      console.log(`✅ Optimized in ${((Date.now() - eckoStepStart) / 1000).toFixed(2)}s`);
-    }
+    console.log(`\n✅ Ecko completed optimization in ${((Date.now() - eckoStep1Start) / 1000).toFixed(2)}s`);
+    console.log(`📊 Tool calls: ${eckoStep1Result.toolCalls}`);
+    console.log(`🎯 Output preview:\n${eckoStep1Result.output.substring(0, 300)}...\n`);
 
-    // STEP 4: PM Agent - Final Task Graph Assembly
+    // STEP 2: PM Agent - Task Breakdown based on Ecko's optimized spec
     console.log('\n' + '-'.repeat(80));
-    console.log('STEP 3: PM Agent - Task Graph Assembly');
+    console.log('STEP 2: PM Agent - Task Breakdown');
     console.log('-'.repeat(80) + '\n');
 
     const pmStep2Start = Date.now();
-    const pmStep2Input = `## 🔍 SEARCH GRAPH FOR CONTEXT
-
-Before assembling the final task graph, query for any relevant existing context:
-
-\`\`\`
-graph_search_nodes("${userRequest.substring(0, 50)}")
-graph_get_subgraph({nodeId: '[relevant-node-id]', depth: 2})
-\`\`\`
-
-Use this to enrich task prompts with existing implementations, patterns, or constraints.
+    const pmStep2Input = `${graphContext}
 
 ---
 
-Create a final task execution document.
+## OPTIMIZED SPECIFICATION FROM ECKO
 
-USER REQUEST: ${userRequest}
+${eckoStep1Result.output}
 
-OPTIMIZED TASKS:
-${optimizedTasks.map(t => `
-### ${t.title}
-**Task ID**: ${t.id}
+---
 
-\`\`\`
-${t.optimizedPrompt}
-\`\`\`
-`).join('\n')}
+## ORIGINAL USER REQUEST
 
-INSTRUCTIONS:
-1. Create a document in DOCKER_MIGRATION_PROMPTS.md style
-2. Include project context at the top
-3. For each task, include IN THIS EXACT FORMAT:
-   ### Task ID: task-x.y
-   #### **Agent Role Description**
-   [Worker role description - technology expertise, standards, research assumptions]
-   
-   #### **Recommended Model**
-   [Model name: GPT-4.1, Claude Sonnet 4, O3-mini, etc.]
-   
-   #### **Optimized Prompt**
-   <details>
-   <summary>Click to expand</summary>
-   
-   \`\`\`markdown
-   [Full prompt here]
-   \`\`\`
-   </details>
-   
-   #### **Dependencies**
-   [task-ids or "None"]
-   
-   #### **Estimated Duration**
-   [time estimate]
-   
-   #### **QC Agent Role**
-   [QC role - aggressive verification specialist]
-   
-   #### **Verification Criteria**
-   Security:
-   - [ ] [check 1]
-   - [ ] [check 2]
-   
-   Functionality:
-   - [ ] [check 3]
-   - [ ] [check 4]
-   
-   Quality:
-   - [ ] [check 5]
-   - [ ] [check 6]
-   
-   #### **Max Retries**
-   2
-   
-4. Add instructions for worker agents to:
-   - Retrieve task context using get_task_context({taskId: '<task-id>', agentType: 'worker'})
-   - Execute the prompt
-   - Update status using graph_update_node('<task-id>', {properties: {status: 'awaiting_qc', workerOutput: '<results>'}})
-5. Include Quick Start section for workers
+${userRequest}
 
-CRITICAL: Use EXACTLY #### headers (not just **bold**) for all field names!
+---
 
-WORKER ROLE FORMAT (CRITICAL - USE THIS EXACT FORMAT):
-**Agent Role Description** Backend engineer with a background in message queues, experience on Kafka based systems specifically designed to write Proof of Concept that work, but aren't necessarily optimized, preferring the simplest execution, unit tests not necessary
+## YOUR TASK
 
-**Agent Role Description** Frontend web engineer who is an expert in web-components, CSS, and standards-based browser development. Test driven development is necessary
+Create a complete task breakdown and execution plan based on Ecko's optimized specification.
 
-**Agent Role Description** DevOps engineer with Docker and container orchestration experience, security-first mindset, infrastructure-as-code specialist, writes comprehensive documentation
+Provide:
+1. Analysis of what needs to be done
+2. References to existing files/work from knowledge graph
+3. Task breakdown into phases
+4. For each task:
+   - Task ID (task-x.y format)
+   - Title
+   - Worker role description
+   - Complete self-contained prompt
+   - Dependencies
+   - Estimated duration
+   - Verification criteria
 
-QC ROLE FORMAT (CRITICAL - AGGRESSIVE VERIFIER):
-**QC Agent Role** Senior API security specialist with expertise in OWASP Top 10, REST security patterns, and authentication vulnerabilities. Aggressively verifies input validation, SQL injection prevention, authentication bypass attempts, and error information leakage. OWASP API Security Top 10 expert.
-
-**QC Agent Role** Senior frontend security and accessibility auditor with expertise in XSS prevention, CSRF protection, and WCAG 2.1 AA compliance. Aggressively verifies sanitization, CSP headers, ARIA implementation, and keyboard navigation. OWASP Frontend Security and WCAG 2.1 AA expert.
-
-**QC Agent Role** Senior infrastructure security specialist with expertise in container security, configuration management vulnerabilities, and deployment best practices. Aggressively verifies version pinning, secret management, network isolation, and security hardening. CIS Docker Benchmark and infrastructure security expert.
-
-VERIFICATION CRITERIA FORMAT (9-15 CHECKS, 3 CATEGORIES):
-**Verification Criteria**
-Security:
-- [ ] No credentials or API keys hardcoded in source code
-- [ ] All user input sanitized before database queries
-- [ ] Authentication tokens expire within 15 minutes
-- [ ] HTTPS enforced for all endpoints
-
-Functionality:
-- [ ] All required API endpoints implemented and tested
-- [ ] Error handling covers all edge cases
-- [ ] Database transactions are atomic
-- [ ] Logging captures all authentication events
-
-Code Quality:
-- [ ] Unit tests achieve >80% coverage
-- [ ] No linter errors or warnings
-- [ ] Documentation updated for all new endpoints
-- [ ] Code follows project style guide
-
-MODEL RECOMMENDATIONS:
-- GPT-4.1: General coding, API development, full-stack tasks
-- Claude Sonnet 4: Architecture planning, documentation, complex refactoring
-- O3-mini: Algorithm optimization, performance-critical code, mathematical tasks
-- GPT-4o: Fast iterations, simple CRUD, straightforward implementations
-
-Output the complete markdown document with agent roles and model recommendations for each task.`;
+Output in markdown format ready for worker execution.`;
 
     const pmStep2Result = await this.pmAgent.execute(pmStep2Input);
     
     steps.push({
       agentName: 'PM Agent',
-      agentRole: 'Task Graph Assembly',
+      agentRole: 'Task Breakdown',
       input: pmStep2Input,
       output: pmStep2Result.output,
       toolCalls: pmStep2Result.toolCalls,
@@ -381,18 +314,9 @@ Output the complete markdown document with agent roles and model recommendations
       duration: Date.now() - pmStep2Start,
     });
 
-    console.log(`\n✅ Task graph assembled in ${((Date.now() - pmStep2Start) / 1000).toFixed(2)}s`);
-    
-    // Extract agent roles for summary
-    const agentRoleMatches = pmStep2Result.output.matchAll(/\*\*Agent Role Description\*\* (.+?)/g);
-    const agentRoles = Array.from(agentRoleMatches).map(m => m[1].trim());
-    
-    if (agentRoles.length > 0) {
-      console.log(`\n👥 Agent Roles Defined:`);
-      agentRoles.forEach((role, i) => {
-        console.log(`   ${i + 1}. ${role.substring(0, 80)}${role.length > 80 ? '...' : ''}`);
-      });
-    }
+    console.log(`\n✅ PM completed task breakdown in ${((Date.now() - pmStep2Start) / 1000).toFixed(2)}s`);
+    console.log(`📊 Tool calls: ${pmStep2Result.toolCalls}`);
+    console.log(`🎯 Output preview:\n${pmStep2Result.output.substring(0, 300)}...\n`);
 
     // Calculate totals
     const totalTokens = steps.reduce(
@@ -414,7 +338,7 @@ Output the complete markdown document with agent roles and model recommendations
     console.log(`   - Input: ${totalTokens.input}`);
     console.log(`   - Output: ${totalTokens.output}`);
     console.log(`🔧 Total Tool Calls: ${steps.reduce((acc, s) => acc + s.toolCalls, 0)}`);
-    console.log(`\n📝 Steps Executed:`);
+    console.log(`\n� Steps Executed:`);
     steps.forEach((step, i) => {
       console.log(`   ${i + 1}. ${step.agentName} (${step.agentRole}): ${step.duration}ms, ${step.toolCalls} tools`);
     });
@@ -426,28 +350,6 @@ Output the complete markdown document with agent roles and model recommendations
       totalTokens,
       totalDuration,
     };
-  }
-
-  /**
-   * Parse tasks from PM's initial output
-   * Simple regex-based parser for demo (can be improved with proper parsing)
-   */
-  private parseTasksFromPM(pmOutput: string): Array<{ id: string; title: string; description: string }> {
-    const tasks: Array<{ id: string; title: string; description: string }> = [];
-    
-    // Match task headers like "### Task 1.1: Create Health Endpoint"
-    const taskRegex = /### Task (\d+\.\d+): (.+?)\n\*\*Brief Description\*\*: (.+?)(?=\n###|\n##|$)/gs;
-    
-    let match;
-    while ((match = taskRegex.exec(pmOutput)) !== null) {
-      tasks.push({
-        id: `task-${match[1]}`,
-        title: match[2].trim(),
-        description: match[3].trim(),
-      });
-    }
-
-    return tasks;
   }
 }
 
@@ -503,6 +405,10 @@ export async function main() {
   } catch (error: any) {
     console.error('\n❌ Chain execution failed:', error.message);
     process.exit(1);
+  } finally {
+    // Clean up resources
+    await chain.cleanup();
+    process.exit(0);
   }
 }
 

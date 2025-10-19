@@ -205,9 +205,28 @@ Example of CORRECT approach:
 
 Start by using read_file to read AGENTS.md, then use run_terminal_cmd to run tests, then continue investigating with tools.`;
     
+    // Verify LLM is initialized before creating agent
+    if (!this.llm) {
+      throw new Error(`❌ CRITICAL: this.llm is null after initializeLLM()! Provider: ${this.provider}, Model: ${this.modelName}`);
+    }
+    
+    console.log(`🔍 Creating LangGraph agent with LLM: ${this.llm.constructor.name}`);
+    console.log(`🔍 Tools count: ${this.tools.length}`);
+    console.log(`🔍 System prompt length: ${enhancedSystemPrompt.length} chars`);
+    
+    // Test if LLM is actually functional before creating agent
+    console.log(`🔍 Testing LLM with simple ping...`);
+    try {
+      const testResult = await this.llm.invoke([new HumanMessage('ping')]);
+      console.log(`✅ LLM test successful: ${testResult.content.toString().substring(0, 50)}`);
+    } catch (error: any) {
+      console.error(`❌ LLM test FAILED:`, error?.message || error);
+      throw error;
+    }
+    
     // Create React agent using the new LangGraph API
     this.agent = createReactAgent({
-      llm: this.llm!,
+      llm: this.llm,
       tools: this.tools,
       prompt: new SystemMessage(enhancedSystemPrompt),
     });
@@ -328,6 +347,9 @@ Start by using read_file to read AGENTS.md, then use run_terminal_cmd to run tes
       temperature: config.temperature ?? modelConfig?.config?.temperature ?? 0.0,
     };
     
+    console.log(`🔍 Initializing Copilot client with baseURL: ${this.baseURL}`);
+    console.log(`🔍 Model: ${model}, maxTokens: ${this.llmConfig.maxTokens}, temperature: ${this.llmConfig.temperature}`);
+    
     this.llm = new ChatOpenAI({
       apiKey: 'dummy-key-not-used', // Required by OpenAI client but not used by proxy
       model: model,
@@ -337,7 +359,10 @@ Start by using read_file to read AGENTS.md, then use run_terminal_cmd to run tes
       temperature: this.llmConfig.temperature,
       maxTokens: this.llmConfig.maxTokens,
       streaming: false,
+      timeout: 120000, // 2 minute timeout for long-running requests
     });
+    
+    console.log(`✅ Copilot ChatOpenAI client created successfully`);
   }
   
   private async initializeOpenAI(config: AgentConfig, model: string): Promise<void> {
@@ -362,7 +387,7 @@ Start by using read_file to read AGENTS.md, then use run_terminal_cmd to run tes
     });
   }
 
-  async execute(task: string): Promise<{
+  async execute(task: string, retryCount: number = 0): Promise<{
     output: string;
     conversationHistory: Array<{ role: string; content: string }>;
     tokens: { input: number; output: number };
@@ -374,14 +399,24 @@ Start by using read_file to read AGENTS.md, then use run_terminal_cmd to run tes
     }
 
     console.log('\n🚀 Starting agent execution...\n');
+    console.log(`🔍 Provider: ${this.provider}, Model: ${this.modelName}, BaseURL: ${this.baseURL}`);
+    console.log(`🔍 Task length: ${task.length} chars\n`);
 
     const startTime = Date.now();
+    const maxRetries = 2; // Allow 2 retries for malformed tool calls
     
     try {
+      console.log('📤 Invoking agent with LangGraph...');
       // LangGraph agents use messages format
-      const result = await this.agent.invoke({
-        messages: [new HumanMessage(task)],
-      });
+      const result = await this.agent.invoke(
+        {
+          messages: [new HumanMessage(task)],
+        },
+        {
+          recursionLimit: 50, // Increase from default 25 for complex prompts
+        }
+      );
+      console.log('📥 Agent invocation complete');
 
       const duration = ((Date.now() - startTime) / 1000).toFixed(2);
       console.log(`\n✅ Agent completed in ${duration}s\n`);
@@ -433,8 +468,37 @@ Start by using read_file to read AGENTS.md, then use run_terminal_cmd to run tes
         intermediateSteps: messages as any[], // Return messages as intermediate steps
       };
     } catch (error: any) {
-      console.error('\n❌ Agent execution failed:', error.message);
-      console.error('Stack trace:', error.stack);
+      // Check if this is a tool call parsing error
+      const isToolCallError = error.message?.includes('error parsing tool call') || 
+                             error.message?.includes('invalid character') ||
+                             error.message?.includes('JSON');
+      
+      if (isToolCallError && retryCount < maxRetries) {
+        console.warn(`\n⚠️  Tool call parsing error detected (attempt ${retryCount + 1}/${maxRetries + 1})`);
+        console.warn(`   Error: ${error.message.substring(0, 150)}...`);
+        console.warn(`   Retrying with guidance to use simpler tool calls...\n`);
+        
+        // Retry with additional guidance
+        const retryTask = `${task}
+
+**IMPORTANT**: If using tools, ensure JSON is valid. Keep tool arguments simple and well-formatted.`;
+        
+        return await this.execute(retryTask, retryCount + 1);
+      }
+      
+      // If not a tool call error or max retries exceeded, provide helpful error message
+      if (isToolCallError) {
+        console.error('\n❌ Agent execution failed due to malformed tool calls after retries');
+        console.error('💡 Suggestion: This model may not support tool calling reliably.');
+        console.error('   Consider switching to a more capable model:');
+        console.error('   - For PM agent: Use copilot/gpt-4o (set agentDefaults.pm.provider="copilot")');
+        console.error('   - For Ollama: Try qwen2.5-coder, deepseek-coder, or llama3.1 instead of gpt-oss');
+        console.error(`\n   Original error: ${error.message}\n`);
+      } else {
+        console.error('\n❌ Agent execution failed:', error.message);
+        console.error('Stack trace:', error.stack);
+      }
+      
       throw error;
     }
   }

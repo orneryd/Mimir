@@ -81,6 +81,12 @@ export class LLMConfigLoader {
         throw new Error('Invalid config: missing defaultProvider or providers');
       }
       
+      // Override Ollama baseUrl from environment variable if set (for Docker)
+      if (process.env.OLLAMA_BASE_URL && parsedConfig.providers.ollama) {
+        parsedConfig.providers.ollama.baseUrl = process.env.OLLAMA_BASE_URL;
+        console.log(`🔧 Using Ollama from environment: ${process.env.OLLAMA_BASE_URL}`);
+      }
+      
       this.config = parsedConfig;
       return this.config!;
     } catch (error: any) {
@@ -102,7 +108,7 @@ export class LLMConfigLoader {
       defaultProvider: 'ollama',
       providers: {
         ollama: {
-          baseUrl: 'http://localhost:11434',
+          baseUrl: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
           defaultModel: 'gpt-oss',
           models: {
             'gpt-oss': {
