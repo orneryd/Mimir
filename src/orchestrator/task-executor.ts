@@ -854,6 +854,12 @@ async function fetchTaskContext(taskId: string, agentType: 'worker' | 'qc'): Pro
 
     const result = await response.json();
     
+    // Handle task not found (graceful fallback for new tasks)
+    if (result.error && result.error.message?.includes('Task not found')) {
+      console.warn(`⚠️  Task context not yet indexed (task just started) - skipping pre-fetch`);
+      return `## ℹ️ TASK CONTEXT NOT YET AVAILABLE\n\nThis task was just created and context pre-fetch is not available yet.\nYou will have access to the full task prompt below.\n\n`;
+    }
+    
     if (result.error) {
       console.warn(`⚠️  Failed to fetch context for ${taskId}: ${result.error.message}`);
       return `## ⚠️ CONTEXT UNAVAILABLE\n\nFailed to retrieve task context from graph. Use get_task_context({taskId: '${taskId}', agentType: '${agentType}'}) to retry.\n\n`;
@@ -876,8 +882,8 @@ async function fetchTaskContext(taskId: string, agentType: 'worker' | 'qc'): Pro
     const { context, metrics } = parsedContext;
     
     if (!context) {
-      console.error(`❌ Context object is missing from parsed data:`, parsedContext);
-      return `## ⚠️ CONTEXT UNAVAILABLE\n\nContext object missing from response. Use get_task_context({taskId: '${taskId}', agentType: '${agentType}'}) to query directly.\n\n`;
+      console.warn(`⚠️  Context object empty - task may be newly indexed`);
+      return `## ℹ️ TASK CONTEXT NOT YET COMPLETE\n\nTask was found but context is still being indexed. You will have access to the full task prompt below.\n\n`;
     }
 
     // Format context for agent consumption
