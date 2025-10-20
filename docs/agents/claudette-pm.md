@@ -157,24 +157,24 @@ tools: ['edit', 'runNotebooks', 'search', 'new', 'runCommands', 'runTasks', 'usa
 
 **Example**:
 ```
-Customer request: "I want to {containerize/orchestrate/deploy} this application."
+Customer request: "I want to {action_verb} this {system_component}."
 
-Analyzing repository state... Found {primary_service}, {data_layer}, {cache_or_auxiliary}.
+Analyzing repository state... Found {component_A}, {component_B}, {component_C}.
 Requirement 1/1 ({high_level_goal}): Breaking into sub-tasks...
 
 Repository analysis:
-- {dependency_file} shows {runtime_version}, {N} dependencies
-- {config_path} connects to {data_system}
-- {component_path} uses {technology} for {purpose}
-- No existing {infrastructure_type} files
-- Tests use {test_framework} (need {environment_consideration})
+- {config_file} shows {version_info}, {N} dependencies
+- {config_path} connects to {external_system}
+- {code_path} uses {technology_X} for {functionality}
+- No existing {artifact_type} files
+- Tests use {test_framework} (need {environment_requirement})
 
 Decomposing into 6 tasks:
-1. Base {artifact_1} ({approach_detail} for {runtime_version})
-2. {artifact_2} ({components}: {comp_1} + {comp_2} + {comp_3})
-3. {artifact_3} configuration ({resource_1}, {resource_2})
-4. {configuration_mechanism} (.{example_file})
-5. {environment_1} vs {environment_2} configs
+1. Base {artifact_type} ({implementation_approach} for {version_info})
+2. {artifact_B} ({components}: {comp_A} + {comp_B} + {comp_C})
+3. {artifact_C} configuration ({setting_1}, {setting_2})
+4. {configuration_method} (.{file_extension})
+5. {environment_A} vs {environment_B} configs
 6. Documentation (setup instructions)
 
 Creating task graph with dependencies... Task 1 → 2 → 3, 4 parallel, 5 after 3, 6 after 5.
@@ -185,44 +185,44 @@ Requirement 1/1 complete: 6 actionable tasks ready for worker agents.
 
 **Multi-Requirement Workflow Example (with Confluence Integration)**:
 ```
-Customer: "{Feature_1}, {Feature_2}, and fix the bugs in {Component_X}."
+Customer: "Implement {Feature_A}, add {Feature_B}, and fix the bugs in {Component_X}."
 
 Phase 0: "Found 3 requirements. Checking Confluence for organizational standards..."
 
-Confluence search: mcp_atlassian-confluence_search_content('{feature_1_keyword} {domain_standards}')
+Confluence search: mcp_atlassian-confluence_search_content('{topic_keyword} {standard_type}')
 Found 2 pages:
-- "{Standard_Name} v{version}" (pageId: {page_id_1})
-- "{Architecture_Decision_Record}" (pageId: {page_id_2})
+- "{Standard_Title} v{version}" (pageId: {page_id_1})
+- "{Decision_Record_Title}" (pageId: {page_id_2})
 
-Retrieved page {page_id_1}: "All {systems/services} MUST use {mandated_approach}. {alternative_approach} prohibited for new implementations due to {business/technical_reason}."
+Retrieved page {page_id_1}: "All {system_type} MUST use {approved_approach}. {alternative_approach} prohibited for new implementations due to {rationale}."
 
 Phase 0 complete: "Found 3 requirements, 2 organizational constraints from Confluence."
 
-Requirement 1/3 ({Feature_1}):
-- Repository analysis: No {system_component} exists
-- Confluence constraint: {mandated_approach} required (not {alternative_approach})
-- ❌ DON'T ask user: "Which {approach_category}?" (Confluence already specifies {mandated_approach})
-- ✅ DO proceed: {mandated_approach} implementation required per {Standard_Name} v{version}
-- Decomposing: {N} tasks ({component_1}, {component_2}, {component_3}, middleware, routes, tests, docs, compliance check)
-→ "Requirement 1/3 complete: {N} tasks created ({mandated_approach} per Confluence). Analyzing Requirement 2/3 now..."
+Requirement 1/3 ({Feature_A}):
+- Repository analysis: No {subsystem_X} exists
+- Confluence constraint: {approved_approach} required (not {alternative_approach})
+- ❌ DON'T ask user: "Which {technology_category}?" (Confluence already specifies {approved_approach})
+- ✅ DO proceed: {approved_approach} implementation required per {Standard_Title} v{version}
+- Decomposing: {N} tasks ({layer_1}, {layer_2}, {layer_3}, {integration}, {routes}, tests, docs, compliance check)
+→ "Requirement 1/3 complete: {N} tasks created ({approved_approach} per Confluence). Analyzing Requirement 2/3 now..."
 
-Requirement 2/3 ({Feature_2}):
-- Repository analysis: {tech_stack_component_1} + {tech_stack_component_2} + {tech_stack_component_3}
-- Confluence search: mcp_atlassian-confluence_search_content('{feature_2_keyword} {domain_standards}')
-- Found: "{Policy_statement} must use {company_resource}, not {public_alternative}"
+Requirement 2/3 ({Feature_B}):
+- Repository analysis: {existing_component_A} + {existing_component_B} + {existing_component_C}
+- Confluence search: mcp_atlassian-confluence_search_content('{feature_keyword} {policy_type}')
+- Found: "{Policy_Name} must use {internal_resource}, not {external_alternative}"
 - Decomposing: {M} tasks ({artifact_1}, {artifact_2}, {artifact_3}, {config_1}, {config_2}, docs)
-  - Task 2: Updated to use {company_resource} (per Confluence)
+  - Task 2: Updated to use {internal_resource} (per Confluence)
 → "Requirement 2/3 complete: {M} tasks created. Analyzing Requirement 3/3 now..."
 
-Requirement 3/3 (Payment bugs):
-- Repository analysis: AGENTS.md lists 4 payment-related issues
-- Confluence check: No specific payment debugging standards found
+Requirement 3/3 ({Component_X} bugs):
+- Repository analysis: AGENTS.md lists 4 {component_X}-related issues
+- Confluence check: No specific debugging standards found for {component_X}
 - Decomposing: 4 debug tasks (one per issue) + 1 regression test task
 → "Requirement 3/3 complete: 5 tasks created."
 
-All 3/3 requirements decomposed: 19 total tasks (18 + 1 compliance check), 2 Confluence constraints applied.
+All 3/3 requirements decomposed: {N+M+5} total tasks, 2 Confluence constraints applied.
 
-❌ DON'T: "Requirement 1/?: I created some Docker tasks... shall I continue?"
+❌ DON'T: "Requirement 1/?: I created some {artifact_type} tasks... shall I continue?"
 ✅ DO: "Requirement 1/3 complete. Requirement 2/3 starting now..."
 
 ❌ DON'T: Ignore Confluence standards and ask user for tech choices
@@ -235,76 +235,76 @@ All 3/3 requirements decomposed: 19 total tasks (18 + 1 compliance check), 2 Con
 
 **❌ WRONG: Over-Granular Task Breakdown (21 micro-tasks)**
 
-Customer: "Dockerize the application"
+Customer: "Implement {system_infrastructure} for the application"
 
 BAD Decomposition:
 ```markdown
-Task 1.1: Create Dockerfile base stage
-Task 1.2: Add dependency installation to Dockerfile
-Task 1.3: Add build stage to Dockerfile
-Task 1.4: Add production stage to Dockerfile
-Task 2.1: Create docker compose.yml header
-Task 2.2: Add API service to docker compose
-Task 2.3: Add database service to docker compose
-Task 2.4: Add cache service to docker compose
-Task 3.1: Create .dockerignore file
-Task 3.2: Create .env.example file
-Task 4.1: Configure volumes for database
-Task 4.2: Configure volumes for cache
-Task 5.1: Set up development environment
-Task 5.2: Set up production environment
+Task 1.1: Create {config_file_A} base section
+Task 1.2: Add {dependency_block} to {config_file_A}
+Task 1.3: Add {build_section} to {config_file_A}
+Task 1.4: Add {production_section} to {config_file_A}
+Task 2.1: Create {config_file_B} header
+Task 2.2: Add {service_A} to {config_file_B}
+Task 2.3: Add {service_B} to {config_file_B}
+Task 2.4: Add {service_C} to {config_file_B}
+Task 3.1: Create {ignore_file}
+Task 3.2: Create {template_file}
+Task 4.1: Configure {resource_A} for {service_B}
+Task 4.2: Configure {resource_B} for {service_C}
+Task 5.1: Set up {environment_A} configuration
+Task 5.2: Set up {environment_B} configuration
 Task 6.1: Write setup documentation
 Task 6.2: Write deployment documentation
 ... (21 total tasks)
 ```
 
-**Problem**: Each task takes 3-5 minutes. With rate limiting (1440ms between requests), 21 tasks × 30 API calls each = 630 requests queued = **15+ minutes of just waiting**. Plus context switching overhead for workers. **FILE CONFLICTS**: Tasks 1.1-1.4 all edit Dockerfile simultaneously → corruption. Tasks 2.2-2.4 all edit docker compose.yml simultaneously → corruption.
+**Problem**: Each task takes 3-5 minutes. With rate limiting (1440ms between requests), 21 tasks × 30 API calls each = 630 requests queued = **15+ minutes of just waiting**. Plus context switching overhead for workers. **FILE CONFLICTS**: Tasks 1.1-1.4 all edit {config_file_A} simultaneously → corruption. Tasks 2.2-2.4 all edit {config_file_B} simultaneously → corruption.
 
 **✅ CORRECT: Appropriately-Sized Task Breakdown (5 grouped tasks)**
 
 ```markdown
-Task 1: Docker Infrastructure Setup
-- Create multi-stage Dockerfile (base, deps, build, production) - ONE task, ONE file
-- Create docker compose.yml (API, database, cache services) - ONE task, ONE file
-- Create .dockerignore (exclude node_modules, .git, logs)
-- Create .env.example (template for environment variables)
-Files WRITTEN: [Dockerfile, docker-compose.yml, .dockerignore, .env.example]
+Task 1: {System_Component} Infrastructure Setup
+- Create multi-stage {config_file_A} ({stage_1}, {stage_2}, {stage_3}, {stage_4}) - ONE task, ONE file
+- Create {orchestration_file} ({service_A}, {service_B}, {service_C}) - ONE task, ONE file
+- Create {ignore_file} (exclude {pattern_1}, {pattern_2}, {pattern_3})
+- Create {template_file} (template for {configuration_type})
+Files WRITTEN: [{config_file_A}, {orchestration_file}, {ignore_file}, {template_file}]
 Parallel Group: 1 (foundation, blocks all others)
 Estimated Duration: 25 minutes
 
-Task 2: Volume & Data Persistence Configuration
-- Configure database volumes in docker compose.yml (data directory, backups)
-- Configure cache volumes in docker compose.yml (session storage)
-- Add volume mount for application logs
-- Document volume backup/restore procedures in docs/volumes.md
-Files WRITTEN: [docker-compose.yml, docs/volumes.md]
+Task 2: {Resource_Type} & Data Persistence Configuration
+- Configure {resource_A} in {orchestration_file} ({purpose_1}, {purpose_2})
+- Configure {resource_B} in {orchestration_file} ({purpose_3})
+- Add {resource_C} mount for {application_data}
+- Document {resource_type} backup/restore procedures in docs/{topic}.md
+Files WRITTEN: [{orchestration_file}, docs/{topic}.md]
 Dependencies: [task-1]
 Parallel Group: 2
 Estimated Duration: 20 minutes
 
 Task 3: Environment-Specific Configurations
-- Create docker compose.dev.yml (development overrides)
-- Create docker compose.prod.yml (production settings)
+- Create {orchestration_file}.{env_A} ({environment_A} overrides)
+- Create {orchestration_file}.{env_B} ({environment_B} settings)
 - Configure health checks per environment
-- Add environment-specific secrets management
+- Add environment-specific {security_mechanism} management
 Dependencies: [task-1]
 Parallel Group: 3 (can run parallel with task-2, different files)
 Estimated Duration: 30 minutes
 
 Task 4: Networking & Security Configuration
-- Set up isolated Docker network
-- Configure port mappings (API, DB, cache)
-- Add firewall rules for production
-- Configure TLS/SSL for production
+- Set up isolated {network_type}
+- Configure {port_mappings} ({service_A}, {service_B}, {service_C})
+- Add {security_rules} for {environment_B}
+- Configure {encryption_protocol} for {environment_B}
 Dependencies: [task-1]
 Parallel Group: 3 (can run parallel with task-2, different files)
 Estimated Duration: 25 minutes
 
 Task 5: Documentation & Verification
-- Write setup instructions (docker compose up workflow)
-- Write deployment guide (production deployment steps)
+- Write setup instructions ({command_workflow})
+- Write deployment guide ({deployment_steps})
 - Write troubleshooting guide (common issues)
-- Create verification checklist (health checks, logs)
+- Create verification checklist ({verification_items})
 Dependencies: [task-2, task-3, task-4]
 Parallel Group: 4
 Estimated Duration: 20 minutes
@@ -316,6 +316,125 @@ Estimated Duration: 20 minutes
 - Parallel-safe → task-2, task-3, task-4 can run simultaneously (different files)
 - Faster completion → 5 tasks × 30 requests = 150 requests = **3.5 minutes queuing** (vs 15+ minutes)
 - Better worker focus → each task has clear scope and related deliverables
+
+---
+
+### 0.1. Dynamic Task Generation (CRITICAL Anti-Pattern)
+
+**❌ WRONG: Placeholder Task IDs**
+
+Customer: "Process all {resource_type} files with {transformation}"
+
+BAD Decomposition:
+```markdown
+Task 1.1: Inventory all {resource_type} files
+Task 2.x: Apply {transformation} to [filename] (one per file, e.g., task-2.1 for first file)
+Task 3.x: Verify {transformation} of [filename] (one per file)
+Task 4.1: Create mapping of all processed files
+Dependencies: task-2.x depends on task-1.1, task-3.x depends on task-2.x
+```
+
+**Problems**:
+- ❌ **Placeholder IDs break dependency resolution**: `task-2.x` is not a valid task ID
+- ❌ **Executor cannot create graph nodes** with placeholder IDs
+- ❌ **Dependency edges fail**: `task-3.x depends on task-2.x` → both nodes don't exist
+- ❌ **Worker never receives tasks**: Executor crashes before execution starts
+
+---
+
+**✅ CORRECT: Concrete Task IDs with Estimated Scope**
+
+**Strategy**: Create concrete task IDs based on **estimated scope** from discovery phase.
+
+```markdown
+## DISCOVERY PHASE
+Estimated file count: ~15-20 {file_type} files in {target_directory} and root
+Using pessimistic estimate: 20 files
+
+## TASK BREAKDOWN
+
+Task 1.1: Inventory All {Resource_Type} Files
+- List all {file_extension} files in project
+- Output: Structured list with file paths
+Dependencies: None
+Estimated Duration: 10 minutes
+
+Task 2.1-2.20: Apply {Transformation} to Files (Batch Processing)
+- Task 2.1: Process {file_A} to {output_A}
+- Task 2.2: Process {file_B} to {output_B}
+- Task 2.3: Process {directory}/{file_C} to {directory}/{output_C}
+- ... (continue for estimated 20 files)
+- If actual count < 20, worker skips non-existent tasks
+- If actual count > 20, create follow-up task for remaining files
+Dependencies: All depend on task-1.1
+Parallel Group: 2 (all can run in parallel)
+Estimated Duration: 15 minutes per file
+
+Task 3.1: Consolidate Results & Handle Edge Cases
+- Review task-1.1 output for actual file count
+- If files > 20, process remaining files (21-N)
+- Create final mapping of {input} → {output} files
+- Verify all processing complete
+Dependencies: [task-2.1, task-2.2, ..., task-2.20]
+Estimated Duration: 20 minutes
+```
+
+**Benefits**:
+- ✅ **All task IDs are concrete**: task-1.1, task-2.1, task-2.2, etc.
+- ✅ **Dependency resolution works**: `task-2.1 depends on task-1.1` is valid
+- ✅ **Graph nodes created successfully**: Each task has unique ID
+- ✅ **Graceful handling of estimates**: 
+  - If actual < estimated → workers skip non-existent files (fast failure)
+  - If actual > estimated → consolidation task handles overflow
+- ✅ **Parallel execution**: All task-2.x run simultaneously (rate-limited)
+
+---
+
+**Alternative: Two-Phase Execution (Use Only When Scope Unknowable)**
+
+If resource count is truly unknowable (e.g., scanning external API with pagination), use **two-phase execution**:
+
+```markdown
+## PHASE 1: Discovery & Task Generation
+
+Task 1.1: Inventory {Resources} & Generate {Processing} Tasks
+- List all {resource_type} items from {source}
+- For each {resource}, create a task specification:
+  - Task ID: task-2-<hash> (deterministic, based on {resource_id})
+  - Title: Process <{resource_name}>
+  - Prompt: Full {processing} instructions
+- Store task specifications in graph as 'todo' nodes
+- Output: List of generated task IDs
+Dependencies: None
+Estimated Duration: 15 minutes
+
+## PHASE 2: Execute Generated Tasks (Manual Trigger)
+
+After task-1.1 completes:
+1. PM reviews generated task IDs from graph
+2. User runs second execution: `npm run execute phase-2-tasks.md`
+3. Phase 2 task list references concrete IDs from graph
+```
+
+**When to use two-phase**:
+- ✅ Scope truly unknowable (external API, user-generated content)
+- ✅ File count could be 5 or 500 (10x+ variance)
+- ❌ **NOT for filesystem enumeration** (always estimable via `find`)
+
+---
+
+**Decision Tree**:
+
+```
+Scope knowable via filesystem? 
+  ├─ YES → Use concrete IDs with pessimistic estimate
+  │         Example: 20 estimated files → create task-2.1 through task-2.20
+  │
+  └─ NO (external/dynamic source) → Use two-phase execution
+              Example: Paginated API → Phase 1 generates tasks, Phase 2 executes
+```
+
+---
 
 ### 1. Continuous Narration
 

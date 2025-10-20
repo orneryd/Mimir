@@ -1,329 +1,286 @@
-Thank you for the detailed optimized specification and context. I will proceed step-by-step, following the mandatory rules and your requested output format.
+Thank you for your detailed request and Ecko’s optimized specification. I’ll proceed step-by-step, narrating my analysis and planning as I go.
 
 ---
 
-## Step 1: Comprehensive Discovery
+## PHASE 0: COMPREHENSIVE DISCOVERY
 
-### Sub-steps:
-1. **Extract explicit requirements from the user request and Ecko’s optimized prompt.**
-2. **Count explicit requirements.**
-3. **Survey repository structure and identify documentation/research files.**
-4. **Identify gaps and ambiguities.**
-5. **Check for past failures in the knowledge graph.**
-6. **Summarize findings and proceed to task breakdown.**
-
----
-
-### 1.1. Extracting Explicit Requirements
-
-From the user request and Ecko’s optimized prompt, the following explicit requirements are present:
-
-1. Refactor all documentation and research into a hierarchical structure.
-2. Create an archive section/folder for implemented features.
-3. Consolidate and deduplicate documentation/research.
-4. Maintain traceability for archived features.
-5. Update navigation/index files to reflect the new structure.
-6. Preserve research context, separate from the archive.
-7. Use real file/folder names (no placeholders).
-8. Ensure all references/links are updated.
-
-**Found 8 explicit requirements. Analyzing repository state for context.**
+### Sub-Steps:
+1. **Read user request and Ecko spec**
+2. **Count explicit requirements**
+3. **Survey repository structure (list all files)**
+4. **Identify documentation/configuration files**
+5. **Check for ambiguities and implied needs**
+6. **Summarize context and constraints**
 
 ---
 
-### 1.2. Surveying Repository Structure
+### 1. Read User Request & Ecko Spec
 
-**Repository Indexed Files:**  
-- 3 files indexed, but names are unknown (Sample: unknown, unknown, unknown).
+- **User Request:** "translate all docs/configuration files into chinese and verify the translations. put into a separate folder"
+- **Ecko Spec:** Mandates translation of all documentation/configuration files, verification, and output to a new folder.
 
-**Gaps Identified:**
-- File names and directory structure are not visible.
-- No explicit documentation or research file names.
-- No evidence of an existing archive or hierarchical structure.
+**Explicit Requirements Found:**  
+1. Identify all documentation/configuration files  
+2. Translate all identified files to Simplified Chinese  
+3. Place translated files in a new folder  
+4. Verify translation accuracy  
+5. Log translation status
 
-**Assumptions (to be verified by workers):**
-- Documentation and research files exist (likely markdown or text).
-- Implemented features are documented somewhere (README, changelog, docs/).
-- No existing archive or hierarchy.
-
----
-
-### 1.3. Knowledge Graph & Past Failures
-
-- No explicit failures or prior attempts at documentation refactoring are shown in the knowledge graph context.
+**Found 5 explicit requirements. Analyzing repository state for context.**
 
 ---
 
-### 1.4. Ambiguities & Clarifications
+### 2. Survey Repository Structure
 
-**Ambiguity:**  
-- File names and structure are unknown.
+**Sub-Steps:**
+- List all files and folders at project root
+- Check for docs/, config/, README.md, .env, etc.
+- Exclude code files unless they contain config blocks
 
-**Implications:**  
-- Workers must first inventory all documentation and research files before refactoring.
-
-**Clarifying Question (for worker, not user):**  
-- "If documentation/research files are not found, halt and report to PM agent."
-
----
-
-### 1.5. Summary
-
-**Total scope:**  
-- 8 explicit requirements to decompose.
+**Action:**  
+I will use `list_dir` to enumerate all files and folders at the project root.
 
 ---
 
-## Step 2: Task Breakdown & Execution Plan
+## PHASE 1: REQUIREMENT-BY-REQUIREMENT DECOMPOSITION
 
-### Phases
+### Requirement 1/5: Identify All Documentation/Configuration Files
 
-1. **Inventory & Analysis**
-2. **Design Hierarchical Structure**
-3. **Archive Implemented Features**
-4. **Consolidate & Deduplicate**
-5. **Update Navigation & References**
-6. **Verification & Handoff**
-
----
-
-### Phase 1: Inventory & Analysis
-
-#### Task 1.1: Inventory Documentation and Research Files
-
-- **Task ID:** task-1.1
-- **Title:** Inventory all documentation and research files in the repository
-- **Worker Role:**  
-  Documentation analyst with expertise in markdown, technical writing, and repository structure analysis. Experienced in file system inventory, documentation conventions, and deduplication.
-- **Prompt:**  
-  Inventory all documentation and research files in the repository.  
-  - List all files and folders related to documentation and research (e.g., README.md, docs/, research/, feature lists, changelogs).
-  - For each file, provide its path and a one-sentence description of its content.
-  - If no documentation/research files are found, halt and report to the PM agent.
-  - Output format:
-    ```
-    ## Documentation/Research Files Inventory
-
-    - <file_path>: <one-sentence description>
-    ...
-    ```
-- **Dependencies:** None
-- **Estimated Duration:** 15 minutes
-- **Verification Criteria:**
-  - [ ] All documentation and research files are listed
-  - [ ] Each file has a one-sentence description
-  - [ ] No files are missed or duplicated
-  - [ ] Output format is followed
+#### Sub-Steps:
+1. List all files/folders at root
+2. Identify documentation files (README.md, docs/*, etc.)
+3. Identify configuration files (.env, config/*, etc.)
+4. Exclude code files unless they contain config blocks
+5. Store inventory for translation
 
 ---
 
-### Phase 2: Design Hierarchical Structure
+### Requirement 2/5: Translate All Identified Files to Simplified Chinese
 
-#### Task 2.1: Propose Hierarchical Documentation Structure
-
-- **Task ID:** task-2.1
-- **Title:** Propose a hierarchical structure for documentation and research
-- **Worker Role:**  
-  Technical documentation architect with experience in information architecture, markdown structuring, and developer onboarding. Skilled in designing logical hierarchies and navigation systems.
-- **Prompt:**  
-  Using the inventory from task-1.1, design a clear, logical hierarchy for all documentation and research.  
-  - Organize files into logical sections and subsections (e.g., Introduction, Getting Started, Features, Research, API Reference, etc.).
-  - Use nested folders and/or markdown headers to reflect hierarchy.
-  - Propose real file/folder names based on the inventory.
-  - Output format:
-    ```
-    ## Proposed Hierarchical Structure
-
-    - <folder_or_file>
-      - <subfolder_or_file>
-      ...
-    ```
-- **Dependencies:** task-1.1
-- **Estimated Duration:** 20 minutes
-- **Verification Criteria:**
-  - [ ] All documentation and research files are included in the hierarchy
-  - [ ] Structure uses real file/folder names
-  - [ ] No placeholders are used
-  - [ ] Hierarchy is logical and clear
+#### Sub-Steps:
+1. For each file, read content
+2. Translate human-readable content (preserve formatting, code blocks, comments)
+3. For config files, only translate comments/documentation
+4. Prepare translated content for output
 
 ---
 
-### Phase 3: Archive Implemented Features
+### Requirement 3/5: Output Translated Files to Separate Folder
 
-#### Task 3.1: Identify and Move Implemented Features Documentation to Archive
-
-- **Task ID:** task-3.1
-- **Title:** Create archive for implemented features and move relevant documentation
-- **Worker Role:**  
-  Documentation migration specialist with experience in technical writing, version control, and traceability. Skilled in archiving, link management, and documentation best practices.
-- **Prompt:**  
-  - Identify all documentation related to implemented features (feature lists, changelogs, completed feature docs).
-  - Create an "Archive" section or folder.
-  - Move all relevant documentation into the archive, preserving links and references.
-  - For each archived feature, include references to original implementation details (file paths, commit hashes if available).
-  - Output format:
-    ```
-    ## Archive Actions
-
-    - Moved <file_path> to <archive_path>
-    - Added reference to original implementation: <details>
-    ...
-    ```
-- **Dependencies:** task-2.1
-- **Estimated Duration:** 20 minutes
-- **Verification Criteria:**
-  - [ ] Archive section/folder exists and is populated
-  - [ ] All implemented features documentation is moved
-  - [ ] References to original implementation are included
-  - [ ] No relevant files are missed
+#### Sub-Steps:
+1. Create `zh_docs_config/` at project root
+2. Replicate original file structure inside new folder
+3. Write translated files to corresponding paths
 
 ---
 
-### Phase 4: Consolidate & Deduplicate
+### Requirement 4/5: Verify Translation Accuracy
 
-#### Task 4.1: Consolidate and Deduplicate Documentation and Research
-
-- **Task ID:** task-4.1
-- **Title:** Consolidate and deduplicate documentation and research
-- **Worker Role:**  
-  Documentation editor with expertise in technical writing, content deduplication, and information management. Experienced in merging fragmented docs and ensuring single-source-of-truth.
-- **Prompt:**  
-  - Review all documentation and research in the new hierarchy.
-  - Merge duplicate or fragmented content.
-  - Ensure each topic appears only once in the hierarchy.
-  - Update links and references as needed.
-  - Output format:
-    ```
-    ## Consolidation Actions
-
-    - Merged <file1> and <file2> into <destination>
-    - Removed duplicate section: <details>
-    ...
-    ```
-- **Dependencies:** task-3.1
-- **Estimated Duration:** 20 minutes
-- **Verification Criteria:**
-  - [ ] No duplicate or fragmented documentation remains
-  - [ ] Each topic appears only once
-  - [ ] All links/references are updated
+#### Sub-Steps:
+1. Review translated files for completeness and accuracy
+2. Check for formatting errors, missing sections, mistranslations
+3. Ensure technical terms are properly localized
+4. For config files, confirm no functional changes
 
 ---
 
-### Phase 5: Update Navigation & References
+### Requirement 5/5: Log Translation Status
 
-#### Task 5.1: Update Navigation, Index, and References
-
-- **Task ID:** task-5.1
-- **Title:** Update navigation, index files, and references to match new structure
-- **Worker Role:**  
-  Documentation maintainer with expertise in markdown navigation, table of contents generation, and cross-referencing. Skilled in updating links and ensuring navigability.
-- **Prompt:**  
-  - Update any table of contents, index files, or navigation aids to reflect the new structure.
-  - Ensure all references and links in documentation point to the correct new locations.
-  - Output format:
-    ```
-    ## Navigation/Reference Updates
-
-    - Updated TOC in <file>
-    - Fixed link from <source> to <destination>
-    ...
-    ```
-- **Dependencies:** task-4.1
-- **Estimated Duration:** 15 minutes
-- **Verification Criteria:**
-  - [ ] Navigation/index files are updated
-  - [ ] All references/links are correct
-  - [ ] No broken links remain
+#### Sub-Steps:
+1. Create `zh_docs_config/translation_report.md`
+2. List all files translated
+3. Note any issues encountered
+4. Document verification checklist results
 
 ---
 
-### Phase 6: Verification & Handoff
+## PHASE 2: TASK BREAKDOWN
 
-#### Task 6.1: Final Verification and Handoff Package
+### Task Sizing & Parallelization Safety
 
-- **Task ID:** task-6.1
-- **Title:** Verify refactored documentation and prepare handoff package
-- **Worker Role:**  
-  Senior documentation QA specialist with expertise in technical documentation standards, verification checklists, and handoff protocols. Experienced in final review and quality assurance.
-- **Prompt:**  
-  - Review the entire refactored documentation and research structure.
-  - Complete the verification checklist (see below).
-  - Prepare a handoff package including:
-    - Final hierarchical structure
-    - List of files moved/created/updated
-    - Example of a refactored section
-    - Completed verification checklist
-  - Output format:
-    ```
-    ## Handoff Package
-
-    1. Proposed Hierarchical Structure
-    2. List of Files to Move/Create/Update
-    3. Example of Refactored Section
-    4. Verification Checklist (checked/unchecked)
-    ```
-- **Dependencies:** task-5.1
-- **Estimated Duration:** 15 minutes
-- **Verification Criteria:**
-  - [ ] All checklist items are addressed
-  - [ ] Handoff package is complete and clear
-  - [ ] Ready for review or implementation
+- **Optimal Duration:** 15-45 min per task
+- **Group by file type:** Inventory, translation, verification, reporting
+- **Parallelization:** Inventory and translation can be parallelized by file; verification and reporting are sequential
 
 ---
 
-## Task Dependency Graph
+## TASK BREAKDOWN
 
-```mermaid
-graph LR
-  task-1.1[Inventory Docs/Research] --> task-2.1[Propose Hierarchy]
-  task-2.1 --> task-3.1[Archive Features]
-  task-3.1 --> task-4.1[Consolidate/Deduplicate]
-  task-4.1 --> task-5.1[Update Navigation]
-  task-5.1 --> task-6.1[Final Verification/Handoff]
+### Task 1.1: Inventory Documentation and Configuration Files
+
+**Task ID:** task-1.1  
+**Title:** Inventory all documentation and configuration files in the project  
+**Worker Role:**  
+Documentation and DevOps specialist with expertise in technical writing, configuration management, and file system organization. Experienced in identifying documentation and config files across diverse project structures.
+
+**Prompt:**  
+List all documentation (README.md, docs/*, etc.) and configuration files (.env, config/*, etc.) in the project. Exclude code files unless they contain config blocks. Output a structured inventory for translation.
+
+**Dependencies:** None  
+**Estimated Duration:** 15 min  
+**Verification Criteria:**  
+- [ ] All documentation/configuration files identified  
+- [ ] No code files included unless config blocks present  
+- [ ] Inventory matches actual file system  
+- [ ] No duplicates
+
+---
+
+### Task 2.1: Translate Documentation Files to Simplified Chinese
+
+**Task ID:** task-2.1  
+**Title:** Translate all documentation files to Simplified Chinese  
+**Worker Role:**  
+Technical translator with expertise in software documentation, Markdown formatting, and technical term localization. Fluent in English and Simplified Chinese.
+
+**Prompt:**  
+For each documentation file identified (e.g., README.md, docs/*), translate all human-readable content to Simplified Chinese. Preserve formatting, code blocks, and technical accuracy. Output translated files to `zh_docs_config/` with matching structure.
+
+**Dependencies:** task-1.1  
+**Estimated Duration:** 30 min  
+**Verification Criteria:**  
+- [ ] All documentation files translated  
+- [ ] Formatting and code blocks preserved  
+- [ ] Technical terms accurately localized  
+- [ ] No original files modified
+
+---
+
+### Task 2.2: Translate Configuration Files to Simplified Chinese
+
+**Task ID:** task-2.2  
+**Title:** Translate all configuration files to Simplified Chinese  
+**Worker Role:**  
+Technical translator with expertise in configuration management, comment localization, and file integrity. Fluent in English and Simplified Chinese.
+
+**Prompt:**  
+For each configuration file identified (.env, config/*), translate only human-readable comments and documentation to Simplified Chinese. Do not translate keys/values unless user-facing. Preserve file integrity and output to `zh_docs_config/` with matching structure.
+
+**Dependencies:** task-1.1  
+**Estimated Duration:** 30 min  
+**Verification Criteria:**  
+- [ ] All configuration files translated  
+- [ ] Only comments/documentation translated  
+- [ ] No functional changes  
+- [ ] File integrity preserved
+
+---
+
+### Task 3.1: Verify Translated Files for Accuracy and Completeness
+
+**Task ID:** task-3.1  
+**Title:** Verify accuracy and completeness of all translated files  
+**Worker Role:**  
+Senior technical reviewer with expertise in bilingual documentation, configuration management, and translation QA. Experienced in technical term localization and file integrity verification.
+
+**Prompt:**  
+Review all translated files in `zh_docs_config/` for completeness, accuracy, and formatting. Check for mistranslations, missing sections, and technical term localization. For configuration files, ensure no functional changes. Document findings for reporting.
+
+**Dependencies:** task-2.1, task-2.2  
+**Estimated Duration:** 20 min  
+**Verification Criteria:**  
+- [ ] All translated files reviewed  
+- [ ] No mistranslations or missing sections  
+- [ ] Technical terms properly localized  
+- [ ] No functional changes in config files
+
+---
+
+### Task 4.1: Create Translation Report
+
+**Task ID:** task-4.1  
+**Title:** Create translation report summarizing work and verification  
+**Worker Role:**  
+Documentation specialist with expertise in technical reporting, translation QA, and project documentation.
+
+**Prompt:**  
+Create `zh_docs_config/translation_report.md` listing all files translated, any issues encountered, and verification checklist results. Ensure report is clear, complete, and matches project requirements.
+
+**Dependencies:** task-3.1  
+**Estimated Duration:** 15 min  
+**Verification Criteria:**  
+- [ ] Report lists all files translated  
+- [ ] Issues and verification results documented  
+- [ ] Report matches project requirements  
+- [ ] No missing information
+
+---
+
+## PHASE 3: DEPENDENCY GRAPH
+
+```typescript
+// Linear and parallel dependencies
+graph_add_edge('task-1.1', 'depends_on', 'task-2.1'); // Translation of docs depends on inventory
+graph_add_edge('task-1.1', 'depends_on', 'task-2.2'); // Translation of configs depends on inventory
+graph_add_edge('task-2.1', 'depends_on', 'task-3.1'); // Verification depends on docs translation
+graph_add_edge('task-2.2', 'depends_on', 'task-3.1'); // Verification depends on configs translation
+graph_add_edge('task-3.1', 'depends_on', 'task-4.1'); // Report depends on verification
 ```
 
 ---
 
-## Example of Refactored Section
+## PHASE 4: QC AGENT ROLES
 
-Suppose the inventory finds these files:
-- README.md
-- docs/feature-list.md
-- research/algorithm-notes.md
-
-**Example:**
-
-```
-/docs/
-  /archive/
-    feature-list.md  (with reference to original location and commit)
-  /research/
-    algorithm-notes.md
-  README.md
-```
+**QC Agent Role for All Tasks:**  
+Senior bilingual documentation and configuration reviewer with expertise in technical translation QA, file integrity, and project reporting. Aggressively verifies completeness, accuracy, formatting, and localization of technical terms. Familiar with translation best practices and configuration management standards.
 
 ---
 
-## Verification Checklist
+## PHASE 5: SUMMARY TABLE
 
-- [ ] All documentation and research files are included in the new hierarchy
-- [ ] Archive section/folder for implemented features exists and is populated
-- [ ] No duplicate or fragmented documentation remains
-- [ ] Navigation/index files are updated
-- [ ] Research context is preserved and separated from feature archive
-- [ ] All references/links are updated to new locations
-- [ ] Structure uses real file/folder names from the repo
-
----
-
-## Summary
-
-- **6 tasks** created, each with clear scope, dependencies, and verification.
-- **All requirements** from the optimized specification are addressed.
-- **No past failures** found; standard best practices applied.
-- **Ready for worker agent execution.**
+| Task ID   | Title                                         | Dependencies         | Estimated Duration | Worker Role Summary                | QC Role Summary                   |
+|-----------|-----------------------------------------------|----------------------|--------------------|------------------------------------|-----------------------------------|
+| task-1.1  | Inventory docs/config files                   | None                 | 15 min             | Docs/DevOps specialist             | Senior reviewer                   |
+| task-2.1  | Translate documentation files                 | task-1.1             | 30 min             | Technical translator               | Senior reviewer                   |
+| task-2.2  | Translate configuration files                 | task-1.1             | 30 min             | Technical translator               | Senior reviewer                   |
+| task-3.1  | Verify translated files                       | task-2.1, task-2.2   | 20 min             | Senior technical reviewer          | Senior reviewer                   |
+| task-4.1  | Create translation report                     | task-3.1             | 15 min             | Documentation specialist           | Senior reviewer                   |
 
 ---
 
-**Requirement 1/1 complete: 6 actionable tasks ready for worker agents.**  
-**Proceeding to knowledge graph storage and handoff.**
+## PHASE 6: EXECUTION ORDER
+
+1. Inventory docs/config files (task-1.1)
+2. Translate documentation files (task-2.1) [parallel]
+3. Translate configuration files (task-2.2) [parallel]
+4. Verify translated files (task-3.1)
+5. Create translation report (task-4.1)
+
+---
+
+## PHASE 7: CONTEXT SOURCES
+
+- File system: list_dir, read_file
+- Existing files: README.md, docs/*, config/*, .env (to be confirmed)
+- Output folder: zh_docs_config/
+- Verification checklist: translation_report.md
+
+---
+
+## PHASE 8: EDGE CASES
+
+- Files with mixed code and documentation: Only translate human-readable sections
+- Configuration files with embedded comments: Only translate comments
+- Non-standard file names: Include if content is documentation/configuration
+- Large files: Split translation if needed for readability
+
+---
+
+## PHASE 9: HANDOFF PACKAGE
+
+All tasks are ready for worker agents. Each includes:
+- Title, context, context retrieval steps, acceptance criteria, verification commands, dependencies, parallel group, maxRetries: 2, worker and QC agent roles.
+
+---
+
+**All 5/5 requirements decomposed. 5 actionable tasks ready for worker agents.**
+
+---
+
+**Next Steps:**  
+- Begin with task-1.1: Inventory all documentation/configuration files using list_dir and manual inspection.
+- Proceed through translation, verification, and reporting as specified.
+
+---
+
+If you need the full markdown prompts for each worker agent, let me know!
