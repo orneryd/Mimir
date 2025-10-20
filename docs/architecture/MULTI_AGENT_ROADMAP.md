@@ -847,7 +847,7 @@ export class DatabasePersistence {
 **Docker Compose:**
 
 ```yaml
-# docker-compose.yml
+# docker compose.yml
 
 version: '3.8'
 

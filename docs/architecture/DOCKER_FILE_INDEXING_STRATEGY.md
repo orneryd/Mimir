@@ -34,7 +34,7 @@
 **Description:** Mount host directories directly into the container at runtime.
 
 ```yaml
-# docker-compose.yml
+# docker compose.yml
 services:
   mcp-server:
     volumes:
@@ -378,7 +378,7 @@ export class WatchConfigManager {
 #### Docker Compose Configuration
 
 ```yaml
-# docker-compose.yml
+# docker compose.yml
 services:
   mcp-server:
     volumes:
@@ -568,7 +568,7 @@ export class IndexQueue {
 ### Phase 1: Basic Setup (Bind Mounts + Polling)
 
 ```yaml
-# docker-compose.yml
+# docker compose.yml
 version: '3.8'
 
 services:
@@ -623,7 +623,7 @@ services:
 
 ### Phase 2: Dynamic Volume Mounting (Advanced)
 
-**Challenge:** Adding new folders requires restarting container with updated `docker-compose.yml`.
+**Challenge:** Adding new folders requires restarting container with updated `docker compose.yml`.
 
 **Solution:** Use Docker API to dynamically mount volumes (advanced).
 
@@ -649,7 +649,7 @@ export class DockerVolumeManager {
 **Better Approach:** Pre-mount parent directories and use MCP tool to configure which subdirectories to watch.
 
 ```yaml
-# docker-compose.yml
+# docker compose.yml
 volumes:
   # Mount entire workspace directory
   - /Users/username:/workspace:ro

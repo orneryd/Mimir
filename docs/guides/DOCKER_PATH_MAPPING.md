@@ -19,7 +19,7 @@ When running the MCP server in Docker, paths work differently than on your host 
 
 ### Default Setup
 
-By default, the docker-compose mounts:
+By default, the docker compose mounts:
 ```yaml
 volumes:
   - /Users/timothysweet/src:/workspace:ro
@@ -33,17 +33,17 @@ volumes:
 To mount a different directory:
 
 ```bash
-HOST_WORKSPACE_ROOT=/path/to/your/projects docker-compose up
+HOST_WORKSPACE_ROOT=/path/to/your/projects docker compose up
 ```
 
 **Examples:**
 
 ```bash
 # Mount your entire home directory
-HOST_WORKSPACE_ROOT=/Users/timothysweet docker-compose up
+HOST_WORKSPACE_ROOT=/Users/timothysweet docker compose up
 
 # Mount a specific projects folder
-HOST_WORKSPACE_ROOT=/Users/timothysweet/Documents/projects docker-compose up
+HOST_WORKSPACE_ROOT=/Users/timothysweet/Documents/projects docker compose up
 ```
 
 ## Using File Indexing Tools
@@ -112,7 +112,7 @@ HOST_WORKSPACE_ROOT=/Users/timothysweet/Documents/projects docker-compose up
 
 ## Environment Variables
 
-### In docker-compose.yml
+### In docker compose.yml
 
 ```yaml
 environment:
@@ -126,7 +126,7 @@ volumes:
 
 ```bash
 # Change host mount point
-HOST_WORKSPACE_ROOT=/path/to/projects docker-compose up
+HOST_WORKSPACE_ROOT=/path/to/projects docker compose up
 
 # Container still uses /workspace internally
 ```
@@ -175,9 +175,9 @@ ls -la /workspace/ngx-cmk-translate
 **Problem:** Wrong host directory mounted
 
 **Solution:** 
-1. Stop containers: `docker-compose down`
+1. Stop containers: `docker compose down`
 2. Check `HOST_WORKSPACE_ROOT` points to correct directory
-3. Restart: `HOST_WORKSPACE_ROOT=/correct/path docker-compose up`
+3. Restart: `HOST_WORKSPACE_ROOT=/correct/path docker compose up`
 
 ## Quick Reference
 
@@ -185,13 +185,13 @@ ls -la /workspace/ngx-cmk-translate
 
 ```bash
 # Start with default workspace (/Users/timothysweet/src)
-docker-compose up
+docker compose up
 
 # Start with custom workspace
-HOST_WORKSPACE_ROOT=/Users/timothysweet/Documents/code docker-compose up
+HOST_WORKSPACE_ROOT=/Users/timothysweet/Documents/code docker compose up
 
 # Start with entire home directory
-HOST_WORKSPACE_ROOT=/Users/timothysweet docker-compose up
+HOST_WORKSPACE_ROOT=/Users/timothysweet docker compose up
 ```
 
 ### MCP Tool Calls (Always Use Container Paths)

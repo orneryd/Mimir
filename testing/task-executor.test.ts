@@ -11,15 +11,18 @@ describe('Task Executor - Parallel Execution', () => {
 **Agent Role Description**
 Backend engineer with API experience
 
-**Recommended Model:** GPT-4.1
+**Recommended Model**
+GPT-4.1
 
-**Optimized Prompt:**
-\`\`\`markdown
+**Optimized Prompt**
+<prompt>
 Create API endpoint
-\`\`\`
+</prompt>
 
-**Dependencies:** None
-**Estimated Duration:** 1 hour
+**Dependencies**
+None
+**Estimated Duration**
+1 hour
 
 ---
 
@@ -27,15 +30,18 @@ Create API endpoint
 **Agent Role Description**
 Frontend developer with React skills
 
-**Recommended Model:** Claude Sonnet 4
+**Recommended Model**
+Claude Sonnet 4
 
-**Optimized Prompt:**
-\`\`\`
+**Optimized Prompt**
+<prompt>
 Build UI component
-\`\`\`
+</prompt>
 
-**Dependencies:** task-1
-**Estimated Duration:** 2 hours
+**Dependencies**
+task-1
+**Estimated Duration**
+2 hours
 `;
 
       const tasks = parseChainOutput(markdown);
@@ -50,36 +56,44 @@ Build UI component
     it('should parse tasks with parallel groups', () => {
       const markdown = `
 ### Task ID: task-1
-**Parallel Group:** 1
+**Parallel Group**
+1
 **Agent Role Description**
 Backend engineer
 
-**Recommended Model:** GPT-4.1
+**Recommended Model**
+GPT-4.1
 
-**Optimized Prompt:**
-\`\`\`
+**Optimized Prompt**
+<prompt>
 Create service A
-\`\`\`
+</prompt>
 
-**Dependencies:** None
-**Estimated Duration:** 1 hour
+**Dependencies**
+None
+**Estimated Duration**
+1 hour
 
 ---
 
 ### Task ID: task-2
-**Parallel Group:** 1
+**Parallel Group**
+1
 **Agent Role Description**
 Backend engineer
 
-**Recommended Model:** GPT-4.1
+**Recommended Model**
+GPT-4.1
 
-**Optimized Prompt:**
-\`\`\`
+**Optimized Prompt**
+<prompt>
 Create service B
-\`\`\`
+</prompt>
 
-**Dependencies:** None
-**Estimated Duration:** 1 hour
+**Dependencies**
+None
+**Estimated Duration**
+1 hour
 `;
 
       const tasks = parseChainOutput(markdown);

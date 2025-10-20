@@ -16,7 +16,7 @@ GPT-4.1
 <details>
 <summary>Click to expand</summary>
 
-\`\`\`markdown
+<prompt>
 # Task: Implement authentication
 
 ## MANDATORY RULES
@@ -25,7 +25,7 @@ GPT-4.1
 
 ## OUTPUT
 Deliver working code.
-\`\`\`
+</prompt>
 </details>
 
 #### **Dependencies**
@@ -62,11 +62,11 @@ Frontend developer with React expertise.
 Claude Sonnet 4
 
 #### **Optimized Prompt**
-\`\`\`markdown
+<prompt>
 # Build Login Component
 
 Create a login form with email and password fields.
-\`\`\`
+</prompt>
 
 #### **Dependencies**
 task-1.1
@@ -98,9 +98,9 @@ Backend architect.
 GPT-4.1
 
 #### **Optimized Prompt**
-\`\`\`markdown
+<prompt>
 Design the system.
-\`\`\`
+</prompt>
 
 #### **Dependencies**
 None
@@ -119,9 +119,9 @@ Database engineer.
 GPT-4.1
 
 #### **Optimized Prompt**
-\`\`\`markdown
+<prompt>
 Create schema.
-\`\`\`
+</prompt>
 
 #### **Dependencies**
 task-1.1
@@ -149,9 +149,9 @@ Integration specialist.
 GPT-4.1
 
 #### **Optimized Prompt**
-\`\`\`markdown
+<prompt>
 Integrate components.
-\`\`\`
+</prompt>
 
 #### **Dependencies**
 task-1.1, task-2.1, task-2.2
@@ -180,9 +180,9 @@ Backend developer A.
 GPT-4.1
 
 #### **Optimized Prompt**
-\`\`\`markdown
+<prompt>
 Implement feature A.
-\`\`\`
+</prompt>
 
 #### **Dependencies**
 None
@@ -204,9 +204,9 @@ Backend developer B.
 GPT-4.1
 
 #### **Optimized Prompt**
-\`\`\`markdown
+<prompt>
 Implement feature B.
-\`\`\`
+</prompt>
 
 #### **Dependencies**
 None
@@ -233,9 +233,9 @@ Developer.
 GPT-4.1
 
 #### **Optimized Prompt**
-\`\`\`markdown
+<prompt>
 Task
-\`\`\`
+</prompt>
 
 #### **Dependencies**
 none
@@ -279,7 +279,7 @@ Claude Sonnet 4
 <details>
 <summary>Click to expand</summary>
 
-\`\`\`markdown
+<prompt>
 # Complex Task
 
 ## MANDATORY RULES
@@ -301,7 +301,7 @@ Before starting, verify these:
 ## VERIFICATION CHECKLIST
 - [ ] Tests pass
 - [ ] Code is documented
-\`\`\`
+</prompt>
 </details>
 
 #### **Dependencies**
@@ -330,9 +330,9 @@ None
    GPT-4.1   
 
 #### **Optimized Prompt**
-\`\`\`markdown
+<prompt>
 Task with spaces
-\`\`\`
+</prompt>
 
 #### **Dependencies**
    task-0.1  ,  task-0.2  
@@ -362,9 +362,9 @@ Backend developer with Node.js expertise
 Claude Sonnet 4
 
 #### **Optimized Prompt**
-\`\`\`markdown
+<prompt>
 Build a REST API
-\`\`\`
+</prompt>
 
 #### **Dependencies**
 None
@@ -403,9 +403,9 @@ Backend developer
 GPT-4.1
 
 #### **Optimized Prompt**
-\`\`\`markdown
+<prompt>
 Build API
-\`\`\`
+</prompt>
 
 #### **Dependencies**
 None
@@ -449,9 +449,9 @@ Backend developer
 GPT-4.1
 
 #### **Optimized Prompt**
-\`\`\`markdown
+<prompt>
 Build API
-\`\`\`
+</prompt>
 
 #### **Dependencies**
 None
@@ -488,9 +488,9 @@ Backend developer
 GPT-4.1
 
 #### **Optimized Prompt**
-\`\`\`markdown
+<prompt>
 Build API
-\`\`\`
+</prompt>
 
 #### **Dependencies**
 None
@@ -517,9 +517,9 @@ Backend developer
 GPT-4.1
 
 #### **Optimized Prompt**
-\`\`\`markdown
+<prompt>
 Build API
-\`\`\`
+</prompt>
 
 #### **Dependencies**
 None

@@ -30,6 +30,13 @@ import {
   handleListWatchedFolders
 } from "./tools/fileIndexing.tools.js";
 
+// Vector Search
+import {
+  createVectorSearchTools,
+  handleVectorSearchFiles,
+  handleGetEmbeddingStats
+} from "./tools/vectorSearch.tools.js";
+
 // ============================================================================
 // Global State
 // ============================================================================
@@ -362,6 +369,34 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       // ========================================================================
+      // VECTOR SEARCH OPERATIONS
+      // ========================================================================
+
+      case "vector_search_files": {
+        const result = await handleVectorSearchFiles(args, graphManager.getDriver());
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(result, null, 2)
+            }
+          ]
+        };
+      }
+
+      case "get_embedding_stats": {
+        const result = await handleGetEmbeddingStats(args, graphManager.getDriver());
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(result, null, 2)
+            }
+          ]
+        };
+      }
+
+      // ========================================================================
       // MULTI-AGENT LOCKING OPERATIONS
       // ========================================================================
 
@@ -502,7 +537,8 @@ export async function initializeGraphManager() {
     
     // Combine all tools
     const fileIndexingTools = createFileIndexingTools(graphManager.getDriver(), fileWatchManager);
-    allTools = [...GRAPH_TOOLS, ...fileIndexingTools];
+    const vectorSearchTools = createVectorSearchTools(graphManager.getDriver());
+    allTools = [...GRAPH_TOOLS, ...fileIndexingTools, ...vectorSearchTools];
   }
   return graphManager;
 }

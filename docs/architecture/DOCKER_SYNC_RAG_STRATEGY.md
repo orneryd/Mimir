@@ -124,7 +124,7 @@
 ### Docker Compose Configuration
 
 ```yaml
-# docker-compose.yml
+# docker compose.yml
 version: '3.8'
 
 services:
@@ -238,7 +238,7 @@ volumes:
 **Container Path:** `/workspace/src`
 
 ```yaml
-# docker-compose.yml
+# docker compose.yml
 services:
   mcp-server:
     volumes:
@@ -453,7 +453,7 @@ RAG_MIN_RELEVANCE=0.3
 export WORKSPACE_ROOT=/Users/timothysweet/src
 
 # Start Docker services
-docker-compose up -d
+docker compose up -d
 
 # Verify the mount worked (all projects visible)
 docker exec mcp-graph-rag ls -la /workspace/src
@@ -465,7 +465,7 @@ docker exec mcp-graph-rag ls -la /workspace/src
 # drwxr-xr-x  personal-notes/
 
 # Check logs
-docker-compose logs -f mcp-server
+docker compose logs -f mcp-server
 
 # Expected output (NO watches yet - empty config):
 # 📂 Loading persisted watches...
@@ -566,7 +566,7 @@ await mcp.call('watch_folder', {
 // 3. On restart: Automatically resumes watching
 ```
 
-**Option 2: Update docker-compose.yml (Requires Restart)**
+**Option 2: Update docker compose.yml (Requires Restart)**
 
 ```yaml
 # Add new bind mount
@@ -575,8 +575,8 @@ volumes:
 ```
 
 ```bash
-docker-compose down
-docker-compose up -d
+docker compose down
+docker compose up -d
 ```
 
 ---
@@ -595,13 +595,13 @@ NEO4J_PASSWORD=mysecurepassword
 WORKSPACE_ROOT=/Users/timothysweet/src
 EOF
 
-# Verify docker-compose.yml volumes section
+# Verify docker compose.yml volumes section
 # volumes:
 #   - ${WORKSPACE_ROOT}:/workspace/src:ro
 #   - ./data:/app/data
 
 # Start services
-docker-compose up -d
+docker compose up -d
 
 # Verify ALL projects are visible (but not indexed yet)
 docker exec mcp-graph-rag ls /workspace/src
@@ -612,7 +612,7 @@ docker exec mcp-graph-rag ls /workspace/src/GRAPH-RAG-TODO-main/src
 # Output: index.ts  managers/  tools/  types/  utils/
 
 # Check logs - no watches yet
-docker-compose logs mcp-server
+docker compose logs mcp-server
 # Output: 📂 Loading 0 persisted watches...
 ```
 
@@ -743,7 +743,7 @@ echo "// New feature" >> /Users/timothysweet/src/GRAPH-RAG-TODO-main/src/manager
 # 4. Next query includes updated content
 
 # Check logs:
-docker-compose logs -f mcp-server
+docker compose logs -f mcp-server
 # 📝 File changed: /workspace/src/GRAPH-RAG-TODO-main/src/managers/GraphManager.ts
 # ✅ reindex: /workspace/src/GRAPH-RAG-TODO-main/src/managers/GraphManager.ts (87ms)
 
@@ -1701,7 +1701,7 @@ export async function handleGetNode(
 ### **PHASE 1: Core RAG (No Vector Embeddings) - CURRENT FOCUS**
 
 #### 1.1: Docker Bind Mount Setup (Week 1)
-- [ ] Update `docker-compose.yml` with bind mount volumes
+- [ ] Update `docker compose.yml` with bind mount volumes
 - [ ] Configure environment variables for watched folders
 - [ ] Test polling performance (CPU usage, event latency)
 - [ ] Configure chokidar with `usePolling: true`

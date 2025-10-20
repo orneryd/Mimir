@@ -1,13 +1,102 @@
 # MCP Server Configuration Guide
 
-**Version:** 3.0.0  
-**Last Updated:** 2025-10-13
+**Version:** 4.0.0  
+**Last Updated:** 2025-10-18
 
 ---
 
 ## 🎯 Overview
 
-The TODO + Memory System MCP Server can be configured via **environment variables** in your MCP client configuration (VSCode, Cursor, Windsurf, Claude Desktop, etc.).
+Mimir MCP Server supports two configuration methods:
+
+1. **Environment Variables** (Recommended for Docker) - Set via `.env` file or `docker compose.yml`
+2. **Config Files** - `.mimir/llm-config.json` for LLM model selection
+
+**Key principle:** Feature flags and deployment settings use environment variables for Docker-friendly configuration.
+
+---
+
+## 🔧 Environment Variable Configuration
+
+### Database Configuration
+
+| Variable | Description | Default | Docker Value |
+|----------|-------------|---------|--------------|
+| `NEO4J_URI` | Neo4j connection string | `bolt://localhost:7687` | `bolt://neo4j:7687` |
+| `NEO4J_USER` | Database username | `neo4j` | `neo4j` |
+| `NEO4J_PASSWORD` | Database password | `password` | Set in `.env` |
+
+### Ollama Configuration
+
+| Variable | Description | Default | Docker Value |
+|----------|-------------|---------|--------------|
+| `OLLAMA_BASE_URL` | Ollama API endpoint | `http://localhost:11434` | `http://ollama:11434` |
+
+### Feature Flags
+
+| Variable | Description | Default | Notes |
+|----------|-------------|---------|-------|
+| `MIMIR_FEATURE_PM_MODEL_SUGGESTIONS` | PM agent suggests models | `false` | Experimental |
+| `MIMIR_FEATURE_VECTOR_EMBEDDINGS` | Enable semantic search | `false` | Requires Ollama |
+
+### Vector Embeddings Configuration
+
+Only used when `MIMIR_FEATURE_VECTOR_EMBEDDINGS=true`:
+
+| Variable | Description | Default | Notes |
+|----------|-------------|---------|-------|
+| `MIMIR_EMBEDDINGS_ENABLED` | Generate embeddings | `false` | Must be `true` |
+| `MIMIR_EMBEDDINGS_MODEL` | Ollama embedding model | `nomic-embed-text` | See [Vector Embeddings Guide](../guides/VECTOR_EMBEDDINGS_GUIDE.md) |
+| `MIMIR_EMBEDDINGS_DIMENSIONS` | Vector dimensions | `768` | Model-specific |
+| `MIMIR_EMBEDDINGS_CHUNK_SIZE` | Text chunk size | `512` | Tokens |
+| `MIMIR_EMBEDDINGS_CHUNK_OVERLAP` | Chunk overlap | `50` | Tokens |
+
+### Docker Configuration
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `HOST_WORKSPACE_ROOT` | Host directory to mount | `~/src` |
+| `WORKSPACE_ROOT` | Container mount point | `/workspace` |
+| `NODE_ENV` | Node environment | `production` |
+| `PORT` | HTTP server port | `3000` |
+
+---
+
+## 📁 Configuration Files
+
+### LLM Model Configuration
+
+**File:** `.mimir/llm-config.json`
+
+Used for LLM model selection and provider configuration. **Feature flags are now in environment variables.**
+
+**Example:**
+```json
+{
+  "defaultProvider": "ollama",
+  "providers": {
+    "ollama": {
+      "baseUrl": "http://localhost:11434",
+      "defaultModel": "gpt-oss",
+      "models": {
+        "gpt-oss": {
+          "name": "gpt-oss",
+          "contextWindow": 32768,
+          "description": "Open-source GPT model",
+          "recommendedFor": ["pm", "worker", "qc"],
+          "config": {
+            "numCtx": 32768,
+            "temperature": 0.0,
+            "numPredict": -1
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+**Note:** `baseUrl` can be overridden by `OLLAMA_BASE_URL` environment variable.
 
 ---
 

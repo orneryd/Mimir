@@ -40,7 +40,7 @@ The Docker migration project successfully completed **Phase 1 and Phase 2**, del
 
 **Duration**: 4-6 hours  
 **Status**: Completed on 2025-10-14T12:20:00.000Z  
-**Deliverables**: Dockerfile, docker-compose.yml, .env.example, .dockerignore
+**Deliverables**: Dockerfile, docker compose.yml, .env.example, .dockerignore
 
 ### Task 2.1: Create Dockerfile ✅
 - **Task ID**: `node-5-1760410374474`
@@ -57,7 +57,7 @@ The Docker migration project successfully completed **Phase 1 and Phase 2**, del
 ### Task 2.2: Create Docker Compose Configuration ✅
 - **Task ID**: `node-6-1760410374474`
 - **Status**: Completed (2025-10-14T12:05:00.000Z)
-- **Deliverable**: `docker-compose.yml`
+- **Deliverable**: `docker compose.yml`
 - **Key Features**:
   - Service: mcp-server
   - Port mapping: 3000:3000
@@ -65,7 +65,7 @@ The Docker migration project successfully completed **Phase 1 and Phase 2**, del
   - Environment from .env
   - Health check integration
   - Restart policy: unless-stopped
-- **Result**: Production-ready docker-compose configuration
+- **Result**: Production-ready docker compose configuration
 
 ### Task 2.3: Create Environment Configuration ✅
 - **Task ID**: `node-7-1760410374474`
@@ -161,7 +161,7 @@ The Docker migration project successfully completed **Phase 1 and Phase 2**, del
   - `docs/DOCKER_DEPLOYMENT.md`
   - Updated `README.md` with Docker section
 - **Planned Sections**:
-  - Prerequisites (Docker, docker-compose)
+  - Prerequisites (Docker, docker compose)
   - Quick Start (5-minute setup)
   - Configuration (all env vars explained)
   - Volume Management (backup, restore)
@@ -195,7 +195,7 @@ The Docker migration project successfully completed **Phase 1 and Phase 2**, del
 ### Files Created/Modified
 **Created**:
 - `Dockerfile`
-- `docker-compose.yml`
+- `docker compose.yml`
 - `.env.example`
 - `.dockerignore`
 

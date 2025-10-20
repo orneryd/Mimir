@@ -14,7 +14,7 @@ Last Updated: 2025-10-14
 3. [Configuration](#configuration)
 4. [Volume Management](#volume-management)
 5. [HTTP API Usage](#http-api-usage)
-6. [Docker Compose Commands Reference](#docker-compose-commands-reference)
+6. [Docker Compose Commands Reference](#docker compose-commands-reference)
 7. [Troubleshooting](#troubleshooting)
 8. [Production Deployment](#production-deployment)
 
@@ -30,7 +30,7 @@ Last Updated: 2025-10-14
   
 - **Docker Compose**: Version 2.0 or higher
   - Included with Docker Desktop
-  - Linux: `sudo apt-get install docker-compose-plugin`
+  - Linux: `sudo apt-get install docker compose-plugin`
 
 ### Verify Installation
 
@@ -38,7 +38,7 @@ Last Updated: 2025-10-14
 docker --version
 # Expected: Docker version 20.10+ or higher
 
-docker-compose --version
+docker compose --version
 # Expected: Docker Compose version v2.0+ or higher
 ```
 
@@ -71,12 +71,16 @@ cp .env.example .env
 ### Step 3: Build and Start
 
 ```bash
-# Build the Docker image
-docker-compose build
+# Build the Docker image with consistent tag
+docker build . -t mimir
+docker compose up -d
 
-# Start the server
-docker-compose up -d
+# Or use docker compose build (also uses 'mimir' tag via compose config)
+docker compose build
+docker compose up -d
 ```
+
+**Note**: Always use `-t mimir` when building manually to avoid creating multiple unnamed images.
 
 ### Step 4: Verify Health
 
@@ -186,7 +190,7 @@ To run on a different port (e.g., 8080):
    PORT=8080
    ```
 
-2. Edit `docker-compose.yml`:
+2. Edit `docker compose.yml`:
    ```yaml
    ports:
      - "8080:8080"
@@ -194,8 +198,8 @@ To run on a different port (e.g., 8080):
 
 3. Restart:
    ```bash
-   docker-compose down
-   docker-compose up -d
+   docker compose down
+   docker compose up -d
    ```
 
 ---
@@ -251,13 +255,13 @@ Run daily via cron:
 
 ```bash
 # Stop server
-docker-compose down
+docker compose down
 
 # Restore backup
 cp backups/memory-backup-20251014-020000.json data/.mcp-memory-store.json
 
 # Start server
-docker-compose up -d
+docker compose up -d
 ```
 
 #### Handling Corruption
@@ -268,9 +272,9 @@ If memory file is corrupted on startup:
 2. Restore from most recent backup (see above)
 3. If no backup exists, delete corrupted file and restart:
    ```bash
-   docker-compose down
+   docker compose down
    rm data/.mcp-memory-store.json
-   docker-compose up -d
+   docker compose up -d
    ```
 
 ### Data Migration
@@ -370,7 +374,7 @@ curl -s -X POST http://localhost:3000/mcp \
       "name": "create_todo",
       "arguments": {
         "title": "Deploy to production",
-        "description": "Test deployment with docker-compose",
+        "description": "Test deployment with docker compose",
         "priority": "high"
       }
     },
@@ -480,35 +484,35 @@ See [AGENTS.md](../AGENTS.md) for complete list of 33 available MCP tools.
 
 ```bash
 # Build image
-docker-compose build
+docker compose build
 
 # Start server (detached)
-docker-compose up -d
+docker compose up -d
 
 # Start server (with logs)
-docker-compose up
+docker compose up
 
 # Stop server
-docker-compose down
+docker compose down
 
 # Restart server
-docker-compose restart
+docker compose restart
 
 # Stop and remove volumes (⚠️ deletes data!)
-docker-compose down -v
+docker compose down -v
 ```
 
 ### Monitoring & Logs
 
 ```bash
 # View logs (live tail)
-docker-compose logs -f
+docker compose logs -f
 
 # View last 100 lines
-docker-compose logs --tail=100
+docker compose logs --tail=100
 
 # Check container status
-docker-compose ps
+docker compose ps
 
 # View resource usage
 docker stats
@@ -517,31 +521,36 @@ docker stats
 ### Maintenance
 
 ```bash
-# Rebuild from scratch
-docker-compose build --no-cache
+# Rebuild from scratch with consistent tag
+docker build . -t mimir --no-cache
+docker compose up -d
+
+# Or use docker compose
+docker compose build --no-cache
+docker compose up -d
 
 # Pull latest base images
-docker-compose pull
+docker compose pull
 
 # Remove stopped containers
-docker-compose rm
+docker compose rm
 
 # Execute command inside container
-docker-compose exec mcp-server sh
+docker compose exec mcp-server sh
 ```
 
 ### Health Checks
 
 ```bash
 # Check health status
-docker-compose ps
+docker compose ps
 
 # Manual health check
 curl http://localhost:3000/health
 
 # View health check logs
 docker inspect --format='{{json .State.Health}}' \
-  $(docker-compose ps -q mcp-server) | jq '.'
+  $(docker compose ps -q mcp-server) | jq '.'
 ```
 
 ---
@@ -550,7 +559,7 @@ docker inspect --format='{{json .State.Health}}' \
 
 ### Container Won't Start
 
-**Symptom**: `docker-compose up` fails immediately
+**Symptom**: `docker compose up` fails immediately
 
 **Solutions**:
 
@@ -559,7 +568,7 @@ docker inspect --format='{{json .State.Health}}' \
    # Check what's using port 3000
    lsof -i :3000
    
-   # Kill process or change port in .env and docker-compose.yml
+   # Kill process or change port in .env and docker compose.yml
    ```
 
 2. **Permission issues**:
@@ -570,7 +579,7 @@ docker inspect --format='{{json .State.Health}}' \
 
 3. **Check logs**:
    ```bash
-   docker-compose logs mcp-server
+   docker compose logs mcp-server
    ```
 
 ### Memory File Corruption
@@ -581,16 +590,16 @@ docker inspect --format='{{json .State.Health}}' \
 
 1. **Restore from backup**:
    ```bash
-   docker-compose down
+   docker compose down
    cp backups/memory-backup-<timestamp>.json data/.mcp-memory-store.json
-   docker-compose up -d
+   docker compose up -d
    ```
 
 2. **Start fresh** (⚠️ loses all data):
    ```bash
-   docker-compose down
+   docker compose down
    rm data/.mcp-memory-store.json
-   docker-compose up -d
+   docker compose up -d
    ```
 
 ### API Returns 400 "Server not initialized"
@@ -629,7 +638,7 @@ SESSION=$(curl -s -i -X POST http://localhost:3000/mcp \
    # ... (see Volume Management)
    
    # Restart to trigger decay cleanup
-   docker-compose restart
+   docker compose restart
    ```
 
 2. **Adjust TTL values** in `.env`:
@@ -640,14 +649,14 @@ SESSION=$(curl -s -i -X POST http://localhost:3000/mcp \
 
 ### Image Build Fails
 
-**Symptom**: `docker-compose build` fails with npm errors
+**Symptom**: `docker compose build` fails with npm errors
 
 **Solutions**:
 
 1. **Authentication issues** (enterprise environments):
    ```bash
-   # Use BuildKit secrets
-   DOCKER_BUILDKIT=1 docker build --secret id=npmrc,src=$HOME/.npmrc -t mcp-server:latest .
+   # Use BuildKit secrets with consistent tag
+   DOCKER_BUILDKIT=1 docker build --secret id=npmrc,src=$HOME/.npmrc -t mimir .
    ```
 
 2. **Network issues**:
@@ -655,13 +664,18 @@ SESSION=$(curl -s -i -X POST http://localhost:3000/mcp \
    # Clear Docker build cache
    docker builder prune
    
+   # Rebuild with consistent tag
+   docker build . -t mimir
+   docker compose up -d
+   ```
+   
    # Rebuild
-   docker-compose build --no-cache
+   docker compose build --no-cache
    ```
 
 ### Health Check Failing
 
-**Symptom**: `docker-compose ps` shows `unhealthy` status
+**Symptom**: `docker compose ps` shows `unhealthy` status
 
 **Debug**:
 
@@ -670,10 +684,10 @@ SESSION=$(curl -s -i -X POST http://localhost:3000/mcp \
 curl http://localhost:3000/health
 
 # Check container logs
-docker-compose logs --tail=50 mcp-server
+docker compose logs --tail=50 mcp-server
 
 # Inspect health check details
-docker inspect $(docker-compose ps -q mcp-server) \
+docker inspect $(docker compose ps -q mcp-server) \
   | jq '.[0].State.Health'
 ```
 
@@ -737,7 +751,7 @@ chmod 600 .env
 The Dockerfile already runs as non-root user `node`. Verify:
 
 ```bash
-docker-compose exec mcp-server whoami
+docker compose exec mcp-server whoami
 # Expected: node
 ```
 
@@ -745,7 +759,7 @@ docker-compose exec mcp-server whoami
 
 #### Resource Limits
 
-Add to `docker-compose.yml`:
+Add to `docker compose.yml`:
 
 ```yaml
 services:
@@ -782,7 +796,7 @@ upstream mcp_backend {
 Use tools like Uptime Kuma, Prometheus, or Datadog:
 
 ```yaml
-# docker-compose.yml
+# docker compose.yml
 services:
   mcp-server:
     # ... existing config ...
@@ -862,7 +876,7 @@ rsync -avz ./backups/ user@backup-server:/backups/mcp/
 
 1. **Pull new image**:
    ```bash
-   docker-compose pull
+   docker compose pull
    ```
 
 2. **Backup data**:
@@ -872,7 +886,7 @@ rsync -avz ./backups/ user@backup-server:/backups/mcp/
 
 3. **Restart with new image**:
    ```bash
-   docker-compose up -d
+   docker compose up -d
    ```
 
    Docker Compose will:
@@ -887,7 +901,7 @@ rsync -avz ./backups/ user@backup-server:/backups/mcp/
 1. ✅ Restore `.env` from secure backup
 2. ✅ Restore latest `data/.mcp-memory-store.json` backup
 3. ✅ Verify Docker and Docker Compose installed
-4. ✅ Run `docker-compose up -d`
+4. ✅ Run `docker compose up -d`
 5. ✅ Test health endpoint
 6. ✅ Verify data integrity with sample API calls
 
@@ -908,7 +922,7 @@ mkdir -p data
 cp /secure-backups/latest-memory-backup.json data/.mcp-memory-store.json
 
 # Start server
-docker-compose up -d
+docker compose up -d
 
 # Wait for health
 until curl -f http://localhost:3000/health; do

@@ -8,15 +8,18 @@
  * 'todo' replaces the old separate TodoManager
  */
 export type NodeType = 
-  | 'todo'      // Tasks, action items (replaces TodoManager)
-  | 'file'      // Source files
-  | 'function'  // Functions, methods
-  | 'class'     // Classes, interfaces
-  | 'module'    // Modules, packages
-  | 'concept'   // Abstract concepts, ideas
-  | 'person'    // People, users, agents
-  | 'project'   // Projects, initiatives
-  | 'custom';   // User-defined types
+  | 'todo'              // Tasks, action items (replaces TodoManager)
+  | 'file'              // Source files
+  | 'function'          // Functions, methods
+  | 'class'             // Classes, interfaces
+  | 'module'            // Modules, packages
+  | 'concept'           // Abstract concepts, ideas
+  | 'person'            // People, users, agents
+  | 'project'           // Projects, initiatives
+  | 'chain_execution'   // Agent chain execution tracking
+  | 'agent_step'        // Individual agent step within chain
+  | 'failure_pattern'   // Failed execution patterns for learning
+  | 'custom';           // User-defined types
 
 // Special type for clear() function - includes all node types plus "ALL"
 export type ClearType = NodeType | "ALL";
@@ -34,7 +37,10 @@ export type EdgeType =
   | 'assigned_to'  // Task assigned to person
   | 'parent_of'    // Hierarchical parent-child
   | 'blocks'       // Task A blocks task B
-  | 'references';  // Generic reference
+  | 'references'   // Generic reference
+  | 'belongs_to'   // Step belongs to execution
+  | 'follows'      // Step follows previous step
+  | 'occurred_in'; // Failure occurred in execution
 
 /**
  * Unified Node structure

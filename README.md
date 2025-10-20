@@ -16,6 +16,22 @@ A production-ready Model Context Protocol (MCP) server that provides **Graph-RAG
 
 ## 🚀 Quick Start
 
+### Prerequisites Check
+
+**⚠️ IMPORTANT: Docker Memory Configuration**
+
+Before starting, ensure Docker has enough memory allocated:
+
+```bash
+# Check your current Docker resources
+./scripts/check-docker-resources.sh
+
+# If memory < 16 GB, increase it:
+# macOS/Windows: Docker Desktop → Settings → Resources → Memory: 16 GB
+```
+
+📖 **See [docs/DOCKER_RESOURCES.md](docs/DOCKER_RESOURCES.md) for detailed instructions**
+
 ### One-Command Installation
 
 **Complete setup in one command:**
@@ -29,6 +45,11 @@ curl -fsSL https://raw.githubusercontent.com/orneryd/GRAPH-RAG-TODO/main/install
 ```bash
 git clone https://github.com/orneryd/GRAPH-RAG-TODO.git
 cd GRAPH-RAG-TODO
+
+# Check Docker resources first
+./scripts/check-docker-resources.sh
+
+# Run setup
 ./scripts/setup.sh
 ```
 
@@ -44,7 +65,7 @@ cd GRAPH-RAG-TODO
 
 **Prerequisites** (auto-detected with installation instructions if missing):
 - Node.js 18+ 
-- Docker & Docker Compose
+- Docker & Docker Compose (with **16 GB RAM** allocated)
 - Git 2.20+
 
 ### Manual Setup (Alternative)
@@ -86,8 +107,8 @@ curl http://localhost:7474        # Neo4j browser
 curl http://localhost:4141/v1/models  # Copilot API
 
 # View service logs
-docker-compose logs neo4j
-docker-compose logs mcp-server
+docker compose logs neo4j
+docker compose logs mcp-server
 ```
 
 ### Next Steps
@@ -99,13 +120,66 @@ Once setup is complete:
 3. **Neo4j Browser**: Visit http://localhost:7474 (user: `neo4j`, password: `password`)
 4. **Start Development**: Use `mimir` commands or integrate with your AI workflow
 
-### Folder Configuration & File Indexing
+## 🤖 LLM Configuration
 
-#### Initial Folder Setup
-The system can automatically index and watch folders for changes. By default, Docker Compose mounts your home workspace:
+**Default Configuration**: All agents (PM, Worker, QC) use **Ollama with `gpt-oss`** model by default.
+
+```bash
+# Verify Ollama is running and model is available
+ollama list | grep gpt-oss
+
+# If not available, pull the model
+ollama pull gpt-oss
+```
+
+**Configuration File**: `.mimir/llm-config.json` (created automatically with defaults)
+
+**Default Setup:**
+- **Provider**: Ollama (local)
+- **Model**: `gpt-oss` (13B params, 32K context)
+- **All Agents**: PM, Worker, and QC use same model
+- **Temperature**: 0.0 (deterministic)
+
+**To customize**: Edit `.mimir/llm-config.json` or see detailed guide at [`docs/configuration/LLM_CONFIGURATION.md`](docs/configuration/LLM_CONFIGURATION.md)
+
+**Future**: RAG/vector embeddings will use separate configuration when implemented.
+
+### File Watching & Automatic Indexing
+
+The system includes **automatic file indexing** that keeps the Neo4j knowledge graph synchronized with your codebase. This enables agents to have up-to-date context about your project files.
+
+#### Quick Setup
+
+**On Host Machine:**
+```bash
+# Watch current project's src directory (auto-detect)
+node setup-watch.js
+
+# Or watch specific directory
+node setup-watch.js /path/to/your/project/src
+
+# Or use environment variable
+WATCH_PATH=/custom/path/src node setup-watch.js
+
+# Verify indexing
+node check-watches.js
+```
+
+**In Docker Container:**
+```bash
+# Auto-detects /workspace mount point
+docker exec mcp_server node setup-watch.js
+
+# Verify
+docker exec mcp_server node check-watches.js
+```
+
+#### Docker Configuration
+
+The docker compose.yml includes automatic mount configuration:
 
 ```yaml
-# docker-compose.yml (already configured)
+# docker compose.yml (already configured)
 volumes:
   - ${HOST_WORKSPACE_ROOT:-~/src}:/workspace:ro  # Mounts your src folder as /workspace
 ```
@@ -114,36 +188,73 @@ volumes:
 ```bash
 # Option 1: Set environment variable (recommended)
 export HOST_WORKSPACE_ROOT=~/projects
-docker-compose up -d
+docker compose up -d
 
-# Option 2: Edit docker-compose.yml directly
+# Option 2: Edit docker compose.yml directly
 # Change the line to your preferred path:
 # - ${HOST_WORKSPACE_ROOT:-/path/to/your/workspace}:/workspace:ro
 ```
 
-#### Adding Folders for Indexing
-Use the `watch_folder` MCP tool to add directories for automatic indexing:
+#### How It Works
 
+1. **Environment Detection**: Automatically detects host vs Docker container
+   - **Docker**: Uses `WORKSPACE_ROOT=/workspace` (set in docker compose.yml)
+   - **Host**: Uses current directory or `WATCH_PATH` environment variable
+
+2. **Path Mapping**:
+   ```
+   Host:      ${HOST_WORKSPACE_ROOT:-~/src}  (configurable)
+   Container: /workspace                      (standardized)
+   Watch:     /workspace/src                  (auto-detected)
+   ```
+
+3. **File Indexing**:
+   - Scans directory for matching files (`*.ts`, `*.js`, `*.json`, `*.md`)
+   - Respects `.gitignore` patterns automatically
+   - Stores file nodes in Neo4j with content and metadata
+   - Agents can query indexed files via `graph_search_nodes`
+
+4. **Agent Integration**:
+   ```bash
+   npm run chain "what files do we have?"
+   # Agent uses indexed file context from graph
+   ```
+
+#### Advanced Configuration
+
+**Custom file patterns** (edit `setup-watch.js`):
 ```javascript
-// Example: Index a project folder
-await mcp.call('watch_folder', {
-  path: '/workspace/src',           // Must be under mounted path
-  recursive: true,                  // Watch subdirectories
-  debounce_ms: 500,                // File change debounce
-  file_patterns: ['*.ts', '*.js', '*.md']  // File types to index
-});
-
-// Example: Index multiple project folders
-await mcp.call('watch_folder', {
-  path: '/workspace/docs',
-  recursive: true,
-  file_patterns: ['*.md', '*.txt']
-});
+file_patterns: ['*.ts', '*.js', '*.json', '*.md', '*.py']  // Add Python
+ignore_patterns: ['*.test.ts', 'node_modules/**', 'dist/**']
 ```
 
-#### Folder Path Requirements
-- **Root Path**: All watched folders must be under `/workspace` (Docker mount)
-- **Sub-folders**: You can add any sub-folder: `/workspace/src`, `/workspace/docs`, etc.
+**Multiple directories**:
+```bash
+# Watch source code
+node setup-watch.js /workspace/src
+
+# Watch documentation  
+node setup-watch.js /workspace/docs
+```
+
+**Enable vector embeddings** (optional - for semantic search):
+```bash
+# 1. Edit .env file
+MIMIR_FEATURE_VECTOR_EMBEDDINGS=true
+MIMIR_EMBEDDINGS_ENABLED=true
+MIMIR_EMBEDDINGS_MODEL=nomic-embed-text
+
+# 2. Start with Ollama (embedding model auto-installed)
+docker compose --profile ollama up -d
+./scripts/setup-ollama-models.sh  # Pulls embeddings model automatically
+
+# 3. Index files with embeddings
+docker exec mcp_server node setup-watch.js
+```
+
+**For complete documentation**, see:
+- [File Watching Guide](docs/guides/FILE_WATCHING_GUIDE.md)
+- [Vector Embeddings Guide](docs/guides/VECTOR_EMBEDDINGS_GUIDE.md)
 - **Recursive**: Set `recursive: true` to watch subdirectories automatically
 - **File Patterns**: Use glob patterns to filter file types: `['*.ts', '*.js']`
 
@@ -317,8 +428,8 @@ npx tsc --version  # Should be 5.x
 **Check Service Status:**
 ```bash
 npm run setup:verify     # Overall health check
-docker-compose ps        # Container status
-docker-compose logs      # Service logs
+docker compose ps        # Container status
+docker compose logs      # Service logs
 curl http://localhost:7474  # Neo4j health
 curl http://localhost:4141/v1/models  # Copilot API health
 ```
@@ -475,7 +586,7 @@ const qcContext = await get_task_context({
 ### Development (with Neo4j)
 ```bash
 # Start Neo4j only
-docker-compose up -d
+docker compose up -d
 
 # Run MCP server locally
 npm run build
@@ -581,7 +692,7 @@ cd GRAPH-RAG-TODO-main
 cp .env.example .env
 
 # Build and start
-docker-compose up -d
+docker compose up -d
 
 # Verify health
 curl http://localhost:3000/health

@@ -23,6 +23,7 @@
     "test": "npx vitest run",
     "test:coverage": "npx vitest run --coverage",
     "test:benchmark": "npx vitest run --config vitest.config.benchmark.ts",
+    "test:embeddings": "node scripts/test-embeddings.js",
     "watch": "node esbuild.config.js --watch",
     "start": "node build/index.js",
     "dev": "node esbuild.config.js && node build/index.js",
@@ -44,8 +45,10 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@langchain/community": "^1.0.0",
     "@langchain/core": "^1.0.1",
     "@langchain/langgraph": "^1.0.0",
+    "@langchain/ollama": "^1.0.0",
     "@langchain/openai": "^1.0.0",
     "@modelcontextprotocol/sdk": "^1.20.1",
     "@typescript-eslint/parser": "^8.46.1",

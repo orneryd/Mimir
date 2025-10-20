@@ -1,4 +1,13 @@
 /**
+ * LLM Provider Types
+ */
+export enum LLMProvider {
+  OLLAMA = 'ollama',
+  COPILOT = 'copilot',
+  OPENAI = 'openai',
+}
+
+/**
  * Available models via GitHub Copilot API
  */
 export enum CopilotModel {

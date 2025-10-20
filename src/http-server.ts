@@ -63,7 +63,8 @@ async function startHttpServer() {
     origin: process.env.MCP_ALLOWED_ORIGIN || '*', 
     methods: ['POST','GET','DELETE'], 
     exposedHeaders: ['Mcp-Session-Id'], 
-    allowedHeaders: ['Content-Type', 'mcp-session-id'], 
+    // Allow Accept header and the custom mcp-session-id header
+    allowedHeaders: ['Content-Type', 'Accept', 'mcp-session-id'], 
     credentials: true 
   }));
 
@@ -71,6 +72,11 @@ async function startHttpServer() {
     try {
       const method = req.body?.method || 'unknown';
       console.warn(`[HTTP] Request method: ${method} (shared session mode)`);
+      
+      // Log headers for debugging content negotiation issues
+      const contentType = req.headers['content-type'] || 'not-set';
+      const accept = req.headers['accept'] || 'not-set';
+      console.warn(`[HTTP] Headers: Content-Type="${contentType}", Accept="${accept}"`);
       
       // Initialize shared transport once on first request
       if (!sharedTransport) {

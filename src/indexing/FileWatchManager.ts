@@ -77,9 +77,15 @@ export class FileWatchManager {
     );
 
     let indexed = 0;
+    const generateEmbeddings = config.generate_embeddings || false;
+    
+    if (generateEmbeddings) {
+      console.log('🧮 Vector embeddings enabled for this watch');
+    }
+    
     for (const file of files) {
       try {
-        await this.indexer.indexFile(file, folderPath);
+        await this.indexer.indexFile(file, folderPath, generateEmbeddings);
         indexed++;
         
         if (indexed % 10 === 0) {

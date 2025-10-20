@@ -124,11 +124,11 @@ TARGET: Image size < 200MB
 **Task ID**: `node-6-1760410374474`
 
 ```
-I need you to create a docker-compose.yml for easy deployment.
+I need you to create a docker compose.yml for easy deployment.
 
 INSTRUCTIONS:
 1. Retrieve task context: graph_get_node('node-6-1760410374474')
-2. Create docker-compose.yml with:
+2. Create docker compose.yml with:
    - Service name: mcp-server
    - Build from Dockerfile
    - Port mapping: 3000:3000
@@ -138,10 +138,10 @@ INSTRUCTIONS:
    - Environment variables (from .env)
    - Restart policy: unless-stopped
    - Health check using /health endpoint
-3. Test with: docker-compose up
+3. Test with: docker compose up
 4. Update task status using KG API:
    graph_update_node('node-6-1760410374474', {
-     properties: {status: 'completed', completed_at: '<timestamp>', result: 'docker-compose.yml created'}
+     properties: {status: 'completed', completed_at: '<timestamp>', result: 'docker compose.yml created'}
    })
 
 COMPLETED INPUTS AVAILABLE:
@@ -251,7 +251,7 @@ INSTRUCTIONS:
    })
 
 DEPENDENCIES:
-- This task depends on: Task 2.2 (docker-compose created)
+- This task depends on: Task 2.2 (docker compose created)
 
 CONTEXT RETRIEVAL:
 Start by running: graph_get_node('node-9-1760410374474')
@@ -267,13 +267,13 @@ I need you to test container startup and verify persistence works.
 
 INSTRUCTIONS:
 1. Retrieve task context: graph_get_node('node-10-1760410374474')
-2. Start container: docker-compose up -d
-3. Check logs: docker-compose logs -f
+2. Start container: docker compose up -d
+3. Check logs: docker compose logs -f
 4. Create a TODO via HTTP POST to /mcp
 5. Verify data/.mcp-memory-store.json created on host
-6. Restart container: docker-compose restart
+6. Restart container: docker compose restart
 7. Verify TODO still exists (persistence working)
-8. Test failure: docker-compose down && docker-compose up
+8. Test failure: docker compose down && docker compose up
 9. Document all test results
 10. Update task status using KG API:
     graph_update_node('node-10-1760410374474', {
@@ -344,7 +344,7 @@ INSTRUCTIONS:
 2. Create: docs/DOCKER_DEPLOYMENT.md
 
 3. Include sections:
-   - Prerequisites (Docker, docker-compose)
+   - Prerequisites (Docker, docker compose)
    - Quick Start (5-minute setup)
    - Configuration (all env vars explained)
    - Volume Management (backup, restore)
@@ -354,7 +354,7 @@ INSTRUCTIONS:
 
 4. Include all curl examples from testing (get them from Task 3.3)
 
-5. Add docker-compose commands reference
+5. Add docker compose commands reference
 
 6. Update main README.md with Docker section
 

@@ -1,0 +1,143 @@
+# Implement the Rate Limiter (Concrete Implementation Task)
+
+You are a senior TypeScript engineer assigned to implement a production-ready, centralized, queue-based rate limiter for LLM API calls in the Mimir repo. Implement the RateLimitQueue class, wire it into the CopilotAgentClient LLM entrypoint, add configuration and tests, and update docs. Follow the mandatory rules below, verify the preconditions, produce the requested files, run build/tests, and return the structured result.
+
+RULE #0: VERIFY CONTEXT ASSUMPTIONS FIRST (do these checks before coding)
+- ✅ Check file exists: `src/orchestrator/llm-client.ts` → Verify: `test -f src/orchestrator/llm-client.ts && echo OK || echo MISSING`
+- ✅ Check TypeScript build works locally: `npm run build` → Verify it exits 0
+- ✅ Check test runner: `npm run test` (or `npx vitest run`) → Verify tests run (may fail until new tests pass)
+- ✅ Check docs file exists: `docs/CENTRALIZED_RATE_LIMITER_DESIGN.md` → Verify: `test -f docs/CENTRALIZED_RATE_LIMITER_DESIGN.md && echo OK || echo MISSING`
+If any VERIFY check fails → stop, report which precondition failed and why. If all pass → proceed.
+
+ROLE (first sentence, 50 tokens max)
+You are a senior TypeScript engineer implementing a centralized RateLimitQueue and integrating it into Mimir's LLM client (`CopilotAgentClient`) to enforce `requestsPerHour` with an opt-out bypass (`-1`).
+
+MANDATORY RULES (apply to all work)
+1. Add a new file at `src/orchestrator/rate-limit-queue.ts` with the RateLimitQueue implementation exactly matching the documented API in `docs/CENTRALIZED_RATE_LIMITER_DESIGN.md`. Implement sliding 1-hour window, FIFO queue, dynamic throttling, minMsBetweenRequests, metrics and `requestsPerHour === -1` bypass at `enqueue()` entry.
+2. Update `src/config/rate-limit-config.ts` to export `RateLimitSettings` and `DEFAULT_RATE_LIMITS` (set `ollama.requestsPerHour = -1`) exactly as documented. Use the same property names (`requestsPerHour`, `enableDynamicThrottling`, `warningThreshold`, `logLevel`).
+3. Integrate the queue into `src/orchestrator/llm-client.ts` by:
+   - Creating a singleton instance via `RateLimitQueue.getInstance({...})` during `CopilotAgentClient` construction (use `agentConfig.requestsPerHour` or fallback).
+   - Wrapping the agent execution in `execute()` using `await this.rateLimiter.enqueue(async () => this.executeInternal(prompt), estimatedRequests)`.
+   - Compute `estimatedRequests` conservatively as `1 + (metadata?.estimatedToolCalls || fallback)`.
+   - After execution, count actual AI messages (`result.messages.filter(m => m._getType() === 'ai').length`) and call `recordAPIUsageMetrics(...)`.
+4. Add unit tests in `testing/rate-limit-queue.test.ts` (Vitest) for: throttling behavior, capacity limits, bypass mode (`-1`), and metrics accuracy. Tests must be runnable with `npm run test`.
+5. Update docs: ensure `docs/CENTRALIZED_RATE_LIMITER_DESIGN.md` references the exact implemented behaviors (bypass `-1`, config keys, file paths). Do not create separate rate-limiting docs; update the existing file only.
+6. Do not change other unrelated project behaviors. Keep style consistent (TypeScript, ESM) and pass `tsc`.
+7. Use concrete file paths and code examples (no placeholders). Commit code with clear messages and include tests.
+8. Stop only when: build passes, new unit tests pass, and `execute()` integration works with bypass and metrics recording.
+
+STOP CONDITIONS (explicit)
+- Don't stop until all of the following are satisfied:
+  1. `npm run build` succeeds (tsc).
+  2. `npm run test` passes (new tests included).
+  3. `RateLimitQueue` implemented in `src/orchestrator/rate-limit-queue.ts`.
+  4. `CopilotAgentClient.execute()` calls `rateLimiter.enqueue(...)` and records actual usage.
+  5. Configuration and defaults present in `src/config/rate-limit-config.ts`.
+  6. `docs/CENTRALIZED_RATE_LIMITER_DESIGN.md` updated with a short "Implementation status" note and how to bypass.
+  7. Commit(s) created that modify only the required files and tests; include a short changelog entry in the commit.
+
+STRUCTURED OUTPUT FORMAT (required, exact)
+Return a single markdown document containing:
+- FILES_MODIFIED: array of relative paths added/edited
+- CHANGES_SUMMARY: short bullets describing each change
+- BUILD_RESULT: output summary from `npm run build` (PASS/FAIL + important messages)
+- TEST_RESULT: summary from `npm run test` (PASS/FAIL + failing tests if any)
+- VERIFICATION: results for RULE #0 checks (command + outcome)
+- USAGE: example snippet showing how to set `requestsPerHour: -1` and call `CopilotAgentClient.execute()`
+- NEXT_STEPS: 2 short recommendations (monitoring, learn parallelism)
+
+VERIFICATION CHECKLIST (must include 5+ items; mark each done/failed)
+- [ ] `src/orchestrator/rate-limit-queue.ts` created and exported (class RateLimitQueue)
+- [ ] `src/config/rate-limit-config.ts` updated with `requestsPerHour: -1` for Ollama
+- [ ] `src/orchestrator/llm-client.ts` integrated with `RateLimitQueue`
+- [ ] Bypass works: `requestsPerHour === -1` executes immediately
+- [ ] Tests added: `testing/rate-limit-queue.test.ts`
+- [ ] `npm run build` passes
+- [ ] `npm run test` passes
+- [ ] `docs/CENTRALIZED_RATE_LIMITER_DESIGN.md` updated
+- [ ] Commit(s) created with clear messages
+
+EXAMPLE CODE SNIPPETS (must use exact file paths)
+- `src/orchestrator/rate-limit-queue.ts` should export `export class RateLimitQueue { ... }`
+- `src/config/rate-limit-config.ts`:
+  ```ts
+  export interface RateLimitSettings {
+    requestsPerHour: number; // set -1 to bypass
+    enableDynamicThrottling: boolean;
+    warningThreshold: number;
+    logLevel: 'silent' | 'normal' | 'verbose';
+  }
+  export const DEFAULT_RATE_LIMITS = { copilot: { requestsPerHour: 2500, ... }, ollama: { requestsPerHour: -1, ... } }
+  ```
+- `src/orchestrator/llm-client.ts` integration (inside execute()):
+  ```ts
+  const estimatedToolCalls = metadata?.estimatedToolCalls || Math.ceil((this.agentConfig.recursionLimit || 180) / 4);
+  const estimatedRequests = 1 + estimatedToolCalls;
+  const result = await this.rateLimiter.enqueue(async () => this.executeInternal(prompt), estimatedRequests);
+  const actualRequests = result.messages.filter(m => m._getType() === 'ai').length;
+  this.recordAPIUsageMetrics({ estimated: estimatedRequests, actual: actualRequests, toolCalls: result.toolCallCount, parallelismFactor: actualRequests / estimatedRequests });
+  ```
+
+TESTS (what to implement)
+- `testing/rate-limit-queue.test.ts`:
+  - should throttle N requests according to `requestsPerHour`
+  - bypass test: `RateLimitQueue.getInstance({requestsPerHour: -1}).enqueue(() => Promise.resolve(x))` executes without delay
+  - capacity test: enqueue until capacity used, then verify `getRemainingCapacity() === 0` until time advances (use fake timers if needed)
+  - metrics test: `getMetrics()` returns expected fields
+
+COMMIT & PR
+- Commit message starter: `feat(rate-limiter): add RateLimitQueue + integrate into CopilotAgentClient`
+- Provide a short PR description (3-5 lines) describing what changed and how to test.
+
+DO NOTs
+- Do not change unrelated code or module exports.
+- Do not add new top-level scripts unless necessary for tests.
+- Do not create new rate-limiting docs — update `docs/CENTRALIZED_RATE_LIMITER_DESIGN.md` only.
+
+EXPLICIT STOP: After tests and build pass, produce the STRUCTURED OUTPUT (see format) and list the git commits and commands used.
+
+```
+
+---
+
+## CONTEXT RESEARCH PERFORMED (local files checked)
+- package.json
+  - Found: TypeScript build (`npm run build` = `tsc`), tests via Vitest (`npm run test`), dependencies include `@langchain/langgraph` and `langchain`. Use tsc and vitest for validation.
+- llm-client.ts
+  - Found: `CopilotAgentClient.execute()` / `executeInternal()` pattern; agent uses `createReactAgent` and has `agentConfig.recursionLimit`; `execute()` is the integration point per docs. Integration approach in prompt matches actual function names.
+- CENTRALIZED_RATE_LIMITER_DESIGN.md (attachment)
+  - Contains canonical design and code snippets including `enqueue()` signature, bypass logic, `requestsPerHour` default and `-1` behavior, and explicit file paths to implement.
+- Tests & tooling
+  - Project uses TypeScript (ESM), Vitest for tests. New tests should follow existing testing conventions (Vitest).
+
+Assumptions (stated)
+- ✅ VERIFIABLE: TypeScript build works locally → verify with: `npm run build`
+- ✅ VERIFIABLE: Tests run via Vitest → verify with: `npm run test`
+- ⚠️ INFERRED: The codebase uses the exact method names and shapes as in the design doc (e.g. `enqueue`, `getInstance`, `getMetrics`). If names differ, adjust to match project but prefer the design doc names.
+- ⚠️ INFERRED: Test environment allows using `setTimeout` or fake timers; if not, tests can use manual timeouts.
+
+---
+
+## SUCCESS CRITERIA (deliverable checklist)
+1. Implemented `src/orchestrator/rate-limit-queue.ts` with sliding window and bypass `-1`.
+2. Integrated rate limiter into `CopilotAgentClient` (llm-client.ts) as described.
+3. `src/config/rate-limit-config.ts` updated with `requestsPerHour` config and Ollama default `-1`.
+4. Unit tests added under testing and passing via `npm run test`.
+5. TypeScript build passes: `npm run build` returns success.
+6. CENTRALIZED_RATE_LIMITER_DESIGN.md contains a short Implementation Status block describing the implementation and how to bypass.
+7. Provide the structured output (FILES_MODIFIED, CHANGES_SUMMARY, BUILD_RESULT, TEST_RESULT, VERIFICATION, USAGE, NEXT_STEPS).
+8. Create a single commit (or small, logical commits) with message: `feat(rate-limiter): add RateLimitQueue + integrate into CopilotAgentClient`.
+
+---
+
+## WHAT TO DO NEXT (copy-paste checklist you can run)
+1. Run RULE #0 verification commands listed above.
+2. Implement `src/orchestrator/rate-limit-queue.ts` per doc API.
+3. Update `src/config/rate-limit-config.ts`.
+4. Wire into `CopilotAgentClient` in llm-client.ts.
+5. Add `testing/rate-limit-queue.test.ts` and run `npm run test`.
+6. Run `npm run build`.
+7. Update CENTRALIZED_RATE_LIMITER_DESIGN.md with Implementation Status and usage examples.
+8. Commit and open PR.
+
+Don’t stop until SUCCESS CRITERIA above are all green. If a VERIFY item fails, stop and report the failing check and suggested fix.

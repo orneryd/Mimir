@@ -13,6 +13,9 @@
 import { CopilotAgentClient, AgentConfig } from './llm-client.js';
 import { CopilotModel } from './types.js';
 import { planningTools } from './tools.js';
+import { LLMConfigLoader } from '../config/LLMConfigLoader.js';
+import { createGraphManager } from '../managers/index.js';
+import type { GraphManager } from '../managers/GraphManager.js';
 import path from 'path';
 
 /**
@@ -65,6 +68,7 @@ export class AgentChain {
   private pmAgent: CopilotAgentClient;
   private eckoAgent: CopilotAgentClient;
   private agentsDir: string;
+  private graphManager: GraphManager | null = null;
 
   constructor(agentsDir: string = 'docs/agents') {
     this.agentsDir = agentsDir;
@@ -72,17 +76,23 @@ export class AgentChain {
     // Initialize PM Agent with limited tools (prevents OpenAI 128 tool limit)
     this.pmAgent = new CopilotAgentClient({
       preamblePath: path.join(agentsDir, 'claudette-pm.md'),
-      model: CopilotModel.GPT_4_1,
+      provider: 'copilot', // Explicitly set provider
+      model: 'gpt-4.1', // Explicitly set model
+      copilotBaseUrl: 'http://localhost:4141/v1', // Explicitly set base URL
       temperature: 0.0,
+      maxTokens: -1,
       tools: planningTools, // Filesystem + 5 graph search tools = 12 tools
     });
 
-    // Initialize Ecko Agent (Prompt Architect) with limited tools
+    // Initialize Ecko Agent (Prompt Architect) WITHOUT tools - it only optimizes prompts
     this.eckoAgent = new CopilotAgentClient({
       preamblePath: path.join(agentsDir, 'claudette-ecko.md'),
-      model: CopilotModel.GPT_4_1,
+      provider: 'copilot', // Explicitly set provider
+      model: 'gpt-4.1', // Explicitly set model
+      copilotBaseUrl: 'http://localhost:4141/v1', // Explicitly set base URL
       temperature: 0.0,
-      tools: planningTools, // Filesystem + 5 graph search tools = 12 tools
+      maxTokens: -1,
+      tools: [], // NO TOOLS - Ecko just analyzes text and outputs optimized specs
     });
   }
 
@@ -92,11 +102,259 @@ export class AgentChain {
   async initialize(): Promise<void> {
     console.log('🔗 Initializing Agent Chain...\n');
     
+    // Initialize GraphManager
+    try {
+      this.graphManager = await createGraphManager();
+    } catch (error) {
+      console.warn('⚠️  Could not connect to Neo4j:', error instanceof Error ? error.message : String(error));
+      console.warn('   Continuing without graph context...\n');
+    }
+    
     await this.pmAgent.loadPreamble(path.join(this.agentsDir, 'claudette-pm.md'));
     console.log('✅ PM Agent loaded\n');
     
     await this.eckoAgent.loadPreamble(path.join(this.agentsDir, 'claudette-ecko.md'));
     console.log('✅ Ecko Agent loaded\n');
+  }
+
+  /**
+   * Clean up resources (close Neo4j connection)
+   */
+  async cleanup(): Promise<void> {
+    if (this.graphManager) {
+      try {
+        await this.graphManager.close();
+        console.log('✅ Neo4j connection closed');
+      } catch (error) {
+        console.warn('⚠️  Error closing Neo4j:', error instanceof Error ? error.message : String(error));
+      }
+    }
+  }
+
+  /**
+   * Gather context from knowledge graph for a given query
+   */
+  private async gatherGraphContext(userRequest: string): Promise<string> {
+    if (!this.graphManager) {
+      return '## Knowledge Graph: Not available (Neo4j not connected)';
+    }
+
+    console.log('🔍 Gathering context from knowledge graph...');
+    const contextParts: string[] = [];
+    
+    try {
+      // Search for related concepts
+      console.log('  - Searching for related concepts...');
+      const searchQuery = userRequest.substring(0, 100);
+      const searchResults = await this.graphManager.searchNodes(searchQuery, { limit: 5 });
+      if (searchResults.length > 0) {
+        contextParts.push('## Related Concepts from Knowledge Graph:');
+        searchResults.forEach((node, i) => {
+          const props = node.properties;
+          const summary = props.title || props.name || props.description || JSON.stringify(props).substring(0, 80);
+          contextParts.push(`${i + 1}. [${node.type}] ${summary}`);
+          console.log(`    Found: [${node.type}] ${summary.substring(0, 60)}...`);
+        });
+      }
+    } catch (error) {
+      console.warn('  ⚠️  Graph search error:', error instanceof Error ? error.message : String(error));
+      contextParts.push('## Graph Search: No results (error occurred)');
+    }
+
+    try {
+      // Check for completed TODOs
+      console.log('  - Checking completed TODOs...');
+      const completedTodos = await this.graphManager.queryNodes('todo', { status: 'completed' });
+      if (completedTodos.length > 0) {
+        contextParts.push('\n## Recently Completed Work:');
+        completedTodos.slice(0, 5).forEach((node, i) => {
+          const title = node.properties.title || 'Untitled';
+          const desc = node.properties.description ? ` - ${node.properties.description.substring(0, 80)}` : '';
+          contextParts.push(`${i + 1}. ${title}${desc}`);
+          console.log(`    ✓ ${title}`);
+        });
+      }
+    } catch (error) {
+      console.warn('  ⚠️  Query completed todos error:', error instanceof Error ? error.message : String(error));
+    }
+
+    try {
+      // Check for existing files
+      console.log('  - Checking indexed files...');
+      const files = await this.graphManager.queryNodes('file');
+      if (files.length > 0) {
+        contextParts.push('\n## Indexed Files in Project:');
+        contextParts.push(`Total: ${files.length} files`);
+        const fileList = files.slice(0, 15).map(f => f.properties.path || 'unknown');
+        contextParts.push(`Sample: ${fileList.join(', ')}`);
+        console.log(`    Found ${files.length} indexed files`);
+      }
+    } catch (error) {
+      console.warn('  ⚠️  Query files error:', error instanceof Error ? error.message : String(error));
+    }
+
+    const contextSummary = contextParts.join('\n');
+    console.log(`✅ Context gathered (${contextParts.length} sections, ${contextSummary.length} chars)\n`);
+    return contextParts.length > 0 ? contextSummary : '## No relevant context found in knowledge graph';
+  }
+
+  /**
+   * Store chain execution metadata in graph
+   */
+  private async storeExecutionInGraph(
+    executionId: string,
+    userRequest: string,
+    status: 'running' | 'completed' | 'failed',
+    result?: AgentChainResult,
+    error?: Error
+  ): Promise<void> {
+    if (!this.graphManager) return;
+
+    try {
+      const properties: Record<string, any> = {
+        id: executionId,
+        userRequest,
+        status,
+        startTime: new Date().toISOString(),
+        endTime: status !== 'running' ? new Date().toISOString() : undefined,
+        duration: result?.totalDuration,
+        totalTokens: result ? result.totalTokens.input + result.totalTokens.output : undefined,
+        inputTokens: result?.totalTokens.input,
+        outputTokens: result?.totalTokens.output,
+        stepCount: result?.steps.length,
+        errorMessage: error?.message,
+        errorStack: error?.stack,
+      };
+
+      await this.graphManager.addNode('chain_execution', properties);
+      console.log(`📊 Execution ${executionId} tracked in graph (${status})`);
+    } catch (error) {
+      console.warn('⚠️  Failed to store execution in graph:', error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  /**
+   * Store agent step in graph
+   */
+  private async storeStepInGraph(
+    executionId: string,
+    step: AgentChainStep,
+    stepIndex: number,
+    status: 'completed' | 'failed',
+    error?: Error
+  ): Promise<void> {
+    if (!this.graphManager) return;
+
+    try {
+      const stepId = `${executionId}-step-${stepIndex}`;
+      const properties: Record<string, any> = {
+        id: stepId,
+        executionId,
+        stepIndex,
+        agentName: step.agentName,
+        agentRole: step.agentRole,
+        status,
+        input: step.input.substring(0, 5000), // Truncate long inputs
+        output: step.output.substring(0, 5000), // Truncate long outputs
+        toolCalls: step.toolCalls,
+        inputTokens: step.tokens.input,
+        outputTokens: step.tokens.output,
+        duration: step.duration,
+        timestamp: new Date().toISOString(),
+        errorMessage: error?.message,
+        errorStack: error?.stack,
+      };
+
+      await this.graphManager.addNode('agent_step', properties);
+      
+      // Link step to execution
+      await this.graphManager.addEdge(stepId, executionId, 'belongs_to');
+      
+      // Link to previous step if exists
+      if (stepIndex > 0) {
+        const prevStepId = `${executionId}-step-${stepIndex - 1}`;
+        await this.graphManager.addEdge(stepId, prevStepId, 'follows');
+      }
+
+      console.log(`  📝 Step ${stepIndex} tracked in graph`);
+    } catch (error) {
+      console.warn('  ⚠️  Failed to store step in graph:', error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  /**
+   * Store failure pattern in graph for future learning
+   */
+  private async storeFailurePattern(
+    executionId: string,
+    stepIndex: number,
+    agentName: string,
+    taskDescription: string,
+    error: Error,
+    context: string
+  ): Promise<void> {
+    if (!this.graphManager) return;
+
+    try {
+      const failureId = `failure-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      const properties: Record<string, any> = {
+        id: failureId,
+        executionId,
+        stepIndex,
+        agentName,
+        taskDescription: taskDescription.substring(0, 500),
+        errorType: error.name,
+        errorMessage: error.message,
+        errorStack: error.stack,
+        context: context.substring(0, 1000),
+        timestamp: new Date().toISOString(),
+        lessons: `Failed when: ${error.message}. Context: ${context.substring(0, 200)}`,
+      };
+
+      await this.graphManager.addNode('failure_pattern', properties);
+      
+      // Link to execution
+      await this.graphManager.addEdge(failureId, executionId, 'occurred_in');
+
+      console.log(`  ❌ Failure pattern stored: ${failureId}`);
+    } catch (err) {
+      console.warn('  ⚠️  Failed to store failure pattern:', err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  /**
+   * Query similar failures from past executions
+   */
+  private async findSimilarFailures(taskDescription: string): Promise<string> {
+    if (!this.graphManager) return '';
+
+    try {
+      const failures = await this.graphManager.queryNodes('failure_pattern');
+      
+      if (failures.length === 0) {
+        return '';
+      }
+
+      // Simple relevance check (could be enhanced with embeddings later)
+      const relevant = failures.filter(f => {
+        const desc = f.properties.taskDescription?.toLowerCase() || '';
+        const keywords = taskDescription.toLowerCase().split(' ').filter(w => w.length > 3);
+        return keywords.some(k => desc.includes(k));
+      });
+
+      if (relevant.length === 0) {
+        return '';
+      }
+
+      const warnings = relevant.slice(0, 3).map((f, i) => 
+        `${i + 1}. ⚠️  Previous failure: ${f.properties.errorMessage}\n   Lesson: ${f.properties.lessons}`
+      ).join('\n\n');
+
+      return `\n## ⚠️  LESSONS FROM PAST FAILURES\n\n${warnings}\n\n**Important**: Review these failures and avoid similar mistakes.\n`;
+    } catch (error) {
+      console.warn('  ⚠️  Failed to query similar failures:', error instanceof Error ? error.message : String(error));
+      return '';
+    }
   }
 
   /**
@@ -108,282 +366,177 @@ export class AgentChain {
   async execute(userRequest: string): Promise<AgentChainResult> {
     const steps: AgentChainStep[] = [];
     const startTime = Date.now();
+    const executionId = `exec-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
     console.log('\n' + '='.repeat(80));
-    console.log('🚀 AGENT CHAIN EXECUTION');
+    console.log('🚀 AGENT CHAIN EXECUTION (Ecko → PM)');
     console.log('='.repeat(80));
-    console.log(`📝 User Request: ${userRequest}\n`);
+    console.log(`📝 User Request: ${userRequest}`);
+    console.log(`🆔 Execution ID: ${executionId}\n`);
 
-    // STEP 1: PM Agent - Initial Analysis & Task Identification
+    // Store execution start in graph
+    await this.storeExecutionInGraph(executionId, userRequest, 'running');
+
+    // Gather context from knowledge graph ONCE
+    const graphContext = await this.gatherGraphContext(userRequest);
+    
+    // Find similar past failures
+    const pastFailures = await this.findSimilarFailures(userRequest);
+
+    // STEP 1: Ecko Agent - Request Analysis & Optimization
     console.log('\n' + '-'.repeat(80));
-    console.log('STEP 1: PM Agent - Initial Analysis');
+    console.log('STEP 1: Ecko Agent - Request Optimization');
     console.log('-'.repeat(80) + '\n');
 
-    const pmStep1Start = Date.now();
-    const pmStep1Input = `## 🔍 SEARCH EXISTING CONTEXT FIRST
-
-Before planning, search the knowledge graph for relevant existing work:
-
-\`\`\`
-graph_search_nodes("${userRequest.substring(0, 50)}")
-graph_query_nodes({ type: 'todo', filters: { status: 'completed' } })
-\`\`\`
-
-This helps you:
-- Avoid duplicating existing work
-- Build on completed tasks
-- Reference existing implementations
+    const eckoStep1Start = Date.now();
+    const eckoStep1Input = `${graphContext}${pastFailures}
 
 ---
+
+## USER REQUEST
 
 ${userRequest}
 
-INSTRUCTIONS:
-1. Analyze the user's request
-2. Break it down into major phases (2-5 phases)
-3. For each phase, identify 2-5 concrete tasks
-4. For each task, write a BRIEF description (1-2 sentences)
-5. Output the task list in this format:
-
-## Phase 1: [Phase Name]
-### Task 1.1: [Task Title]
-**Brief Description**: [1-2 sentences]
-
-### Task 1.2: [Task Title]
-**Brief Description**: [1-2 sentences]
-
-## Phase 2: [Phase Name]
-...
-
-DO NOT write full prompts yet. Just identify tasks and brief descriptions.
-We will optimize prompts in the next step.`;
-
-    const pmStep1Result = await this.pmAgent.execute(pmStep1Input);
-    
-    steps.push({
-      agentName: 'PM Agent',
-      agentRole: 'Task Identification',
-      input: pmStep1Input,
-      output: pmStep1Result.output,
-      toolCalls: pmStep1Result.toolCalls,
-      tokens: pmStep1Result.tokens,
-      duration: Date.now() - pmStep1Start,
-    });
-
-    console.log(`\n✅ PM identified tasks in ${((Date.now() - pmStep1Start) / 1000).toFixed(2)}s`);
-    console.log(`📊 Tool calls: ${pmStep1Result.toolCalls}`);
-    console.log(`🎯 Output preview:\n${pmStep1Result.output.substring(0, 300)}...\n`);
-
-    // STEP 2: Extract individual tasks for Ecko optimization
-    const tasks = this.parseTasksFromPM(pmStep1Result.output);
-    console.log(`\n📋 Extracted ${tasks.length} tasks for optimization\n`);
-
-    // STEP 3: Ecko Agent - Optimize each task prompt (parallel potential, but sequential for now)
-    console.log('\n' + '-'.repeat(80));
-    console.log('STEP 2: Ecko Agent - Prompt Optimization');
-    console.log('-'.repeat(80) + '\n');
-
-    const optimizedTasks: Array<{ id: string; title: string; description: string; optimizedPrompt: string }> = [];
-
-    for (const task of tasks.slice(0, 3)) { // Limit to first 3 tasks for demo
-      console.log(`\n🔧 Optimizing: ${task.title}...\n`);
-      
-      const eckoStepStart = Date.now();
-      const eckoInput = `## 🔍 SEARCH GRAPH FOR RELEVANT PATTERNS
-
-Before optimizing this prompt, search the knowledge graph for relevant examples:
-
-\`\`\`
-graph_search_nodes("${task.title.substring(0, 40)}")
-graph_query_nodes({ type: 'file' })
-\`\`\`
-
-Use any relevant patterns, conventions, or examples you find.
-
 ---
 
-${task.description}
+## YOUR TASK
 
-CONTEXT:
-- This is for a worker agent who will execute with zero prior context
-- The worker needs all necessary details to complete the task autonomously
-- Project context: ${userRequest}
+Analyze the user request and knowledge graph context above.
 
-Optimize this into a complete, self-contained prompt for a worker agent.`;
+Provide an optimized specification that:
+1. Clarifies what needs to be built/done
+2. References relevant existing work or files from the graph
+3. Defines key requirements and constraints
+4. Establishes success criteria
+5. Notes any assumptions or clarifications
+6. If past failures are shown, explain how to avoid them
 
-      const eckoResult = await this.eckoAgent.execute(eckoInput);
+Keep it concise and actionable.`;
+
+    let eckoStep1Result;
+    try {
+      eckoStep1Result = await this.eckoAgent.execute(eckoStep1Input);
       
-      steps.push({
+      const eckoStep1 = {
         agentName: 'Ecko Agent',
-        agentRole: `Prompt Optimization - ${task.title}`,
-        input: eckoInput,
-        output: eckoResult.output,
-        toolCalls: eckoResult.toolCalls,
-        tokens: eckoResult.tokens,
-        duration: Date.now() - eckoStepStart,
-      });
+        agentRole: 'Request Optimization',
+        input: eckoStep1Input,
+        output: eckoStep1Result.output,
+        toolCalls: eckoStep1Result.toolCalls,
+        tokens: eckoStep1Result.tokens,
+        duration: Date.now() - eckoStep1Start,
+      };
+      
+      steps.push(eckoStep1);
+      await this.storeStepInGraph(executionId, eckoStep1, 0, 'completed');
 
-      optimizedTasks.push({
-        id: task.id,
-        title: task.title,
-        description: task.description,
-        optimizedPrompt: eckoResult.output,
-      });
-
-      console.log(`✅ Optimized in ${((Date.now() - eckoStepStart) / 1000).toFixed(2)}s`);
+      console.log(`\n✅ Ecko completed optimization in ${((Date.now() - eckoStep1Start) / 1000).toFixed(2)}s`);
+      console.log(`📊 Tool calls: ${eckoStep1Result.toolCalls}`);
+      console.log(`🎯 Output preview:\n${eckoStep1Result.output.substring(0, 300)}...\n`);
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error(`\n❌ Ecko step failed: ${err.message}`);
+      
+      const failedStep = {
+        agentName: 'Ecko Agent',
+        agentRole: 'Request Optimization',
+        input: eckoStep1Input,
+        output: `ERROR: ${err.message}`,
+        toolCalls: 0,
+        tokens: { input: 0, output: 0 },
+        duration: Date.now() - eckoStep1Start,
+      };
+      
+      steps.push(failedStep);
+      await this.storeStepInGraph(executionId, failedStep, 0, 'failed', err);
+      await this.storeFailurePattern(executionId, 0, 'Ecko Agent', userRequest, err, graphContext);
+      await this.storeExecutionInGraph(executionId, userRequest, 'failed', undefined, err);
+      
+      throw error;
     }
 
-    // STEP 4: PM Agent - Final Task Graph Assembly
+    // STEP 2: PM Agent - Task Breakdown based on Ecko's optimized spec
     console.log('\n' + '-'.repeat(80));
-    console.log('STEP 3: PM Agent - Task Graph Assembly');
+    console.log('STEP 2: PM Agent - Task Breakdown');
     console.log('-'.repeat(80) + '\n');
 
     const pmStep2Start = Date.now();
-    const pmStep2Input = `## 🔍 SEARCH GRAPH FOR CONTEXT
-
-Before assembling the final task graph, query for any relevant existing context:
-
-\`\`\`
-graph_search_nodes("${userRequest.substring(0, 50)}")
-graph_get_subgraph({nodeId: '[relevant-node-id]', depth: 2})
-\`\`\`
-
-Use this to enrich task prompts with existing implementations, patterns, or constraints.
+    const pmStep2Input = `${graphContext}${pastFailures}
 
 ---
 
-Create a final task execution document.
+## OPTIMIZED SPECIFICATION FROM ECKO
 
-USER REQUEST: ${userRequest}
+${eckoStep1Result.output}
 
-OPTIMIZED TASKS:
-${optimizedTasks.map(t => `
-### ${t.title}
-**Task ID**: ${t.id}
+---
 
-\`\`\`
-${t.optimizedPrompt}
-\`\`\`
-`).join('\n')}
+## ORIGINAL USER REQUEST
 
-INSTRUCTIONS:
-1. Create a document in DOCKER_MIGRATION_PROMPTS.md style
-2. Include project context at the top
-3. For each task, include IN THIS EXACT FORMAT:
-   ### Task ID: task-x.y
-   #### **Agent Role Description**
-   [Worker role description - technology expertise, standards, research assumptions]
-   
-   #### **Recommended Model**
-   [Model name: GPT-4.1, Claude Sonnet 4, O3-mini, etc.]
-   
-   #### **Optimized Prompt**
-   <details>
-   <summary>Click to expand</summary>
-   
-   \`\`\`markdown
-   [Full prompt here]
-   \`\`\`
-   </details>
-   
-   #### **Dependencies**
-   [task-ids or "None"]
-   
-   #### **Estimated Duration**
-   [time estimate]
-   
-   #### **QC Agent Role**
-   [QC role - aggressive verification specialist]
-   
-   #### **Verification Criteria**
-   Security:
-   - [ ] [check 1]
-   - [ ] [check 2]
-   
-   Functionality:
-   - [ ] [check 3]
-   - [ ] [check 4]
-   
-   Quality:
-   - [ ] [check 5]
-   - [ ] [check 6]
-   
-   #### **Max Retries**
-   2
-   
-4. Add instructions for worker agents to:
-   - Retrieve task context using get_task_context({taskId: '<task-id>', agentType: 'worker'})
-   - Execute the prompt
-   - Update status using graph_update_node('<task-id>', {properties: {status: 'awaiting_qc', workerOutput: '<results>'}})
-5. Include Quick Start section for workers
+${userRequest}
 
-CRITICAL: Use EXACTLY #### headers (not just **bold**) for all field names!
+---
 
-WORKER ROLE FORMAT (CRITICAL - USE THIS EXACT FORMAT):
-**Agent Role Description** Backend engineer with a background in message queues, experience on Kafka based systems specifically designed to write Proof of Concept that work, but aren't necessarily optimized, preferring the simplest execution, unit tests not necessary
+## YOUR TASK
 
-**Agent Role Description** Frontend web engineer who is an expert in web-components, CSS, and standards-based browser development. Test driven development is necessary
+Create a complete task breakdown and execution plan based on Ecko's optimized specification.
 
-**Agent Role Description** DevOps engineer with Docker and container orchestration experience, security-first mindset, infrastructure-as-code specialist, writes comprehensive documentation
+Provide:
+1. Analysis of what needs to be done
+2. References to existing files/work from knowledge graph
+3. Task breakdown into phases
+4. For each task:
+   - Task ID (task-x.y format)
+   - Title
+   - Worker role description
+   - Complete self-contained prompt
+   - Dependencies
+   - Estimated duration
+   - Verification criteria
+5. If past failures are shown, include avoidance strategies
 
-QC ROLE FORMAT (CRITICAL - AGGRESSIVE VERIFIER):
-**QC Agent Role** Senior API security specialist with expertise in OWASP Top 10, REST security patterns, and authentication vulnerabilities. Aggressively verifies input validation, SQL injection prevention, authentication bypass attempts, and error information leakage. OWASP API Security Top 10 expert.
+Output in markdown format ready for worker execution.`;
 
-**QC Agent Role** Senior frontend security and accessibility auditor with expertise in XSS prevention, CSRF protection, and WCAG 2.1 AA compliance. Aggressively verifies sanitization, CSP headers, ARIA implementation, and keyboard navigation. OWASP Frontend Security and WCAG 2.1 AA expert.
+    let pmStep2Result;
+    try {
+      pmStep2Result = await this.pmAgent.execute(pmStep2Input);
+      
+      const pmStep2 = {
+        agentName: 'PM Agent',
+        agentRole: 'Task Breakdown',
+        input: pmStep2Input,
+        output: pmStep2Result.output,
+        toolCalls: pmStep2Result.toolCalls,
+        tokens: pmStep2Result.tokens,
+        duration: Date.now() - pmStep2Start,
+      };
+      
+      steps.push(pmStep2);
+      await this.storeStepInGraph(executionId, pmStep2, 1, 'completed');
 
-**QC Agent Role** Senior infrastructure security specialist with expertise in container security, configuration management vulnerabilities, and deployment best practices. Aggressively verifies version pinning, secret management, network isolation, and security hardening. CIS Docker Benchmark and infrastructure security expert.
-
-VERIFICATION CRITERIA FORMAT (9-15 CHECKS, 3 CATEGORIES):
-**Verification Criteria**
-Security:
-- [ ] No credentials or API keys hardcoded in source code
-- [ ] All user input sanitized before database queries
-- [ ] Authentication tokens expire within 15 minutes
-- [ ] HTTPS enforced for all endpoints
-
-Functionality:
-- [ ] All required API endpoints implemented and tested
-- [ ] Error handling covers all edge cases
-- [ ] Database transactions are atomic
-- [ ] Logging captures all authentication events
-
-Code Quality:
-- [ ] Unit tests achieve >80% coverage
-- [ ] No linter errors or warnings
-- [ ] Documentation updated for all new endpoints
-- [ ] Code follows project style guide
-
-MODEL RECOMMENDATIONS:
-- GPT-4.1: General coding, API development, full-stack tasks
-- Claude Sonnet 4: Architecture planning, documentation, complex refactoring
-- O3-mini: Algorithm optimization, performance-critical code, mathematical tasks
-- GPT-4o: Fast iterations, simple CRUD, straightforward implementations
-
-Output the complete markdown document with agent roles and model recommendations for each task.`;
-
-    const pmStep2Result = await this.pmAgent.execute(pmStep2Input);
-    
-    steps.push({
-      agentName: 'PM Agent',
-      agentRole: 'Task Graph Assembly',
-      input: pmStep2Input,
-      output: pmStep2Result.output,
-      toolCalls: pmStep2Result.toolCalls,
-      tokens: pmStep2Result.tokens,
-      duration: Date.now() - pmStep2Start,
-    });
-
-    console.log(`\n✅ Task graph assembled in ${((Date.now() - pmStep2Start) / 1000).toFixed(2)}s`);
-    
-    // Extract agent roles for summary
-    const agentRoleMatches = pmStep2Result.output.matchAll(/\*\*Agent Role Description\*\* (.+?)/g);
-    const agentRoles = Array.from(agentRoleMatches).map(m => m[1].trim());
-    
-    if (agentRoles.length > 0) {
-      console.log(`\n👥 Agent Roles Defined:`);
-      agentRoles.forEach((role, i) => {
-        console.log(`   ${i + 1}. ${role.substring(0, 80)}${role.length > 80 ? '...' : ''}`);
-      });
+      console.log(`\n✅ PM completed task breakdown in ${((Date.now() - pmStep2Start) / 1000).toFixed(2)}s`);
+      console.log(`📊 Tool calls: ${pmStep2Result.toolCalls}`);
+      console.log(`🎯 Output preview:\n${pmStep2Result.output.substring(0, 300)}...\n`);
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error(`\n❌ PM step failed: ${err.message}`);
+      
+      const failedStep = {
+        agentName: 'PM Agent',
+        agentRole: 'Task Breakdown',
+        input: pmStep2Input,
+        output: `ERROR: ${err.message}`,
+        toolCalls: 0,
+        tokens: { input: 0, output: 0 },
+        duration: Date.now() - pmStep2Start,
+      };
+      
+      steps.push(failedStep);
+      await this.storeStepInGraph(executionId, failedStep, 1, 'failed', err);
+      await this.storeFailurePattern(executionId, 1, 'PM Agent', userRequest, err, eckoStep1Result.output);
+      await this.storeExecutionInGraph(executionId, userRequest, 'failed', undefined, err);
+      
+      throw error;
     }
 
     // Calculate totals
@@ -397,49 +550,34 @@ Output the complete markdown document with agent roles and model recommendations
 
     const totalDuration = Date.now() - startTime;
 
-    // Print summary
-    console.log('\n' + '='.repeat(80));
-    console.log('📊 CHAIN EXECUTION SUMMARY');
-    console.log('='.repeat(80));
-    console.log(`\n⏱️  Total Duration: ${(totalDuration / 1000).toFixed(2)}s`);
-    console.log(`🎫 Total Tokens: ${totalTokens.input + totalTokens.output}`);
-    console.log(`   - Input: ${totalTokens.input}`);
-    console.log(`   - Output: ${totalTokens.output}`);
-    console.log(`🔧 Total Tool Calls: ${steps.reduce((acc, s) => acc + s.toolCalls, 0)}`);
-    console.log(`\n📝 Steps Executed:`);
-    steps.forEach((step, i) => {
-      console.log(`   ${i + 1}. ${step.agentName} (${step.agentRole}): ${step.duration}ms, ${step.toolCalls} tools`);
-    });
-    console.log('\n' + '='.repeat(80) + '\n');
-
-    return {
+    const result: AgentChainResult = {
       steps,
       finalOutput: pmStep2Result.output,
       totalTokens,
       totalDuration,
     };
-  }
 
-  /**
-   * Parse tasks from PM's initial output
-   * Simple regex-based parser for demo (can be improved with proper parsing)
-   */
-  private parseTasksFromPM(pmOutput: string): Array<{ id: string; title: string; description: string }> {
-    const tasks: Array<{ id: string; title: string; description: string }> = [];
-    
-    // Match task headers like "### Task 1.1: Create Health Endpoint"
-    const taskRegex = /### Task (\d+\.\d+): (.+?)\n\*\*Brief Description\*\*: (.+?)(?=\n###|\n##|$)/gs;
-    
-    let match;
-    while ((match = taskRegex.exec(pmOutput)) !== null) {
-      tasks.push({
-        id: `task-${match[1]}`,
-        title: match[2].trim(),
-        description: match[3].trim(),
-      });
-    }
+    // Store completed execution in graph
+    await this.storeExecutionInGraph(executionId, userRequest, 'completed', result);
 
-    return tasks;
+    // Print summary
+    console.log('\n' + '='.repeat(80));
+    console.log('📊 CHAIN EXECUTION SUMMARY');
+    console.log('='.repeat(80));
+    console.log(`🆔 Execution ID: ${executionId}`);
+    console.log(`\n⏱️  Total Duration: ${(totalDuration / 1000).toFixed(2)}s`);
+    console.log(`🎫 Total Tokens: ${totalTokens.input + totalTokens.output}`);
+    console.log(`   - Input: ${totalTokens.input}`);
+    console.log(`   - Output: ${totalTokens.output}`);
+    console.log(`🔧 Total Tool Calls: ${steps.reduce((acc, s) => acc + s.toolCalls, 0)}`);
+    console.log(`\n� Steps Executed:`);
+    steps.forEach((step, i) => {
+      console.log(`   ${i + 1}. ${step.agentName} (${step.agentRole}): ${step.duration}ms, ${step.toolCalls} tools`);
+    });
+    console.log(`\n💾 Execution tracked in graph: ${executionId}`);
+    console.log('='.repeat(80) + '\n');
+
+    return result;
   }
 }
 
@@ -495,6 +633,10 @@ export async function main() {
   } catch (error: any) {
     console.error('\n❌ Chain execution failed:', error.message);
     process.exit(1);
+  } finally {
+    // Clean up resources
+    await chain.cleanup();
+    process.exit(0);
   }
 }
 

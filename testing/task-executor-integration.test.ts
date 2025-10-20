@@ -114,15 +114,18 @@ describe('Task Executor - Integration Tests', () => {
 **Agent Role Description**
 Backend engineer specializing in microservices
 
-**Recommended Model:** GPT-4.1
+**Recommended Model**
+GPT-4.1
 
-**Optimized Prompt:**
-\`\`\`markdown
+**Optimized Prompt**
+<prompt>
 Create authentication service
-\`\`\`
+</prompt>
 
-**Dependencies:** None
-**Estimated Duration:** 1 hour
+**Dependencies**
+None
+**Estimated Duration**
+1 hour
 
 ---
 
@@ -130,15 +133,18 @@ Create authentication service
 **Agent Role Description**
 Backend engineer specializing in microservices
 
-**Recommended Model:** GPT-4.1
+**Recommended Model**
+GPT-4.1
 
-**Optimized Prompt:**
-\`\`\`markdown
+**Optimized Prompt**
+<prompt>
 Create logging service
-\`\`\`
+</prompt>
 
-**Dependencies:** None
-**Estimated Duration:** 1 hour
+**Dependencies**
+None
+**Estimated Duration**
+1 hour
 `;
 
       const chainPath = path.join(TEST_DIR, 'chain-output.md');
@@ -163,15 +169,18 @@ Create logging service
 **Agent Role Description**
 Database architect
 
-**Recommended Model:** GPT-4.1
+**Recommended Model**
+GPT-4.1
 
-**Optimized Prompt:**
-\`\`\`markdown
+**Optimized Prompt**
+<prompt>
 Design database schema
-\`\`\`
+</prompt>
 
-**Dependencies:** None
-**Estimated Duration:** 1 hour
+**Dependencies**
+None
+**Estimated Duration**
+1 hour
 
 ---
 
@@ -179,15 +188,18 @@ Design database schema
 **Agent Role Description**
 Backend engineer
 
-**Recommended Model:** GPT-4.1
+**Recommended Model**
+GPT-4.1
 
-**Optimized Prompt:**
-\`\`\`markdown
+**Optimized Prompt**
+<prompt>
 Implement data access layer
-\`\`\`
+</prompt>
 
-**Dependencies:** task-1
-**Estimated Duration:** 2 hours
+**Dependencies**
+task-1
+**Estimated Duration**
+2 hours
 
 ---
 
@@ -195,15 +207,18 @@ Implement data access layer
 **Agent Role Description**
 API developer
 
-**Recommended Model:** GPT-4.1
+**Recommended Model**
+GPT-4.1
 
-**Optimized Prompt:**
-\`\`\`markdown
+**Optimized Prompt**
+<prompt>
 Create REST endpoints
-\`\`\`
+</prompt>
 
-**Dependencies:** task-2
-**Estimated Duration:** 1 hour
+**Dependencies**
+task-2
+**Estimated Duration**
+1 hour
 `;
 
       const chainPath = path.join(TEST_DIR, 'chain-output.md');
@@ -226,15 +241,18 @@ Create REST endpoints
 **Agent Role Description**
 System architect
 
-**Recommended Model:** GPT-4.1
+**Recommended Model**
+GPT-4.1
 
-**Optimized Prompt:**
-\`\`\`markdown
+**Optimized Prompt**
+<prompt>
 Define system architecture
-\`\`\`
+</prompt>
 
-**Dependencies:** None
-**Estimated Duration:** 2 hours
+**Dependencies**
+None
+**Estimated Duration**
+2 hours
 
 ---
 
@@ -242,15 +260,18 @@ Define system architecture
 **Agent Role Description**
 Frontend developer
 
-**Recommended Model:** Claude Sonnet 4
+**Recommended Model**
+Claude Sonnet 4
 
-**Optimized Prompt:**
-\`\`\`markdown
+**Optimized Prompt**
+<prompt>
 Create UI components
-\`\`\`
+</prompt>
 
-**Dependencies:** task-1
-**Estimated Duration:** 3 hours
+**Dependencies**
+task-1
+**Estimated Duration**
+3 hours
 
 ---
 
@@ -258,15 +279,18 @@ Create UI components
 **Agent Role Description**
 Backend developer
 
-**Recommended Model:** GPT-4.1
+**Recommended Model**
+GPT-4.1
 
-**Optimized Prompt:**
-\`\`\`markdown
+**Optimized Prompt**
+<prompt>
 Create API services
-\`\`\`
+</prompt>
 
-**Dependencies:** task-1
-**Estimated Duration:** 3 hours
+**Dependencies**
+task-1
+**Estimated Duration**
+3 hours
 
 ---
 
@@ -274,15 +298,18 @@ Create API services
 **Agent Role Description**
 Integration engineer
 
-**Recommended Model:** GPT-4.1
+**Recommended Model**
+GPT-4.1
 
-**Optimized Prompt:**
-\`\`\`markdown
+**Optimized Prompt**
+<prompt>
 Wire up frontend and backend
-\`\`\`
+</prompt>
 
-**Dependencies:** task-2, task-3
-**Estimated Duration:** 2 hours
+**Dependencies**
+task-2, task-3
+**Estimated Duration**
+2 hours
 `;
 
       const chainPath = path.join(TEST_DIR, 'chain-output.md');
@@ -317,53 +344,65 @@ Wire up frontend and backend
     it('should respect explicit parallel groups', async () => {
       const markdown = `
 ### Task ID: task-1
-**Parallel Group:** 1
+**Parallel Group**
+1
 **Agent Role Description**
 Microservice developer
 
-**Recommended Model:** GPT-4.1
+**Recommended Model**
+GPT-4.1
 
-**Optimized Prompt:**
-\`\`\`markdown
+**Optimized Prompt**
+<prompt>
 Create user service
-\`\`\`
+</prompt>
 
-**Dependencies:** None
-**Estimated Duration:** 2 hours
+**Dependencies**
+None
+**Estimated Duration**
+2 hours
 
 ---
 
 ### Task ID: task-2
-**Parallel Group:** 1
+**Parallel Group**
+1
 **Agent Role Description**
 Microservice developer
 
-**Recommended Model:** GPT-4.1
+**Recommended Model**
+GPT-4.1
 
-**Optimized Prompt:**
-\`\`\`markdown
+**Optimized Prompt**
+<prompt>
 Create product service
-\`\`\`
+</prompt>
 
-**Dependencies:** None
-**Estimated Duration:** 2 hours
+**Dependencies**
+None
+**Estimated Duration**
+2 hours
 
 ---
 
 ### Task ID: task-3
-**Parallel Group:** 2
+**Parallel Group**
+2
 **Agent Role Description**
 Integration engineer
 
-**Recommended Model:** GPT-4.1
+**Recommended Model**
+GPT-4.1
 
-**Optimized Prompt:**
-\`\`\`markdown
+**Optimized Prompt**
+<prompt>
 Create API gateway
-\`\`\`
+</prompt>
 
-**Dependencies:** None
-**Estimated Duration:** 1 hour
+**Dependencies**
+None
+**Estimated Duration**
+1 hour
 `;
 
       const chainPath = path.join(TEST_DIR, 'chain-output.md');
@@ -391,15 +430,19 @@ Create API gateway
 **Agent Role Description**
 Backend engineer
 
-**Recommended Model:** GPT-4.1
+**Recommended Model**
+GPT-4.1
 
-**Optimized Prompt:**
-\`\`\`markdown
+**Optimized Prompt**
+<prompt>
 Create service that will fail
-\`\`\`
+</prompt>
 
-**Dependencies:** None
-**Estimated Duration:** 1 hour
+**Dependencies**
+None
+
+**Estimated Duration**
+1 hour
 
 ---
 
@@ -407,15 +450,19 @@ Create service that will fail
 **Agent Role Description**
 Backend engineer
 
-**Recommended Model:** GPT-4.1
+**Recommended Model**
+GPT-4.1
 
-**Optimized Prompt:**
-\`\`\`markdown
+**Optimized Prompt**
+<prompt>
 This should not execute
-\`\`\`
+</prompt>
 
-**Dependencies:** task-1
-**Estimated Duration:** 1 hour
+**Dependencies**
+task-1
+
+**Estimated Duration**
+1 hour
 `;
 
       const chainPath = path.join(TEST_DIR, 'chain-output-fail.md');
@@ -458,15 +505,18 @@ This should not execute
 **Agent Role Description**
 Backend engineer
 
-**Recommended Model:** GPT-4.1
+**Recommended Model**
+GPT-4.1
 
-**Optimized Prompt:**
-\`\`\`markdown
+**Optimized Prompt**
+<prompt>
 Create service A that will fail
-\`\`\`
+</prompt>
 
-**Dependencies:** None
-**Estimated Duration:** 1 hour
+**Dependencies**
+None
+**Estimated Duration**
+1 hour
 
 ---
 
@@ -474,15 +524,18 @@ Create service A that will fail
 **Agent Role Description**
 Backend engineer
 
-**Recommended Model:** GPT-4.1
+**Recommended Model**
+GPT-4.1
 
-**Optimized Prompt:**
-\`\`\`markdown
+**Optimized Prompt**
+<prompt>
 Create service B that will also fail
-\`\`\`
+</prompt>
 
-**Dependencies:** None
-**Estimated Duration:** 1 hour
+**Dependencies**
+None
+**Estimated Duration**
+1 hour
 `;
 
       const chainPath = path.join(TEST_DIR, 'chain-output-fail-parallel.md');
@@ -515,15 +568,18 @@ Create service B that will also fail
 **Agent Role Description**
 Backend engineer specializing in microservices
 
-**Recommended Model:** GPT-4.1
+**Recommended Model**
+GPT-4.1
 
-**Optimized Prompt:**
-\`\`\`markdown
+**Optimized Prompt**
+<prompt>
 Create service A
-\`\`\`
+</prompt>
 
-**Dependencies:** None
-**Estimated Duration:** 1 hour
+**Dependencies**
+None
+**Estimated Duration**
+1 hour
 
 ---
 
@@ -531,15 +587,18 @@ Create service A
 **Agent Role Description**
 Backend engineer specializing in microservices
 
-**Recommended Model:** GPT-4.1
+**Recommended Model**
+GPT-4.1
 
-**Optimized Prompt:**
-\`\`\`markdown
+**Optimized Prompt**
+<prompt>
 Create service B
-\`\`\`
+</prompt>
 
-**Dependencies:** None
-**Estimated Duration:** 1 hour
+**Dependencies**
+None
+**Estimated Duration**
+1 hour
 
 ---
 
@@ -547,15 +606,18 @@ Create service B
 **Agent Role Description**
 Frontend developer
 
-**Recommended Model:** Claude Sonnet 4
+**Recommended Model**
+Claude Sonnet 4
 
-**Optimized Prompt:**
-\`\`\`markdown
+**Optimized Prompt**
+<prompt>
 Create UI
-\`\`\`
+</prompt>
 
-**Dependencies:** None
-**Estimated Duration:** 2 hours
+**Dependencies**
+None
+**Estimated Duration**
+2 hours
 `;
 
       const chainPath = path.join(TEST_DIR, 'chain-output-reuse.md');

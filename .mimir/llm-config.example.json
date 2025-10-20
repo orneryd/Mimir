@@ -1,0 +1,65 @@
+{
+  "defaultProvider": "ollama",
+  "providers": {
+    "copilot": {
+      "baseUrl": "http://localhost:4141/v1",
+      "defaultModel": "gpt-4.1",
+      "models": {
+        "gpt-4.1": {
+          "name": "gpt-4.1",
+          "contextWindow": 128000,
+          "description": "GitHub Copilot GPT-4 model via copilot-api proxy",
+          "recommendedFor": ["pm", "worker", "qc"],
+          "config": {
+            "temperature": 0.0
+          }
+        }
+      }
+    },
+    "ollama": {
+      "baseUrl": "http://localhost:11434",
+      "defaultModel": "gpt-oss",
+      "models": {
+        "gpt-oss": {
+          "name": "gpt-oss",
+          "contextWindow": 32768,
+          "description": "Open-source GPT model (13B params), good balance of quality and speed",
+          "recommendedFor": ["pm", "worker", "qc"],
+          "config": {
+            "numCtx": 32768,
+            "temperature": 0.0,
+            "numPredict": -1
+          }
+        },
+        "tinyllama": {
+          "name": "tinyllama",
+          "contextWindow": 8192,
+          "description": "1.1B params, very fast inference (backup/testing only)",
+          "recommendedFor": ["testing"],
+          "config": {
+            "numCtx": 8192,
+            "temperature": 0.0,
+            "numPredict": -1
+          }
+        }
+      }
+    }
+  },
+  "agentDefaults": {
+    "pm": {
+      "provider": "ollama",
+      "model": "gpt-oss",
+      "rationale": "PM agent benefits from larger context window for research"
+    },
+    "worker": {
+      "provider": "ollama",
+      "model": "gpt-oss",
+      "rationale": "Worker agent uses same model for consistency"
+    },
+    "qc": {
+      "provider": "ollama",
+      "model": "gpt-oss",
+      "rationale": "QC agent uses same model for validation"
+    }
+  }
+}
