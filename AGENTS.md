@@ -68,13 +68,13 @@ This repository contains **Mimir** - a production-ready MCP (Model Context Proto
 
 ## 📚 Documentation Structure
 
-### 🎯 Executive Documents (`docs/`)
-- **[MULTI_AGENT_EXECUTIVE_SUMMARY.md](docs/MULTI_AGENT_EXECUTIVE_SUMMARY.md)** - **Strategic overview** for stakeholders
+### 🎯 Executive Documents (`docs/architecture/`)
+- **[MULTI_AGENT_EXECUTIVE_SUMMARY.md](docs/architecture/MULTI_AGENT_EXECUTIVE_SUMMARY.md)** - **Strategic overview** for stakeholders
 
 ### 📖 User Guides (`docs/guides/`)
-- **[MEMORY_GUIDE.md](docs/architecture/MEMORY_GUIDE.md)** - **START HERE:** External memory system guide
-- **[KNOWLEDGE_GRAPH_GUIDE.md](docs/architecture/knowledge-graph.md)** - Associative memory networks guide
-- **[TESTING_GUIDE.md](docs/guides/TESTING_GUIDE.md)** - Test suite guide
+- **[MEMORY_GUIDE.md](docs/guides/MEMORY_GUIDE.md)** - **START HERE:** External memory system guide
+- **[KNOWLEDGE_GRAPH_GUIDE.md](docs/guides/knowledge-graph.md)** - Associative memory networks guide
+- **[TESTING_GUIDE.md](docs/testing/TESTING_GUIDE.md)** - Test suite guide
 - **[DOCKER_DEPLOYMENT_GUIDE.md](docs/guides/DOCKER_DEPLOYMENT_GUIDE.md)** - Docker deployment
 
 ### 🏗️ Architecture (`docs/architecture/`)

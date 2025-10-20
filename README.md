@@ -537,12 +537,12 @@ const qcContext = await get_task_context({
 ## Documentation
 
 ### 🎯 Executive Documents
-- 📊 **[Multi-Agent Executive Summary](docs/MULTI_AGENT_EXECUTIVE_SUMMARY.md)** - **Strategic overview** for stakeholders
+- 📊 **[Multi-Agent Executive Summary](docs/architecture/MULTI_AGENT_EXECUTIVE_SUMMARY.md)** - **Strategic overview** for stakeholders
 
 ### 📚 User Guides
-- 🧠 **[Memory Guide](docs/architecture/MEMORY_GUIDE.md)** - **START HERE:** External memory system guide
-- 🕸️ **[Knowledge Graph Guide](docs/architecture/knowledge-graph.md)** - Associative memory networks
-- 🧪 **[Testing Guide](docs/guides/TESTING_GUIDE.md)** - Test suite overview
+- 🧠 **[Memory Guide](docs/guides/MEMORY_GUIDE.md)** - **START HERE:** External memory system guide
+- 🕸️ **[Knowledge Graph Guide](docs/guides/knowledge-graph.md)** - Associative memory networks
+- 🧪 **[Testing Guide](docs/testing/TESTING_GUIDE.md)** - Test suite overview
 - 🐳 **[Docker Deployment Guide](docs/guides/DOCKER_DEPLOYMENT_GUIDE.md)** - Container deployment
 
 ### 🏗️ Architecture

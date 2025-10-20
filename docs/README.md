@@ -1,14 +1,33 @@
 # Documentation Index
 
-Complete documentation for the TODO Tracker + External Memory System MCP server.
+Complete documentation for the Mimir MCP Server - TODO Tracker, External Memory, and Knowledge Graph system.
+
+## � Quick Start
+
+**New to Mimir? Start here:**
+
+- **[MEMORY_GUIDE.md](guides/MEMORY_GUIDE.md)** - **START HERE:** External memory system for AI agents
+- **[ORCHESTRATOR_QUICKSTART.md](guides/ORCHESTRATOR_QUICKSTART.md)** - Quick start for multi-agent orchestration
+- **[DOCKER_DEPLOYMENT_GUIDE.md](guides/DOCKER_DEPLOYMENT_GUIDE.md)** - Deploy with Docker (5-minute setup)
 
 ## 📖 User Guides
 
-**Start with these guides to learn how to use the system:**
+**Comprehensive guides for using Mimir:**
 
-- **[MEMORY_GUIDE.md](guides/MEMORY_GUIDE.md)** - **START HERE:** External memory system for AI agents
+### Core Features
+- **[MEMORY_GUIDE.md](guides/MEMORY_GUIDE.md)** - External memory system for AI agents
 - **[knowledge-graph.md](guides/knowledge-graph.md)** - Associative memory networks and graph operations
 - **[PERSISTENCE.md](guides/PERSISTENCE.md)** - Memory persistence, decay, and storage
+
+### Docker & Deployment
+- **[DOCKER_DEPLOYMENT_GUIDE.md](guides/DOCKER_DEPLOYMENT_GUIDE.md)** - Complete Docker deployment guide
+- **[DOCKER_OLLAMA_SETUP.md](guides/DOCKER_OLLAMA_SETUP.md)** - Running Mimir with containerized Ollama
+- **[DOCKER_PATH_MAPPING.md](guides/DOCKER_PATH_MAPPING.md)** - Understanding container path mappings
+- **[DOCKER_RESOURCES.md](guides/DOCKER_RESOURCES.md)** - Docker resource configuration for Ollama
+
+### Orchestration
+- **[ORCHESTRATOR_QUICKSTART.md](guides/ORCHESTRATOR_QUICKSTART.md)** - Multi-agent orchestration quick start
+- **[ORCHESTRATOR_README.md](guides/ORCHESTRATOR_README.md)** - Detailed orchestration documentation
 
 ## ⚙️ Configuration
 
@@ -43,14 +62,34 @@ Complete documentation for the TODO Tracker + External Memory System MCP server.
 
 **Pre-configured agent settings:**
 
+- **[claudette-pm.md](agents/claudette-pm.md)** - Project Manager agent (task breakdown and coordination)
 - **[claudette-todo.md](agents/claudette-todo.md)** - Full Claudette agent configuration with MCP integration
 - **[claudette-auto.md](agents/claudette-auto.md)** - Autonomous execution mode for Claudette
+- **[claudette-ecko.md](agents/claudette-ecko.md)** - Knowledge graph specialist agent
 
-## 📊 Benchmarks
+### Archived Agent Versions
+See **[agents/archive/](agents/archive/)** for deprecated agent configurations.
 
-**Performance analysis and comparisons:**
+## 📊 Results & Analysis
 
-See **[../benchmarks/](../benchmarks/)** for performance benchmarks and agent comparisons.
+**Performance benchmarks and execution results:**
+
+- **[report-4.1-success.md](results/report-4.1-success.md)** - Successful multi-agent execution report (v4.1)
+- See **[../benchmarks/](../benchmarks/)** for detailed performance benchmarks
+
+## 🔬 Research
+
+**Research documentation and comparisons:**
+
+See **[research/](research/)** for research papers, comparisons, and technical analysis.
+
+## 📦 Archive
+
+**Historical documentation and implemented features:**
+
+- **[archive/implemented/](archive/implemented/)** - Documentation for completed features
+- **[archive/test-outputs/](archive/test-outputs/)** - Historical test execution outputs
+- **[archive/phase-implementations/](archive/phase-implementations/)** - Previous implementation phases
 
 ---
 
