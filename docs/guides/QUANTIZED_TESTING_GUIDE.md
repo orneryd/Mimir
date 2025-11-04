@@ -31,6 +31,7 @@ curl http://192.168.1.167:11434/api/tags
 ```
 
 If not running:
+
 - **Local**: Download from [ollama.ai](https://ollama.ai) and start
 - **Remote**: Ensure server is accessible on your network
 
@@ -144,6 +145,7 @@ Environment:
 The test suite generates:
 
 **Per-test results:**
+
 ```
 quantized-test-results/
 ├── 2025-11-01_claudette-quantized_qwen2.5-coder_1.5b.json
@@ -154,6 +156,7 @@ quantized-test-results/
 ```
 
 **Comparison report:**
+
 ```
 quantized-test-results/
 └── 2025-11-01_comparison-report.md
@@ -162,29 +165,32 @@ quantized-test-results/
 ### Reading the Comparison Report
 
 **Results Summary Table:**
+
 ```markdown
-| Preamble | Model | Score | Tool Calls | Duration (s) | Status |
-|----------|-------|-------|------------|-------------|--------|
-| claudette-quantized | qwen2.5-coder:1.5b | 85/100 | 5 | 12.3 | ✅ Pass |
-| claudette-auto | qwen2.5-coder:1.5b | 88/100 | 5 | 14.7 | ✅ Pass |
+| Preamble            | Model              | Score  | Tool Calls | Duration (s) | Status  |
+| ------------------- | ------------------ | ------ | ---------- | ------------ | ------- |
+| claudette-quantized | qwen2.5-coder:1.5b | 85/100 | 5          | 12.3         | ✅ Pass |
+| claudette-auto      | qwen2.5-coder:1.5b | 88/100 | 5          | 14.7         | ✅ Pass |
 ```
 
 **Status Indicators:**
+
 - ✅ **Pass**: Score ≥80 (acceptable behavioral parity)
 - ⚠️ **Low**: Score <80 (degraded performance)
 - ❌ **Error**: Test failed to complete
 
 **Score Breakdown by Preamble:**
+
 ```markdown
 ### claudette-quantized
 
 **Average Score:** 83.5/100
 **Average Tool Calls:** 5.2
 
-| Model | Score | Tool Calls | Duration |
-|-------|-------|------------|----------|
-| qwen2.5-coder:1.5b | 85/100 | 5 | 12.3s |
-| phi3:mini | 82/100 | 5 | 15.1s |
+| Model              | Score  | Tool Calls | Duration |
+| ------------------ | ------ | ---------- | -------- |
+| qwen2.5-coder:1.5b | 85/100 | 5          | 12.3s    |
+| phi3:mini          | 82/100 | 5          | 15.1s    |
 ```
 
 ### Interpreting Scores
@@ -199,21 +205,25 @@ quantized-test-results/
 **What Scores Measure:**
 
 1. **Memory Protocol Adherence** (20 points)
+
    - Creates `.agents/memory.instruction.md` as first action
    - Structure matches template
    - Updates memory appropriately
 
 2. **TODO Management** (20 points)
+
    - Creates TODO list with phases
    - References TODO throughout execution
    - Maintains context across conversation
 
 3. **Autonomous Execution** (20 points)
+
    - Executes tools immediately after announcement
    - No "would you like me to proceed?" patterns
    - Continues until completion
 
 4. **Repository Conservation** (20 points)
+
    - Detects existing tools/frameworks
    - Uses existing dependencies
    - No competing tool installation
@@ -232,6 +242,7 @@ The test uses `quantized-preamble-benchmark.json` which tests:
 **Scenario**: Multi-file authentication implementation
 
 **Requirements**:
+
 1. Create memory file as first action
 2. Analyze existing project structure
 3. Create TODO with phases
@@ -240,6 +251,7 @@ The test uses `quantized-preamble-benchmark.json` which tests:
 6. Clean up any temporary files
 
 **Expected Behavior**:
+
 - ✅ Memory file created immediately
 - ✅ TODO list maintained throughout
 - ✅ No permission-asking patterns
@@ -360,18 +372,18 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
         with:
-          node-version: '18'
+          node-version: "18"
       - run: npm install
       - run: npm run build
-      
+
       # Pull test models
       - run: |
           ollama pull qwen2.5-coder:1.5b
           ollama pull phi3:mini
-      
+
       # Run tests
       - run: npm run test:quantized -- --models qwen2.5-coder:1.5b,phi3:mini
-      
+
       # Upload results
       - uses: actions/upload-artifact@v3
         with:
@@ -388,6 +400,7 @@ jobs:
 **Problem**: Server not accessible
 
 **Solutions**:
+
 ```bash
 # Check if Ollama is running
 curl http://localhost:11434/api/tags
@@ -404,6 +417,7 @@ sudo ufw allow 11434
 **Problem**: Models not pulled or excluded
 
 **Solutions**:
+
 ```bash
 # List recommended models
 npm run test:quantized -- --list-models
@@ -420,6 +434,7 @@ curl http://localhost:11434/api/tags | jq '.models[].name'
 **Problem**: Model incorrectly filtered
 
 The test suite automatically filters models by:
+
 1. Checking exclusion list (GPT, Claude, Gemini, Mixtral, etc.)
 2. Parsing size from model name (e.g., `14b`, `70b`)
 3. Looking up known model sizes in `MODEL_SIZES` table
@@ -436,11 +451,13 @@ npm run test:quantized -- --models your-model-name
 **Problem**: Quantized preamble scores below 80
 
 **Diagnosis**:
+
 1. Check detailed category scores in comparison report
 2. Review individual test JSON files for specific failures
 3. Compare with claudette-auto.md results on same model
 
 **Common Issues**:
+
 - Model too small (<2B) - try larger quantized models
 - Benchmark task too complex - create simpler benchmark
 - Preamble optimization too aggressive - adjust structure
@@ -452,14 +469,17 @@ npm run test:quantized -- --models your-model-name
 ### Model Selection
 
 **For validation testing (parity check):**
+
 - Use: `qwen2.5-coder:7b`, `phi3:mini`, `gemma2:9b`
 - Goal: ≥95% parity with claudette-auto.md
 
 **For optimization testing (token efficiency):**
+
 - Use: `qwen2.5-coder:1.5b`, `llama3.2:1b`, `tinyllama:1.1b`
 - Goal: ≥80% parity with 33% fewer tokens
 
 **For production deployment:**
+
 - Test with actual target model (e.g., quantized on edge device)
 - Run multiple benchmarks (simple → complex)
 - Validate across different task types
@@ -467,17 +487,20 @@ npm run test:quantized -- --models your-model-name
 ### Interpreting Results
 
 **Good Results:**
+
 - Quantized ≥85% on 7B models
 - Quantized ≥80% on 2-4B models
 - Tool call counts similar to original
 - Duration within 20% of original
 
 **Acceptable Results:**
+
 - Quantized 75-84% on 2-4B models
 - Some category degradation (1-2 categories)
 - Longer duration acceptable if score maintained
 
 **Poor Results:**
+
 - Quantized <75% on any model
 - Multiple category failures
 - Significantly higher tool calls (indicates confusion)
@@ -496,9 +519,6 @@ npm run test:quantized -- --models your-model-name
 ## Related Documentation
 
 - **[claudette-quantized.md](../agents/claudette-quantized.md)** - The quantized preamble
-- **[CLAUDETTE_QUANTIZED_OPTIMIZATION.md](../agents/CLAUDETTE_QUANTIZED_OPTIMIZATION.md)** - Optimization strategies
-- **[CLAUDETTE_QUANTIZED_COMPARISON.md](../agents/CLAUDETTE_QUANTIZED_COMPARISON.md)** - Side-by-side examples
-- **[CLAUDETTE_QUANTIZED_RESEARCH_SUMMARY.md](../agents/CLAUDETTE_QUANTIZED_RESEARCH_SUMMARY.md)** - Research findings
 
 ---
 

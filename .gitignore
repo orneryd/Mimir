@@ -17,3 +17,6 @@ logs/
 # Snyk Security Extension - AI Rules (auto-generated)
 .cursor/rules/snyk_rules.mdc
 .DS_Store
+test-results-claudette-mini/
+test-results-claudette-quantized/
+quantized-test-results/

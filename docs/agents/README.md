@@ -9,17 +9,19 @@ This directory contains AI agent configuration files for specialized workflows i
 ### By Model Size
 
 **For 2-4B Parameter Models (Quantized):**
+
 - **[claudette-quantized.md](./claudette-quantized.md)** (v1.0.0) - Optimized for Qwen-1.8B/7B-Int4, Phi-3-mini, Gemma 2B-7B
   - 33% token reduction from full version
   - All instructions preserved
-  - See [CLAUDETTE_QUANTIZED_OPTIMIZATION.md](./CLAUDETTE_QUANTIZED_OPTIMIZATION.md) for details
 
 **For 7B+ Parameter Models:**
+
 - **[claudette-auto.md](./claudette-auto.md)** (v5.2.1) - Full autonomous execution mode
 - **[claudette-condensed.md](./claudette-condensed.md)** - Token-efficient version
 - **[claudette.md](./claudette.md)** - Universal abstract version (domain-agnostic)
 
 **For Multi-Agent Orchestration:**
+
 - **[v2/01-pm-preamble.md](./v2/01-pm-preamble.md)** (v2.0) - PM agent for planning
 - **[v2/00-ecko-preamble.md](./v2/00-ecko-preamble.md)** (v2.0) - Prompt architect
 - **[v2/templates/worker-template.md](./v2/templates/worker-template.md)** - Worker agent template
@@ -28,20 +30,25 @@ This directory contains AI agent configuration files for specialized workflows i
 ### By Task Type
 
 **Autonomous Coding (End-to-End):**
+
 - [claudette-auto.md](./claudette-auto.md) - Full autonomy, memory management, TODO tracking
 - [claudette-quantized.md](./claudette-quantized.md) - Same as above, optimized for small models
 
 **Debugging (Root Cause Analysis):**
+
 - [claudette-debug.md](./claudette-debug.md) (v1.3.1) - Find bugs with evidence, don't fix them
 
 **Project Planning:**
+
 - [v2/01-pm-preamble.md](./v2/01-pm-preamble.md) - Research, task breakdown, dependency mapping
 
 **Prompt Design:**
+
 - [v2/00-ecko-preamble.md](./v2/00-ecko-preamble.md) - Create optimized agent preambles
 - [v2/02-agentinator-preamble.md](./v2/02-agentinator-preamble.md) - Generate new agent preambles
 
 **Universal/Abstract:**
+
 - [claudette.md](./claudette.md) - Domain-agnostic version for any task type
 
 ---
@@ -53,11 +60,13 @@ This directory contains AI agent configuration files for specialized workflows i
 **Optimized for 2-4B parameter quantized models** without losing any instructions from the full version.
 
 **Target Models:**
+
 - Qwen-1.8B / Qwen-7B-Chat-Int4 / Qwen-7B-Chat-Int8
 - Phi-3-mini (3.8B)
 - Gemma 2B / Gemma 7B (quantized)
 
 **Key Improvements:**
+
 - 33% token reduction (4,500 → 3,000 tokens)
 - Shorter sentences (15-20 words vs 25+)
 - Front-loaded critical instructions
@@ -66,18 +75,18 @@ This directory contains AI agent configuration files for specialized workflows i
 - Zero instruction loss
 
 **Documentation:**
+
 - **[claudette-quantized.md](./claudette-quantized.md)** - Optimized preamble
-- **[CLAUDETTE_QUANTIZED_OPTIMIZATION.md](./CLAUDETTE_QUANTIZED_OPTIMIZATION.md)** - Optimization strategies
-- **[CLAUDETTE_QUANTIZED_COMPARISON.md](./CLAUDETTE_QUANTIZED_COMPARISON.md)** - Side-by-side examples
-- **[CLAUDETTE_QUANTIZED_RESEARCH_SUMMARY.md](./CLAUDETTE_QUANTIZED_RESEARCH_SUMMARY.md)** - Research findings
 
 **When to Use:**
+
 - Local inference on consumer hardware
 - Edge deployments with limited memory
 - Faster inference needs
 - Budget-constrained deployments
 
 **When NOT to Use:**
+
 - 14B+ models (use original claudette-auto.md)
 - Cloud API deployments with large context windows
 - When maximum verbosity helpful for complex tasks
@@ -91,12 +100,14 @@ This directory contains AI agent configuration files for specialized workflows i
 **Autonomous Coding Agent (Optimized for Small Models)** - All features of claudette-auto.md with 33% fewer tokens.
 
 **When to Use**:
+
 - Qwen-1.8B, Qwen-7B-Int4/Int8
 - Phi-3-mini (3.8B parameters)
 - Gemma 2B-7B (quantized)
 - Local inference on limited hardware
 
 **Key Features**:
+
 - All claudette-auto.md behaviors preserved
 - Shorter sentences (15-20 words)
 - Front-loaded critical instructions
@@ -108,6 +119,7 @@ This directory contains AI agent configuration files for specialized workflows i
 **Performance**: Expected >95% parity with claudette-auto.md on 7B-Int4 models
 
 **Quick Start**:
+
 ```
 Prompt: "Fix the login bug in src/auth.ts"
 [Agent creates memory, analyzes repo, implements fix autonomously]
@@ -120,12 +132,14 @@ Prompt: "Fix the login bug in src/auth.ts"
 **Enterprise Autonomous Coding Agent** - Full-featured version for 7B+ models.
 
 **When to Use**:
+
 - Qwen-14B+, GPT-4, Claude Sonnet
 - Full-precision models (FP16, BF16)
 - Complex multi-file projects
 - When maximum context helpful
 
 **Key Features**:
+
 - Memory management protocol
 - 3-phase execution (analysis, planning, implementation)
 - Repository conservation rules
@@ -137,6 +151,7 @@ Prompt: "Fix the login bug in src/auth.ts"
 **Performance**: Proven in production use
 
 **Quick Start**:
+
 ```
 Prompt: "Implement OAuth authentication with Google"
 [Agent researches, plans, implements, tests autonomously]
@@ -149,6 +164,7 @@ Prompt: "Implement OAuth authentication with Google"
 **Root Cause Analysis Specialist** - Debugging agent that finds bugs, proves them with evidence, and hands off to implementation teams.
 
 **When to Use**:
+
 - Investigating test failures or hangs
 - Reproducing reported bugs
 - Tracing execution paths
@@ -157,6 +173,7 @@ Prompt: "Implement OAuth authentication with Google"
 - **NOT for fixing bugs** (only for finding and proving them)
 
 **Key Features**:
+
 - Evidence-driven investigation (no theoretical analysis)
 - Progressive hypothesis refinement
 - Strategic instrumentation with debug markers
@@ -166,6 +183,7 @@ Prompt: "Implement OAuth authentication with Google"
 **Performance**: 90/100 (Tier S) - Expected with v1.3.1
 
 **Quick Start**:
+
 ```
 Prompt: "investigate the failing test in [file.test.ts]"
 ```
@@ -178,13 +196,13 @@ See [CHANGELOG.md](./CHANGELOG.md) for detailed version history and changes.
 
 ### Latest Releases
 
-| Version | Date | Score | Key Feature |
-|---------|------|-------|-------------|
-| **v1.3.1** | 2025-10-15 | 90 (exp) | Action enforcement |
-| v1.3.0 | 2025-10-15 | 63 | Role boundary (DON'T FIX) |
-| v1.2.0 | 2025-10-14 | 45 | ACTION-FIRST approach |
-| v1.1.0 | 2025-10-13 | 75-80 | CREATE, don't propose |
-| v1.0.0 | 2025-10-12 | 55-60 | Initial release |
+| Version    | Date       | Score    | Key Feature               |
+| ---------- | ---------- | -------- | ------------------------- |
+| **v1.3.1** | 2025-10-15 | 90 (exp) | Action enforcement        |
+| v1.3.0     | 2025-10-15 | 63       | Role boundary (DON'T FIX) |
+| v1.2.0     | 2025-10-14 | 45       | ACTION-FIRST approach     |
+| v1.1.0     | 2025-10-13 | 75-80    | CREATE, don't propose     |
+| v1.0.0     | 2025-10-12 | 55-60    | Initial release           |
 
 ---
 
@@ -194,12 +212,13 @@ See [CHANGELOG.md](./CHANGELOG.md) for detailed version history and changes.
 
 1. **Specialized Roles** - Each agent has a narrow, well-defined role
    - claudette-debug: Find bugs, don't fix them (Detective, not Mechanic)
-   
 2. **Evidence-Based** - All claims must be backed by concrete evidence
+
    - Test output, debug logs, execution traces
    - No theoretical analysis without proof
 
 3. **Action-First** - Do, don't propose
+
    - Create test files immediately (not "I'll create...")
    - Show actual output (not "I would show...")
    - Complete work in first response (not "Next, I'll...")
@@ -212,11 +231,13 @@ See [CHANGELOG.md](./CHANGELOG.md) for detailed version history and changes.
 ### Token Efficiency Strategy
 
 **Research-Backed Approach** (2024-2025):
+
 - **Primacy effect**: First 200-300 tokens weighted most heavily
 - **Sweet spot**: 500-1,500 tokens for system prompts
 - **Risk zone**: >2,000 tokens = instruction loss
 
 **Implementation**:
+
 - Front-load critical constraints in first 400 tokens
 - Role boundaries visible immediately
 - Action enforcement via explicit checklists
@@ -231,17 +252,20 @@ See [CHANGELOG.md](./CHANGELOG.md) for detailed version history and changes.
 Located in: `testing/agentic/`
 
 **Structure**:
+
 - Multi-file e-commerce order processing system
 - 24 intentional bugs (cache, concurrency, floating point, etc.)
 - 16 passing tests that deliberately miss the bugs
 - Realistic production-grade complexity
 
 **Purpose**:
+
 - Validate agent debugging capabilities
 - Measure evidence-based investigation
 - Test action enforcement (do vs propose)
 
 **Scoring Rubric** (100 points):
+
 - Bug Discovery (35 pts)
 - Root Cause Analysis (20 pts)
 - Methodology (30 pts) - **Critical: Tests created, markers added, evidence shown**
@@ -249,6 +273,7 @@ Located in: `testing/agentic/`
 - Process Quality (5 pts)
 
 **Tiers**:
+
 - **S** (90-100): Evidence-based, 3+ bugs with tests
 - **A** (75-89): Good analysis, some tests
 - **B** (60-74): Decent analysis, proposals
@@ -258,13 +283,13 @@ Located in: `testing/agentic/`
 
 ### Performance History
 
-| Version | Benchmark Score | Tier | Key Achievement |
-|---------|----------------|------|-----------------|
-| v1.3.1 | 90 (expected) | S | Action enforcement |
-| v1.3.0 | 63 | B | No source edits (role boundary worked) |
-| v1.2.0 | 45 | D | Edited source code (role confusion) |
-| v1.1.0 | ~75 | A | Created tests (but asked first) |
-| v1.0.0 | ~55 | C | Analysis only |
+| Version | Benchmark Score | Tier | Key Achievement                        |
+| ------- | --------------- | ---- | -------------------------------------- |
+| v1.3.1  | 90 (expected)   | S    | Action enforcement                     |
+| v1.3.0  | 63              | B    | No source edits (role boundary worked) |
+| v1.2.0  | 45              | D    | Edited source code (role confusion)    |
+| v1.1.0  | ~75             | A    | Created tests (but asked first)        |
+| v1.0.0  | ~55             | C    | Analysis only                          |
 
 ---
 
@@ -273,6 +298,7 @@ Located in: `testing/agentic/`
 ### For claudette-debug.md
 
 **1. Basic Investigation**
+
 ```
 Prompt: "investigate the test failure in order-processor.test.ts"
 
@@ -287,8 +313,9 @@ Expected Output:
 ```
 
 **2. Specific Bug Report**
+
 ```
-Prompt: "Customer reports: orders processed twice when submitted rapidly. 
+Prompt: "Customer reports: orders processed twice when submitted rapidly.
 Files: order-processor.ts, order-processor.test.ts"
 
 Expected Output:
@@ -301,6 +328,7 @@ Expected Output:
 ```
 
 **3. Multi-Bug Investigation**
+
 ```
 Prompt: "investigate the AGENTS.md in testing/agentic"
 
@@ -319,26 +347,31 @@ Expected Output:
 ### Adding New Agents
 
 1. **Define Role** - Narrow, specific responsibility
+
    ```markdown
    YOU ARE: [Metaphor] (specific action)
    YOU ARE NOT: [Metaphor] (forbidden action)
    ```
 
 2. **Set Boundaries** - Explicit FORBIDDEN list
+
    ```markdown
    ❌ FORBIDDEN: [specific actions]
    ✅ REQUIRED: [specific actions]
    ```
 
 3. **Add Anti-Patterns** - Show actual failures
+
    ```markdown
    ❌ Agent did X → Result: Failed
    ✅ Agent did Y → Result: Success
    ```
 
 4. **Completion Criteria** - Explicit checklist
+
    ```markdown
    YOUR FIRST RESPONSE MUST INCLUDE:
+
    - ✅ [Specific item 1]
    - ✅ [Specific item 2]
    ```
@@ -348,6 +381,7 @@ Expected Output:
 ### Improving Existing Agents
 
 **Data-Driven Approach**:
+
 1. Run agent on benchmark
 2. Score performance (100-point rubric)
 3. Identify failure mode (what went wrong?)
@@ -356,6 +390,7 @@ Expected Output:
 6. Re-test and measure improvement
 
 **Example (claudette-debug)**:
+
 - v1.2.0: 45/100 → Edited source code
 - Root cause: Role boundary buried at token 350
 - Fix: Move "DON'T FIX" to token 200 (primacy effect)
@@ -371,14 +406,17 @@ Expected Output:
 ## 📚 Related Documentation
 
 ### Architecture
+
 - [Multi-Agent Architecture](../../research/MULTI_AGENT_COLLABORATION.md) - PM/Worker/QC pattern
 - [Memory vs Knowledge Graph](../../research/MEMORY_VS_KG.md) - Architecture comparison
 
 ### Testing
+
 - [Testing Guide](../../testing/TESTING_GUIDE.md) - Test suite guide
 - [Benchmark Prompt](../../benchmarks/BENCHMARK_PROMPT.md) - Standard benchmark setup
 
 ### Configuration
+
 - Main project: [README.md](../../README.md)
 - Instructions: [.agents/cvs.instructions.md](../../.agents/cvs.instructions.md)
 
@@ -389,6 +427,7 @@ Expected Output:
 ### Reporting Issues
 
 If an agent doesn't perform as expected:
+
 1. Provide the exact prompt used
 2. Include agent's full response
 3. Describe expected vs actual behavior
@@ -426,4 +465,3 @@ If an agent doesn't perform as expected:
 **Version**: v1.3.1  
 **Status**: Production-ready  
 **Maintainer**: CVS Health Enterprise AI Team
-

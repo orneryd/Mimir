@@ -1,0 +1,57 @@
+{
+  "name": "Tool-Calling Enterprise Development Benchmark",
+  "description": "Test tool-calling models on realistic enterprise development workflow with documentation, patterns, and verification",
+  "task": "You are a developer who has been assigned a debugging task.\n\n**Assignment:** Investigate and document bugs in the order processing system\n\n**Context:**\nYour team lead says: \"There's a debugging exercise in testing/agentic/. Start by reading the AGENTS.md file there - it explains the customer complaints and what we need. The tests all pass but customers are reporting issues. Find the bugs the tests miss and document your findings.\"\n\n**Your Task:**\n1. Read testing/agentic/AGENTS.md to understand the project and complaints\n2. Follow the instructions in that AGENTS.md (it will guide you through the exercise)\n3. Check .agents/memory.instruction.md for project coding patterns\n4. Analyze the order processing system files mentioned in the AGENTS.md\n5. Run the existing tests to verify they pass\n6. Identify bugs that the passing tests don't catch\n7. Create reproduction tests that expose at least 2-3 bugs\n8. Run your new tests to demonstrate the bugs\n9. Document your findings (what bugs, where in code, how to reproduce)\n\n**Requirements:**\n- Start by reading testing/agentic/AGENTS.md (this is your main instruction source)\n- Use read_file to analyze the code files\n- Use run_terminal_cmd to run tests\n- Use edit_file to create reproduction tests\n- Show actual test output that demonstrates bugs\n- Work autonomously through all steps\n\n**Important:** This is a real debugging exercise in the repository. Follow the AGENTS.md instructions, work like a real developer would. Don't ask \"should I proceed?\" - the AGENTS.md tells you what to do. Actually run tests and show real output.",
+  "rubric": {
+    "categories": [
+      {
+        "name": "Project Discovery",
+        "maxPoints": 25,
+        "criteria": [
+          "Read testing/agentic/AGENTS.md first (8pts)",
+          "Understood the debugging exercise from AGENTS.md (6pts)",
+          "Checked .agents/memory.instruction.md for patterns (6pts)",
+          "Identified the relevant files from AGENTS.md (5pts)"
+        ]
+      },
+      {
+        "name": "Tool Usage",
+        "maxPoints": 30,
+        "criteria": [
+          "Used read_file to analyze order processing code (8pts)",
+          "Used run_terminal_cmd to run existing tests (8pts)",
+          "Used edit_file to create reproduction tests (7pts)",
+          "Showed actual test output demonstrating bugs (7pts)"
+        ]
+      },
+      {
+        "name": "Autonomous Execution",
+        "maxPoints": 20,
+        "criteria": [
+          "Made tool calls immediately without asking (6pts)",
+          "Followed AGENTS.md instructions autonomously (5pts)",
+          "Continued through analysis → testing → documentation (5pts)",
+          "Completed full debugging workflow (4pts)"
+        ]
+      },
+      {
+        "name": "Bug Discovery",
+        "maxPoints": 15,
+        "criteria": [
+          "Identified 2+ bugs from customer complaints (6pts)",
+          "Analyzed root causes in code (5pts)",
+          "Created tests that expose the bugs (4pts)"
+        ]
+      },
+      {
+        "name": "Verification & Documentation",
+        "maxPoints": 10,
+        "criteria": [
+          "Ran reproduction tests showing failures (4pts)",
+          "Showed actual failing test output (3pts)",
+          "Documented findings clearly (3pts)"
+        ]
+      }
+    ]
+  }
+}

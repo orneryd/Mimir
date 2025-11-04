@@ -1,0 +1,57 @@
+{
+  "name": "Non-Tool Coding Benchmark",
+  "description": "Test non-tool models on complex code generation, async handling, and comprehensive test coverage",
+  "task": "You are given a coding task requiring comprehensive test coverage for a complex validation system.\n\n**Context:**\nYou're working on a user registration system. Here's the validation module:\n\n```javascript\n// utils/userValidator.js\nclass ValidationError extends Error {\n  constructor(message, field) {\n    super(message);\n    this.field = field;\n    this.name = 'ValidationError';\n  }\n}\n\nclass UserValidator {\n  validateEmail(email) {\n    if (!email || typeof email !== 'string') {\n      throw new ValidationError('Email is required', 'email');\n    }\n    if (!email.includes('@') || !email.includes('.')) {\n      throw new ValidationError('Invalid email format', 'email');\n    }\n    if (email.length < 5 || email.length > 100) {\n      throw new ValidationError('Email must be between 5 and 100 characters', 'email');\n    }\n    return true;\n  }\n\n  validatePassword(password) {\n    if (!password || typeof password !== 'string') {\n      throw new ValidationError('Password is required', 'password');\n    }\n    if (password.length < 8) {\n      throw new ValidationError('Password must be at least 8 characters', 'password');\n    }\n    if (!/[A-Z]/.test(password)) {\n      throw new ValidationError('Password must contain uppercase letter', 'password');\n    }\n    if (!/[0-9]/.test(password)) {\n      throw new ValidationError('Password must contain a number', 'password');\n    }\n    return true;\n  }\n\n  validateAge(age) {\n    if (age === undefined || age === null) {\n      throw new ValidationError('Age is required', 'age');\n    }\n    if (typeof age !== 'number' || !Number.isInteger(age)) {\n      throw new ValidationError('Age must be an integer', 'age');\n    }\n    if (age < 13) {\n      throw new ValidationError('Must be at least 13 years old', 'age');\n    }\n    if (age > 120) {\n      throw new ValidationError('Age must be realistic', 'age');\n    }\n    return true;\n  }\n\n  async validateUser(user) {\n    const errors = [];\n    \n    try { this.validateEmail(user.email); } \n    catch (e) { errors.push(e); }\n    \n    try { this.validatePassword(user.password); } \n    catch (e) { errors.push(e); }\n    \n    try { this.validateAge(user.age); } \n    catch (e) { errors.push(e); }\n    \n    if (errors.length > 0) {\n      throw errors;\n    }\n    \n    return true;\n  }\n}\n\nmodule.exports = { UserValidator, ValidationError };\n```\n\n**Task:**\n1. Analyze the validation system and identify ALL edge cases\n2. Write comprehensive tests covering:\n   - Valid inputs (happy path) for each validation method\n   - Each specific error case (missing, wrong type, format issues)\n   - Boundary values (exactly at limits, just over/under limits)\n   - The async validateUser method with multiple errors\n   - Error message accuracy and field tracking\n\n**Requirements:**\n- Include at least 12 distinct test cases\n- Test ALL validation rules (email format, length, password strength, age boundaries)\n- Test error messages are correct and include proper field names\n- Test async behavior of validateUser\n- Use proper test structure with nested describe blocks\n- NO placeholder comments or TODO items\n- All tests must be complete and runnable\n\n**Note:** Assume Jest as the testing framework. State your testing strategy before showing code.",
+  "rubric": {
+    "categories": [
+      {
+        "name": "Problem Analysis",
+        "maxPoints": 20,
+        "criteria": [
+          "Identified all validation rules and edge cases (8pts)",
+          "Recognized async testing requirements (6pts)",
+          "Identified boundary value test needs (6pts)"
+        ]
+      },
+      {
+        "name": "Code Completeness",
+        "maxPoints": 30,
+        "criteria": [
+          "All 12+ test cases provided and distinct (15pts)",
+          "Tests are syntactically correct (5pts)",
+          "NO placeholder comments or TODOs (5pts)",
+          "Proper async/await usage (5pts)"
+        ]
+      },
+      {
+        "name": "Test Coverage",
+        "maxPoints": 25,
+        "criteria": [
+          "All validation methods tested (validateEmail, validatePassword, validateAge, validateUser) (8pts)",
+          "All error cases covered with correct error messages (8pts)",
+          "Boundary value tests (age 13, 120, email length 5, 100, password length 8) (5pts)",
+          "Happy path tests for valid inputs (4pts)"
+        ]
+      },
+      {
+        "name": "Code Quality",
+        "maxPoints": 15,
+        "criteria": [
+          "Clear, specific test descriptions (4pts)",
+          "Proper nested describe structure (3pts)",
+          "Correct assertions including error message checks (4pts)",
+          "Tests would actually work and pass (4pts)"
+        ]
+      },
+      {
+        "name": "Strategy Explanation",
+        "maxPoints": 10,
+        "criteria": [
+          "Explained testing approach before code (5pts)",
+          "Justified test selection (boundary values, error cases) (3pts)",
+          "Concise and clear (2pts)"
+        ]
+      }
+    ]
+  }
+}
