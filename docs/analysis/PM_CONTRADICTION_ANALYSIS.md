@@ -184,7 +184,7 @@ The PM agent created task-1.1 with **fundamentally contradictory requirements**:
 
 ### Graph Tools
 
-**`graph_search_nodes(query, options)`**
+**`memory_search_nodes(query, options)`**
 - ✅ Full-text search across all node properties
 - ✅ Case-insensitive search with `toLower()`
 - ✅ Filter by node types

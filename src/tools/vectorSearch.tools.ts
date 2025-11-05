@@ -13,17 +13,22 @@ export function createVectorSearchTools(driver: Driver): Tool[] {
 
   return [
     // ========================================================================
-    // vector_search_files
+    // vector_search_nodes
     // ========================================================================
     {
-      name: 'vector_search_files',
-      description: 'Semantic search for files using vector embeddings. Returns files most similar to the query text. Requires embeddings to be enabled in config.',
+      name: 'vector_search_nodes',
+      description: 'Semantic search across all nodes using vector embeddings. Returns nodes most similar to the query by MEANING (not exact text match). Use this to find related concepts, similar problems, or relevant context when you don\'t know exact keywords. Works with todos, memories, files, and all other node types. Complements memory_node search (which finds exact text matches).',
       inputSchema: {
         type: 'object',
         properties: {
           query: {
             type: 'string',
-            description: 'Natural language search query (e.g., "authentication code", "database connections")'
+            description: 'Natural language search query (e.g., "authentication code", "database connections", "pending tasks")'
+          },
+          types: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Optional: Filter by node types (e.g., ["todo", "memory", "file"]). If not provided, searches all types.'
           },
           limit: {
             type: 'number',
@@ -45,7 +50,7 @@ export function createVectorSearchTools(driver: Driver): Tool[] {
     // ========================================================================
     {
       name: 'get_embedding_stats',
-      description: 'Get statistics about indexed files with embeddings',
+      description: 'Get statistics about nodes with embeddings, broken down by type',
       inputSchema: {
         type: 'object',
         properties: {},
@@ -56,9 +61,9 @@ export function createVectorSearchTools(driver: Driver): Tool[] {
 }
 
 /**
- * Handle vector_search_files tool call
+ * Handle vector_search_nodes tool call
  */
-export async function handleVectorSearchFiles(
+export async function handleVectorSearchNodes(
   params: any,
   driver: Driver
 ): Promise<any> {
@@ -78,63 +83,88 @@ export async function handleVectorSearchFiles(
     // Generate embedding for query
     const queryEmbedding = await embeddingsService.generateEmbedding(params.query);
 
-    // Get all files with embeddings
+    const limit = Math.floor(params.limit || 5);
+    const minSimilarity = params.min_similarity || 0.5;
+
+    // Build type filter if provided
+    let typeFilter = '';
+    const queryParams: any = {
+      queryVector: queryEmbedding.embedding,
+      limit: Math.floor(limit * 2) // Get more candidates for filtering
+    };
+    
+    if (params.types && Array.isArray(params.types) && params.types.length > 0) {
+      typeFilter = 'AND node.type IN $types';
+      queryParams.types = params.types;
+    }
+
+    // Use Neo4j's native vector similarity search
+    // Note: Neo4j requires integer parameters, not floats
     const result = await session.run(`
-      MATCH (f:File)
-      WHERE f.has_embedding = true
-      RETURN f.path AS path, 
-             f.name AS name,
-             f.language AS language,
-             f.size_bytes AS size_bytes,
-             f.embedding AS embedding,
-             f.content AS content
-      LIMIT 1000
-    `);
+      CALL db.index.vector.queryNodes('node_embedding_index', toInteger($limit), $queryVector)
+      YIELD node, score
+      WHERE score >= $minSimilarity ${typeFilter}
+      RETURN COALESCE(node.id, node.path) AS id,
+             node.type AS type,
+             COALESCE(node.title, node.name) AS title,
+             node.name AS name,
+             node.description AS description,
+             node.content AS content,
+             node.path AS path,
+             score AS similarity
+      ORDER BY score DESC
+      LIMIT toInteger($finalLimit)
+    `, { ...queryParams, minSimilarity, finalLimit: limit });
 
     if (result.records.length === 0) {
       return {
         status: 'success',
+        query: params.query,
         results: [],
-        message: 'No files with embeddings found. Run file watch with generate_embeddings=true'
+        total_candidates: 0,
+        returned: 0,
+        message: 'No similar nodes found. Try lowering min_similarity or check if nodes have embeddings.'
       };
     }
 
-    // Calculate similarities
-    const candidates = result.records.map(record => ({
-      embedding: record.get('embedding'),
-      metadata: {
-        path: record.get('path'),
-        name: record.get('name'),
-        language: record.get('language'),
-        size_bytes: record.get('size_bytes'),
-        content_preview: record.get('content')?.substring(0, 200) || ''
+    // Format results
+    const results = result.records.map(record => {
+      const content = record.get('content');
+      const description = record.get('description');
+      const title = record.get('title');
+      const name = record.get('name');
+      const path = record.get('path');
+      
+      // Create a preview from available text fields
+      let preview = '';
+      if (title) preview = title;
+      else if (name) preview = name;
+      else if (description) preview = description;
+      else if (content && typeof content === 'string') preview = content.substring(0, 200);
+      
+      const resultObj: any = {
+        id: record.get('id'),
+        type: record.get('type'),
+        title: title || name || null,
+        description: description || null,
+        similarity: record.get('similarity'),
+        content_preview: preview
+      };
+      
+      // Add path for file nodes
+      if (path) {
+        resultObj.path = path;
       }
-    }));
-
-    const limit = params.limit || 5;
-    const minSimilarity = params.min_similarity || 0.5;
-
-    const similarFiles = embeddingsService.findMostSimilar(
-      queryEmbedding.embedding,
-      candidates,
-      limit * 2 // Get more than needed for filtering
-    );
-
-    // Filter by minimum similarity
-    const filtered = similarFiles.filter(f => f.similarity >= minSimilarity);
+      
+      return resultObj;
+    });
 
     return {
       status: 'success',
       query: params.query,
-      results: filtered.slice(0, limit).map(f => ({
-        path: f.metadata.path,
-        name: f.metadata.name,
-        language: f.metadata.language,
-        similarity: f.similarity,
-        content_preview: f.metadata.content_preview
-      })),
+      results,
       total_candidates: result.records.length,
-      returned: Math.min(filtered.length, limit)
+      returned: result.records.length
     };
 
   } catch (error: any) {
@@ -157,27 +187,29 @@ export async function handleGetEmbeddingStats(
   const session = driver.session();
   
   try {
+    // Get total count and breakdown by type
     const result = await session.run(`
-      MATCH (f:File)
-      RETURN 
-        COUNT(f) AS total_files,
-        SUM(CASE WHEN f.has_embedding = true THEN 1 ELSE 0 END) AS files_with_embeddings,
-        SUM(CASE WHEN f.has_embedding = false THEN 1 ELSE 0 END) AS files_without_embeddings,
-        COLLECT(DISTINCT f.embedding_model)[0] AS embedding_model,
-        COLLECT(DISTINCT f.embedding_dimensions)[0] AS embedding_dimensions
+      MATCH (n:Node)
+      WHERE n.has_embedding = true
+      RETURN n.type AS type, count(*) AS count
+      ORDER BY count DESC
     `);
 
-    const record = result.records[0];
+    const byType: Record<string, number> = {};
+    let total = 0;
+
+    for (const record of result.records) {
+      const type = record.get('type');
+      const countValue = record.get('count');
+      const count = typeof countValue === 'object' && countValue.toNumber ? countValue.toNumber() : Number(countValue);
+      byType[type] = count;
+      total += count;
+    }
 
     return {
       status: 'success',
-      stats: {
-        total_files: record.get('total_files').toNumber(),
-        files_with_embeddings: record.get('files_with_embeddings').toNumber(),
-        files_without_embeddings: record.get('files_without_embeddings').toNumber(),
-        embedding_model: record.get('embedding_model'),
-        embedding_dimensions: record.get('embedding_dimensions')?.toNumber() || null
-      }
+      total_nodes_with_embeddings: total,
+      breakdown_by_type: byType
     };
 
   } catch (error: any) {

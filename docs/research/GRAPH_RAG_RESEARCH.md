@@ -120,7 +120,7 @@ update_todo_context({
 **MCP Prevention:**
 - Version context updates with timestamps
 - Track dependencies between nodes
-- Use `graph_get_neighbors` to check for conflicts
+- Use `memory_get_neighbors` to check for conflicts
 
 ---
 
@@ -214,15 +214,15 @@ const enrichedContext = generateContextualPrefix({
 });
 ```
 
-**Expected Impact:** 49-67% improvement in `graph_search_nodes` retrieval accuracy.
+**Expected Impact:** 49-67% improvement in `memory_search_nodes` retrieval accuracy.
 
 ### Priority 2: Subgraph Extraction (DESIGNED)
 
-**Goal:** Implement `graph_get_subgraph` for multi-hop reasoning.
+**Goal:** Implement `memory_get_subgraph` for multi-hop reasoning.
 
 **Tool Signature:**
 ```typescript
-graph_get_subgraph({
+memory_get_subgraph({
   startNodeId: string,
   depth: number,
   edgeTypes?: string[],
@@ -234,7 +234,7 @@ graph_get_subgraph({
 ```
 "What files are related to the auth bug fix?"
 
-→ graph_get_subgraph({
+→ memory_get_subgraph({
     startNodeId: 'todo-1-auth',
     depth: 2,
     edgeTypes: ['references', 'depends_on'],
@@ -312,8 +312,8 @@ This is the operational embodiment of Karpathy's insight.
 
 | Enhancement | Research Finding | Expected Impact |
 |-------------|------------------|-----------------|
-| **Contextual TODO Prefix** | 49% reduction in retrieval failures[^2] | `graph_search_nodes` accuracy +49% |
-| **Contextual Prefix + Re-rank** | 67% reduction in retrieval failures[^2] | `graph_search_nodes` accuracy +67% |
+| **Contextual TODO Prefix** | 49% reduction in retrieval failures[^2] | `memory_search_nodes` accuracy +49% |
+| **Contextual Prefix + Re-rank** | 67% reduction in retrieval failures[^2] | `memory_search_nodes` accuracy +67% |
 | **Subgraph Extraction** | Multi-hop reasoning capability[^1] | Complex query handling +80% |
 | **Pull→Prune→Pull** | Solves "Lost in Middle"[^1] | Context retention +90% |
 | **Hierarchical Memory** | Natural decay reduces noise[^3] | Focus improvement +60% |
@@ -335,7 +335,7 @@ This is the operational embodiment of Karpathy's insight.
 ## 🚀 Future Research Directions
 
 ### 1. Adaptive Context Window Management
-- Dynamic depth for `graph_get_subgraph` based on query complexity
+- Dynamic depth for `memory_get_subgraph` based on query complexity
 - Automatic re-ranking of retrieved nodes
 - Confidence scoring for context relevance
 
@@ -386,7 +386,7 @@ This is the operational embodiment of Karpathy's insight.
 **Next Steps:**
 1. ✅ Document research findings (this file)
 2. 🔨 Implement contextual TODO prefix enhancement
-3. 🔨 Design and implement `graph_get_subgraph` tool
+3. 🔨 Design and implement `memory_get_subgraph` tool
 4. 📊 Measure performance improvements against research benchmarks
 
 ---

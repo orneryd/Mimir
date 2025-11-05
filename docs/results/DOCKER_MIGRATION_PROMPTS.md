@@ -22,12 +22,12 @@
 
 Each task below is a standalone prompt that can be given to an LLM with zero context. The LLM should:
 
-1. Use the knowledge graph tool to retrieve the full task context: `graph_get_node('<task-id>')`
+1. Use the knowledge graph tool to retrieve the full task context: `memory_get_node('<task-id>')`
 2. Execute the task based on the stored context
-3. Update the task status when complete: `graph_update_node('<task-id>', {properties: {status: 'completed', completed_at: '<timestamp>'}})`
-4. Store any output or findings back in the knowledge graph using `graph_update_node()`
+3. Update the task status when complete: `memory_update_node('<task-id>', {properties: {status: 'completed', completed_at: '<timestamp>'}})`
+4. Store any output or findings back in the knowledge graph using `memory_update_node()`
 
-**⚠️ CRITICAL: These are Knowledge Graph nodes, NOT TODO items. Use `graph_update_node()`, NOT `update_todo()`**
+**⚠️ CRITICAL: These are Knowledge Graph nodes, NOT TODO items. Use `memory_update_node()`, NOT `update_todo()`**
 
 **⚠️ HTTP/JSON-RPC Format**: If calling via HTTP, use the correct MCP protocol format:
 ```json
@@ -36,7 +36,7 @@ Each task below is a standalone prompt that can be given to an LLM with zero con
   "id": 1,
   "method": "tools/call",
   "params": {
-    "name": "graph_update_node",
+    "name": "memory_update_node",
     "arguments": {
       "id": "node-4-1760410374474",
       "properties": {
@@ -60,13 +60,13 @@ Each task below is a standalone prompt that can be given to an LLM with zero con
 I need you to add a health check endpoint for Docker monitoring.
 
 INSTRUCTIONS:
-1. Retrieve task context: graph_get_node('node-4-1760410374474')
+1. Retrieve task context: memory_get_node('node-4-1760410374474')
 2. In src/http-server.ts, add GET /health endpoint
 3. Return JSON: { "status": "healthy", "version": "3.0.0" }
 4. Use this for Docker HEALTHCHECK directive later
 5. Test with: curl http://localhost:3000/health
 6. Update task status using KG API:
-   graph_update_node('node-4-1760410374474', {
+   memory_update_node('node-4-1760410374474', {
      properties: {status: 'completed', completed_at: '<timestamp>', result: 'Health endpoint added'}
    })
 
@@ -74,7 +74,7 @@ COMPLETED INPUTS AVAILABLE:
 - src/http-server.ts (HTTP server with session management)
 
 CONTEXT RETRIEVAL:
-Start by running: graph_get_node('node-4-1760410374474')
+Start by running: memory_get_node('node-4-1760410374474')
 
 NOTE: Quick task, < 1 hour.
 ```
@@ -90,7 +90,7 @@ NOTE: Quick task, < 1 hour.
 I need you to create a production-ready Dockerfile with multi-stage build.
 
 INSTRUCTIONS:
-1. Retrieve task context: graph_get_node('node-5-1760410374474')
+1. Retrieve task context: memory_get_node('node-5-1760410374474')
 2. Create Dockerfile with stages:
    - Stage 1: Install dependencies (FROM node:20-alpine)
    - Stage 2: Build TypeScript (npm run build)
@@ -102,7 +102,7 @@ INSTRUCTIONS:
 5. CMD ["node", "build/http-server.js"]
 6. Optimize for minimal image size
 7. Update task status using KG API:
-   graph_update_node('node-5-1760410374474', {
+   memory_update_node('node-5-1760410374474', {
      properties: {status: 'completed', completed_at: '<timestamp>', result: 'Dockerfile created'}
    })
 
@@ -115,7 +115,7 @@ DEPENDENCIES:
 - This task depends on: Task 1.1 (Health endpoint for HEALTHCHECK)
 
 CONTEXT RETRIEVAL:
-Start by running: graph_get_node('node-5-1760410374474')
+Start by running: memory_get_node('node-5-1760410374474')
 
 TARGET: Image size < 200MB
 ```
@@ -127,7 +127,7 @@ TARGET: Image size < 200MB
 I need you to create a docker compose.yml for easy deployment.
 
 INSTRUCTIONS:
-1. Retrieve task context: graph_get_node('node-6-1760410374474')
+1. Retrieve task context: memory_get_node('node-6-1760410374474')
 2. Create docker compose.yml with:
    - Service name: mcp-server
    - Build from Dockerfile
@@ -140,7 +140,7 @@ INSTRUCTIONS:
    - Health check using /health endpoint
 3. Test with: docker compose up
 4. Update task status using KG API:
-   graph_update_node('node-6-1760410374474', {
+   memory_update_node('node-6-1760410374474', {
      properties: {status: 'completed', completed_at: '<timestamp>', result: 'docker compose.yml created'}
    })
 
@@ -151,7 +151,7 @@ DEPENDENCIES:
 - This task depends on: Task 2.1 (Dockerfile created)
 
 CONTEXT RETRIEVAL:
-Start by running: graph_get_node('node-6-1760410374474')
+Start by running: memory_get_node('node-6-1760410374474')
 ```
 
 ### Task 2.3: Create Environment Configuration
@@ -161,7 +161,7 @@ Start by running: graph_get_node('node-6-1760410374474')
 I need you to create environment variable configuration files.
 
 INSTRUCTIONS:
-1. Retrieve task context: graph_get_node('node-7-1760410374474')
+1. Retrieve task context: memory_get_node('node-7-1760410374474')
 2. Create .env.example with all configurable variables:
    - PORT=3000
    - MCP_MEMORY_STORE_PATH=/app/data/.mcp-memory-store.json
@@ -173,7 +173,7 @@ INSTRUCTIONS:
 3. Document each variable in comments
 4. Update .gitignore to exclude .env
 5. Update task status using KG API:
-   graph_update_node('node-7-1760410374474', {
+   memory_update_node('node-7-1760410374474', {
      properties: {status: 'completed', completed_at: '<timestamp>', result: '.env.example created'}
    })
 
@@ -184,7 +184,7 @@ DEPENDENCIES:
 - This task depends on: Task 2.1 (Dockerfile created)
 
 CONTEXT RETRIEVAL:
-Start by running: graph_get_node('node-7-1760410374474')
+Start by running: memory_get_node('node-7-1760410374474')
 
 NOTE: Do NOT commit actual .env file with secrets
 ```
@@ -196,7 +196,7 @@ NOTE: Do NOT commit actual .env file with secrets
 I need you to create a .dockerignore file to optimize Docker builds.
 
 INSTRUCTIONS:
-1. Retrieve task context: graph_get_node('node-8-1760410374474')
+1. Retrieve task context: memory_get_node('node-8-1760410374474')
 2. Create .dockerignore with exclusions:
    - node_modules
    - build
@@ -208,7 +208,7 @@ INSTRUCTIONS:
    - .env
 3. Test that Docker build is faster
 4. Update task status using KG API:
-   graph_update_node('node-8-1760410374474', {
+   memory_update_node('node-8-1760410374474', {
      properties: {status: 'completed', completed_at: '<timestamp>', result: '.dockerignore created'}
    })
 
@@ -216,7 +216,7 @@ DEPENDENCIES:
 - This task depends on: Task 2.1 (Dockerfile created)
 
 CONTEXT RETRIEVAL:
-Start by running: graph_get_node('node-8-1760410374474')
+Start by running: memory_get_node('node-8-1760410374474')
 
 NOTE: Quick task, reduces build context size significantly
 ```
@@ -232,7 +232,7 @@ NOTE: Quick task, reduces build context size significantly
 I need you to test the Docker build process.
 
 INSTRUCTIONS:
-1. Retrieve task context: graph_get_node('node-9-1760410374474')
+1. Retrieve task context: memory_get_node('node-9-1760410374474')
 2. Build the image:
    docker build -t mcp-server:latest .
 3. Verify:
@@ -241,7 +241,7 @@ INSTRUCTIONS:
    - All files are present in /app
 4. Document any issues and fixes
 5. Store build output using KG API:
-   graph_update_node('node-9-1760410374474', {
+   memory_update_node('node-9-1760410374474', {
      properties: {
        status: 'completed',
        completed_at: '<timestamp>',
@@ -254,7 +254,7 @@ DEPENDENCIES:
 - This task depends on: Task 2.2 (docker compose created)
 
 CONTEXT RETRIEVAL:
-Start by running: graph_get_node('node-9-1760410374474')
+Start by running: memory_get_node('node-9-1760410374474')
 
 VALIDATION: Image must build successfully
 ```
@@ -266,7 +266,7 @@ VALIDATION: Image must build successfully
 I need you to test container startup and verify persistence works.
 
 INSTRUCTIONS:
-1. Retrieve task context: graph_get_node('node-10-1760410374474')
+1. Retrieve task context: memory_get_node('node-10-1760410374474')
 2. Start container: docker compose up -d
 3. Check logs: docker compose logs -f
 4. Create a TODO via HTTP POST to /mcp
@@ -276,7 +276,7 @@ INSTRUCTIONS:
 8. Test failure: docker compose down && docker compose up
 9. Document all test results
 10. Update task status using KG API:
-    graph_update_node('node-10-1760410374474', {
+    memory_update_node('node-10-1760410374474', {
       properties: {
         status: 'completed',
         completed_at: '<timestamp>',
@@ -289,7 +289,7 @@ DEPENDENCIES:
 - This task depends on: Task 3.1 (build tested)
 
 CONTEXT RETRIEVAL:
-Start by running: graph_get_node('node-10-1760410374474')
+Start by running: memory_get_node('node-10-1760410374474')
 
 CRITICAL: Persistence MUST survive restarts
 ```
@@ -301,19 +301,19 @@ CRITICAL: Persistence MUST survive restarts
 I need you to test all MCP HTTP endpoints.
 
 INSTRUCTIONS:
-1. Retrieve task context: graph_get_node('node-11-1760410374474')
+1. Retrieve task context: memory_get_node('node-11-1760410374474')
 2. Test health check: curl http://localhost:3000/health
 3. Test MCP endpoints via HTTP POST to /mcp:
    - initialize (get session ID)
    - create_todo
    - list_todos
-   - graph_add_node
-   - graph_get_stats
+   - memory_add_node
+   - memory_get_stats
 4. Verify session persistence across requests
 5. Test error handling (invalid session, bad requests)
 6. Create curl examples for documentation
 7. Store test results and curl commands using KG API:
-   graph_update_node('node-11-1760410374474', {
+   memory_update_node('node-11-1760410374474', {
      properties: {
        status: 'completed',
        completed_at: '<timestamp>',
@@ -326,7 +326,7 @@ DEPENDENCIES:
 - This task depends on: Task 3.2 (container running)
 
 CONTEXT RETRIEVAL:
-Start by running: graph_get_node('node-11-1760410374474')
+Start by running: memory_get_node('node-11-1760410374474')
 
 DELIVERABLE: Working curl examples for all major tools
 ```
@@ -339,7 +339,7 @@ I need you to write comprehensive deployment documentation.
 
 INSTRUCTIONS:
 1. Retrieve task context using the MCP tool:
-   graph_get_node({"id": "node-12-1760410374474"})
+   memory_get_node({"id": "node-12-1760410374474"})
 
 2. Create: docs/DOCKER_DEPLOYMENT.md
 
@@ -359,7 +359,7 @@ INSTRUCTIONS:
 6. Update main README.md with Docker section
 
 7. When complete, update task status using the KG tool:
-   graph_update_node({
+   memory_update_node({
      "id": "node-12-1760410374474",
      "properties": {
        "status": "completed",
@@ -373,8 +373,8 @@ DEPENDENCIES:
 - Get curl examples from node-11-1760410374474 (Task 3.3)
 
 CONTEXT RETRIEVAL:
-First, retrieve the task node: graph_get_node({"id": "node-12-1760410374474"})
-Then, retrieve curl examples: graph_get_node({"id": "node-11-1760410374474"})
+First, retrieve the task node: memory_get_node({"id": "node-12-1760410374474"})
+Then, retrieve curl examples: memory_get_node({"id": "node-11-1760410374474"})
 
 DELIVERABLE: Complete deployment guide for end users
 
@@ -389,24 +389,24 @@ If you're an LLM picking up one of these tasks:
 
 1. **Retrieve the task**: 
    ```
-   graph_get_node('<task-id>')
+   memory_get_node('<task-id>')
    ```
 
 2. **Check dependencies**:
    ```
-   graph_get_neighbors('<task-id>', {edgeType: 'depends_on', direction: 'out'})
+   memory_get_neighbors('<task-id>', {edgeType: 'depends_on', direction: 'out'})
    ```
 
 3. **Get phase context**:
    ```
-   graph_get_subgraph('<task-id>', {depth: 2})
+   memory_get_subgraph('<task-id>', {depth: 2})
    ```
 
 4. **Execute the task** using the instructions in the prompt above
 
 5. **Update status when complete** (⚠️ Use KG API, NOT TODO API):
    ```
-   graph_update_node('<task-id>', {
+   memory_update_node('<task-id>', {
      properties: {
        status: 'completed',
        completed_at: '2025-10-14T02:00:00.000Z',
@@ -427,12 +427,12 @@ If you're an LLM picking up one of these tasks:
 
 **To view the entire plan**:
 ```
-graph_get_subgraph('docker-project-root', {depth: 3, linearize: true})
+memory_get_subgraph('docker-project-root', {depth: 3, linearize: true})
 ```
 
 **To see pending tasks**:
 ```
-graph_query_nodes({type: 'task', properties: {status: 'pending'}})
+memory_query_nodes({type: 'task', properties: {status: 'pending'}})
 ```
 
 ---
@@ -444,10 +444,10 @@ graph_query_nodes({type: 'task', properties: {status: 'pending'}})
 **✅ CORRECT - Use KG API:**
 ```javascript
 // Get task
-graph_get_node('node-4-1760410374474')
+memory_get_node('node-4-1760410374474')
 
 // Update status to completed
-graph_update_node('node-4-1760410374474', {
+memory_update_node('node-4-1760410374474', {
   properties: {
     status: 'completed',
     completed_at: '2025-10-14T02:00:00.000Z',
@@ -456,10 +456,10 @@ graph_update_node('node-4-1760410374474', {
 })
 
 // Check dependencies
-graph_get_neighbors('node-4-1760410374474', {edgeType: 'depends_on'})
+memory_get_neighbors('node-4-1760410374474', {edgeType: 'depends_on'})
 
 // Query all tasks
-graph_query_nodes({type: 'task', properties: {status: 'pending'}})
+memory_query_nodes({type: 'task', properties: {status: 'pending'}})
 ```
 
 **❌ WRONG - Don't use TODO API:**
@@ -486,7 +486,7 @@ curl -X POST http://localhost:3000/mcp \
     "id": 1,
     "method": "tools/call",
     "params": {
-      "name": "graph_update_node",
+      "name": "memory_update_node",
       "arguments": {
         "id": "node-4-1760410374474",
         "properties": {
@@ -502,7 +502,7 @@ curl -X POST http://localhost:3000/mcp \
 ### Key Points:
 
 1. **Method is always `"tools/call"`** - Not the tool name directly
-2. **Tool name goes in `params.name`** - e.g., `"graph_update_node"`
+2. **Tool name goes in `params.name`** - e.g., `"memory_update_node"`
 3. **Tool arguments go in `params.arguments`** - The actual parameters for the tool
 4. **Session ID header required** - `X-Session-ID` header for persistent sessions
 5. **JSON-RPC 2.0 format** - Include `"jsonrpc": "2.0"` and `"id"`
@@ -513,7 +513,7 @@ curl -X POST http://localhost:3000/mcp \
 # DON'T DO THIS - Method cannot be the tool name directly
 curl -X POST http://localhost:3000/mcp \
   -d '{
-    "method": "graph_update_node",
+    "method": "memory_update_node",
     "params": { "id": "...", "properties": {...} }
   }'
 ```
@@ -529,7 +529,7 @@ curl -X POST http://localhost:3000/mcp \
     "id": 2,
     "method": "tools/call",
     "params": {
-      "name": "graph_get_node",
+      "name": "memory_get_node",
       "arguments": {
         "id": "node-10-1760410374474"
       }
@@ -548,7 +548,7 @@ curl -X POST http://localhost:3000/mcp \
     "id": 3,
     "method": "tools/call",
     "params": {
-      "name": "graph_query_nodes",
+      "name": "memory_query_nodes",
       "arguments": {
         "type": "task",
         "properties": {

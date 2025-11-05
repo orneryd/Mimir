@@ -141,8 +141,8 @@ The Docker migration project successfully completed **Phase 1 and Phase 2**, del
   - ✅ `/mcp (initialize)`
   - ✅ `/mcp (create_todo)`
   - ✅ `/mcp (list_todos)`
-  - ✅ `/mcp (graph_add_node)`
-  - ✅ `/mcp (graph_get_stats)`
+  - ✅ `/mcp (memory_add_node)`
+  - ✅ `/mcp (memory_get_stats)`
 - **Verification Results**:
   - ✅ Session persistence across requests
   - ✅ Error handling (invalid session, bad requests)
@@ -229,7 +229,7 @@ The Docker migration project successfully completed **Phase 1 and Phase 2**, del
 **Impact**: Build now works in secure enterprise environments
 
 ### Issue 2: MCP Tool Call Syntax Confusion
-**Problem**: Agents attempting to call tools with JavaScript syntax (e.g., `graph_update_node('id', {props})`)  
+**Problem**: Agents attempting to call tools with JavaScript syntax (e.g., `memory_update_node('id', {props})`)  
 **Resolution**: Updated `DOCKER_MIGRATION_PROMPTS.md` with explicit JSON syntax examples  
 **Impact**: Tool calls now work correctly with proper JSON-RPC `tools/call` wrapper
 
@@ -319,5 +319,5 @@ The Docker migration project successfully delivered a production-ready container
 
 **Report Prepared By**: Knowledge Graph Analysis  
 **Data Source**: MCP HTTP Server Knowledge Graph  
-**Validation Chain**: All task data verified via `graph_get_node` and `graph_search_nodes` tool calls  
+**Validation Chain**: All task data verified via `memory_get_node` and `memory_search_nodes` tool calls  
 **Next Update**: Upon completion of Task 3.4

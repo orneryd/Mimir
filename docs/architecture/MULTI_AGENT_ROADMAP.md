@@ -35,7 +35,7 @@ This roadmap outlines the step-by-step implementation of multi-agent Graph-RAG o
 
 **Achievements:**
 - ✅ Knowledge Graph with full CRUD operations
-- ✅ Subgraph extraction (`graph_get_subgraph`)
+- ✅ Subgraph extraction (`memory_get_subgraph`)
 - ✅ Context enrichment and search
 - ✅ Hierarchical memory architecture
 - ✅ 80-test validation suite
@@ -399,7 +399,7 @@ export class VerificationManager {
     output: any
   ): Promise<ValidationResult> {
     const task = await getTodo(taskId);
-    const subgraph = await graph_get_subgraph(taskId, 2);
+    const subgraph = await memory_get_subgraph(taskId, 2);
     
     const requirements = this.extractRequirements(subgraph);
     const failures: ValidationFailure[] = [];
@@ -1421,7 +1421,7 @@ const tasks = [
 ];
 
 // 3. Link dependencies
-await graph_add_edge(tasks[1].id, 'depends_on', tasks[0].id);
+await memory_add_edge(tasks[1].id, 'depends_on', tasks[0].id);
 ```
 
 ### Worker Agent Claiming and Executing Task
@@ -1491,7 +1491,7 @@ const completedTasks = await list_todos({ status: 'completed' });
 for (const task of completedTasks) {
   // 2. Pull task + subgraph for verification
   const taskData = await get_todo({ id: task.id });
-  const subgraph = await graph_get_subgraph({
+  const subgraph = await memory_get_subgraph({
     startNodeId: task.id,
     depth: 2
   });

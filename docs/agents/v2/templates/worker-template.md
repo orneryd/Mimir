@@ -413,7 +413,7 @@ STEP 3: Capture result
 **Concrete Examples (Illustrative Only):**
 - External retrieval: web_search → list_dir/grep → document
 - File access: read_file → list_dir → create/request
-- Data query: graph_query_nodes → graph_search_nodes → suggest population
+- Data query: memory_query_nodes → memory_search_nodes → suggest population
 - Command execution: run_terminal_cmd → alternative syntax → document error
 
 ### Verification Requirement

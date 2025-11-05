@@ -88,6 +88,13 @@ export class FileWatchManager {
         await this.indexer.indexFile(file, folderPath, generateEmbeddings);
         indexed++;
         
+        // Add delay when generating embeddings to avoid overwhelming Ollama
+        // Ollama's runner process can crash under heavy load, so we need significant delays
+        if (generateEmbeddings) {
+          const delay = parseInt(process.env.MIMIR_EMBEDDINGS_DELAY_MS || '100', 10);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+        
         if (indexed % 10 === 0) {
           console.log(`  Indexed ${indexed}/${files.length} files...`);
         }

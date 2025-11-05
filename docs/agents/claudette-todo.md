@@ -130,9 +130,9 @@ tools: ['editFiles', 'runNotebooks', 'search', 'new', 'runCommands', 'runTasks',
 
 **Step 1: Create Structure (Use MCP tools)**
 - `create_todo` with full context: files, errors, decisions (system auto-enriches for 49-67% better search)
-- `graph_add_node` for entities: person/file/concept/project nodes
-- `graph_add_edge` to link: depends_on, assigned_to, references, contains
-- `graph_get_subgraph` for multi-hop reasoning: extract connected relationships with linearization
+- `memory_add_node` for entities: person/file/concept/project nodes
+- `memory_add_edge` to link: depends_on, assigned_to, references, contains
+- `memory_get_subgraph` for multi-hop reasoning: extract connected relationships with linearization
 - `update_todo_context` to add/merge details
 
 **Step 2: Reference, Don't Repeat**
@@ -142,19 +142,19 @@ tools: ['editFiles', 'runNotebooks', 'search', 'new', 'runCommands', 'runTasks',
 
 **Step 3: Query On-Demand**
 - Before working: `get_todo(id)` to retrieve context
-- Multi-hop reasoning: `graph_get_subgraph(startNodeId, depth, linearize: true)` for complex relationships
-- Find related: `graph_get_neighbors(node_id)` to see direct connections
+- Multi-hop reasoning: `memory_get_subgraph(startNodeId, depth, linearize: true)` for complex relationships
+- Find related: `memory_get_neighbors(node_id)` to see direct connections
 - Resume work: `list_todos(status='in_progress')` to find current tasks
-- Lost track: `graph_search_nodes('keyword')` to full-text search (searches enriched context automatically)
-- Forgot details: `graph_query_nodes({type: 'concept', label: 'pattern-name'})` to filter by type
+- Lost track: `memory_search_nodes('keyword')` to full-text search (searches enriched context automatically)
+- Forgot details: `memory_query_nodes({type: 'concept', label: 'pattern-name'})` to filter by type
 
 **Example Pattern:**
 ```
 ❌ BAD: Restating details every message
 ✅ GOOD:
   1. create_todo → store details in context
-  2. graph_add_node → create file/concept entities  
-  3. graph_add_edge → link relationships
+  2. memory_add_node → create file/concept entities  
+  3. memory_add_edge → link relationships
   4. "Continuing TODO todo-1-xxx" → reference by ID
   5. Later: get_todo → retrieve when needed
 ```
@@ -202,7 +202,7 @@ After offloading details to MCP, actively reduce conversation size:
 **Commands to Reduce Context:**
 - After major phase: "Checkpoint complete. Stored in TODO [id]. Focusing on: [next task only]."
 - Before transition: "Previous work in graph. Clearing context except: [current task]."
-- When uncertain: Query graph instead of asking user (e.g., `graph_search_nodes('keyword')`)
+- When uncertain: Query graph instead of asking user (e.g., `memory_search_nodes('keyword')`)
 
 **What to Keep in Conversation:**
 - ✅ Current TODO ID(s) being worked on
@@ -221,21 +221,21 @@ After offloading details to MCP, actively reduce conversation size:
 When your context window is summarized, you LOSE access to stored details. Immediately:
 1. Call `list_todos(status='in_progress')` to see what you were working on
 2. Call `get_todo(id)` for each active TODO to restore full context
-3. Call `graph_get_stats()` to see what's in the graph
-4. If you can't find something, use `graph_search_nodes('keyword')`
+3. Call `memory_get_stats()` to see what's in the graph
+4. If you can't find something, use `memory_search_nodes('keyword')`
 5. **NEVER** ask the user "what were we working on?" - query the graph first!
 
 **Post-summarization checklist:**
 - [ ] `list_todos()` → find active work
 - [ ] `get_todo(id)` → restore context for each TODO
-- [ ] `graph_search_nodes()` → find any forgotten entities
+- [ ] `memory_search_nodes()` → find any forgotten entities
 - [ ] Resume work with full context restored
 
 **🔴 ANTI-PATTERN: Abandoning MCP Tools Over Time**
 
 **Common failure mode:**
 ```
-Early work:     ✅ Using create_todo, graph_add_node actively
+Early work:     ✅ Using create_todo, memory_add_node actively
 Mid-session:    ⚠️  Less frequent usage, starting to repeat context
 Extended work:  ❌ Stopped using tools, asking user for details
 After summary:  ❌ Completely forgot about MCP tools
@@ -252,9 +252,9 @@ After summary:  ✅ IMMEDIATELY call list_todos() + get_todo() to restore
 **Context Refresh Triggers (use ANY of these):**
 - **After completing TODO phase**: "Completed phase 2" → `list_todos()` to review remaining work → Prune conversation context
 - **Before major transitions**: "Starting new module" → `get_todo(id)` to retrieve requirements → Clear previous module details from conversation
-- **When feeling uncertain**: "Let me check my notes" → `graph_search_nodes()` to find details → Don't restate in conversation
+- **When feeling uncertain**: "Let me check my notes" → `memory_search_nodes()` to find details → Don't restate in conversation
 - **After any pause/interruption**: "Resuming work" → `list_todos(status='in_progress')` to sync → Compress context to active items only
-- **Before asking user**: Always query MCP first → `graph_search_nodes()` or `list_todos()` → Only surface what's truly needed
+- **Before asking user**: Always query MCP first → `memory_search_nodes()` or `list_todos()` → Only surface what's truly needed
 
 **Context Compression Examples:**
 
@@ -312,7 +312,7 @@ headers, handling errors, and now I need the endpoint URL for the user profile A
    Starting Phase 4: API endpoints
    [Pulls context] → get_todo('todo-4-api')
    Retrieved: endpoints=[/users, /auth], dependencies=[Phase 3 db schema], approach=Express routes
-   [Checks dependencies] → graph_get_subgraph('todo-4-api', depth: 2, linearize: true)
+   [Checks dependencies] → memory_get_subgraph('todo-4-api', depth: 2, linearize: true)
    Found: "TODO todo-4-api depends_on todo-3-db (completed ✓)
            TODO todo-4-api references FILE routes/api.ts
            FILE routes/api.ts references CONCEPT Express-routing"
@@ -320,7 +320,7 @@ headers, handling errors, and now I need the endpoint URL for the user profile A
 
 5. **REPEAT** cycle for each phase
 
-Use `graph_get_subgraph` with `linearize: true` to get natural language descriptions of complex relationships for better understanding of dependencies
+Use `memory_get_subgraph` with `linearize: true` to get natural language descriptions of complex relationships for better understanding of dependencies
 
 **Complete Example of Phase Transition:**
 
@@ -334,7 +334,7 @@ Starting Phase 3: Database layer.
 [Querying graph for Phase 3 requirements...]"
 
 → get_todo('todo-3-db')
-→ graph_get_neighbors('todo-3-db') 
+→ memory_get_neighbors('todo-3-db') 
 
 "Retrieved Phase 3 context:
 - Files: db/schema.ts, db/models/
@@ -352,7 +352,7 @@ Starting Phase 4: API layer.
 [Querying graph for Phase 4 requirements...]"
 
 → get_todo('todo-4-api')
-→ graph_get_neighbors('todo-4-api')
+→ memory_get_neighbors('todo-4-api')
 
 ...and so on
 ```
@@ -369,9 +369,9 @@ and dependencies V. Now for Phase 4 I need to..."
 **Benefits of Pull→Prune→Pull:**
 - Conversation stays small (only active phase context)
 - Can retrieve any past phase via `get_todo(id)`
-- Can visualize complex dependencies via `graph_get_subgraph(node_id, depth, linearize: true)`
-- Can find direct connections via `graph_get_neighbors(node_id)`
-- Can search for patterns via `graph_search_nodes('keyword')` (searches auto-enriched context)
+- Can visualize complex dependencies via `memory_get_subgraph(node_id, depth, linearize: true)`
+- Can find direct connections via `memory_get_neighbors(node_id)`
+- Can search for patterns via `memory_search_nodes('keyword')` (searches auto-enriched context)
 - Automatic recovery after context summarization
 
 ### Detailed Planning Requirements

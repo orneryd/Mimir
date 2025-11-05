@@ -384,16 +384,16 @@ node check-graph-status.js
 ### ✅ Queryable State
 ```bash
 # Get all pending tasks
-graph_query_nodes({ type: 'todo', filters: { status: 'pending' } })
+memory_query_nodes({ type: 'todo', filters: { status: 'pending' } })
 
 # Get failed tasks
-graph_query_nodes({ type: 'todo', filters: { status: 'failed' } })
+memory_query_nodes({ type: 'todo', filters: { status: 'failed' } })
 
 # Get task with full execution history
-graph_get_node('task-1.2')
+memory_get_node('task-1.2')
 
 # Get task dependencies
-graph_get_subgraph({ nodeId: 'task-1.2', depth: 2 })
+memory_get_subgraph({ nodeId: 'task-1.2', depth: 2 })
 ```
 
 ### ✅ Re-Run Safety

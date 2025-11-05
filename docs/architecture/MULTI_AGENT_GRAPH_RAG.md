@@ -84,9 +84,9 @@ Phase 1: PM Agent (Research & Planning) - "mimir-chain"
 │  ┌──────────────────────────────────────┐  │
 │  │ Receives Ecko's optimized spec       │  │
 │  │                                      │  │
-│  │ 1. graph_search_nodes() - Find       │  │
+│  │ 1. memory_search_nodes() - Find       │  │
 │  │    existing TODOs, files, patterns   │  │
-│  │ 2. graph_query_nodes() - Get related │  │
+│  │ 2. memory_query_nodes() - Get related │  │
 │  │    context from knowledge graph      │  │
 │  │ 3. read_file() - Check README, docs  │  │
 │  │ 4. Analyze repository structure      │  │
@@ -229,7 +229,7 @@ Phase 2: Worker Execution Loop (Per Task) - "mimir-execute"
 │  │  │    ✅ requirements, workerOutput, verificationCriteria   │  │ │
 │  │  │    ❌ NO worker implementation details, PM research      │  │ │
 │  │  │                                                           │  │ │
-│  │  │ 3. graph_get_subgraph(taskId, depth=2) - Get deps        │  │ │
+│  │  │ 3. memory_get_subgraph(taskId, depth=2) - Get deps        │  │ │
 │  │  │                                                           │  │ │
 │  │  │ 4. Load QC preamble (generated-agents/qc-*.md)           │  │ │
 │  │  │    Role: Deliverable quality validator                   │  │ │
@@ -584,7 +584,7 @@ Measurement: Correction prompt frequency
   // IMPLEMENTED: testing/qc-verification-workflow.test.ts
   async function verifyTask(taskId: string): Promise<VerificationResult> {
     const qcContext = get_task_context(taskId, 'qc');
-    const subgraph = graph_get_subgraph(taskId, depth=2);
+    const subgraph = memory_get_subgraph(taskId, depth=2);
     return {
       passed: boolean,
       score: 0-100,
@@ -939,7 +939,7 @@ await qc.verifyCompletedTasks();
 **Quick Start:**
 1. Use `create_todo` to build task graph (PM role)
 2. Use `lock_todo` before claiming task (Worker role)
-3. Use `graph_get_subgraph` for verification (QC role)
+3. Use `memory_get_subgraph` for verification (QC role)
 
 ---
 

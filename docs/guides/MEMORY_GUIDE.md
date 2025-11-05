@@ -69,12 +69,12 @@ const recalled = await get_todo({ id: memory.id });
 
 **What:** Entities and their relationships (files, concepts, people, projects)  
 **When:** You need to model how information connects  
-**Tools:** `graph_add_node`, `graph_add_edge`, `graph_get_neighbors`, `graph_get_subgraph`
+**Tools:** `memory_add_node`, `memory_add_edge`, `memory_get_neighbors`, `memory_get_subgraph`
 
 **Example:**
 ```typescript
 // Store entities
-const authConcept = await graph_add_node({
+const authConcept = await memory_add_node({
   type: "concept",
   label: "Authentication System",
   properties: {
@@ -83,7 +83,7 @@ const authConcept = await graph_add_node({
   }
 });
 
-const jwtFile = await graph_add_node({
+const jwtFile = await memory_add_node({
   type: "file",
   label: "src/auth/jwt.ts",
   properties: {
@@ -93,14 +93,14 @@ const jwtFile = await graph_add_node({
 });
 
 // Link them (associative memory)
-await graph_add_edge({
+await memory_add_edge({
   source: authConcept.id,
   target: jwtFile.id,
   type: "contains"
 });
 
 // Recall by association
-const relatedFiles = await graph_get_neighbors({
+const relatedFiles = await memory_get_neighbors({
   nodeId: authConcept.id,
   direction: "out",
   edgeType: "contains"
@@ -111,7 +111,7 @@ const relatedFiles = await graph_get_neighbors({
 
 **What:** Structured task with explicit relationships  
 **When:** You want both task tracking AND relationship modeling  
-**Tools:** `create_todo_with_graph`, `graph_get_subgraph`
+**Tools:** `create_todo_with_graph`, `memory_get_subgraph`
 
 **Example:**
 ```typescript
@@ -198,12 +198,12 @@ const authWork = await list_todos({ tags: ["authentication"] });
 **3. Search memories by content:**
 ```typescript
 // Simple search
-const results = await graph_search_nodes({
+const results = await memory_search_nodes({
   searchTerm: "authentication"
 });
 
 // Search with ranking (best matches first)
-const ranked = await graph_search_nodes_ranked({
+const ranked = await memory_search_nodes_ranked({
   searchTerm: "jwt token error"
 });
 ```
@@ -211,12 +211,12 @@ const ranked = await graph_search_nodes_ranked({
 **4. Recall by association:**
 ```typescript
 // What's connected to this memory?
-const related = await graph_get_neighbors({
+const related = await memory_get_neighbors({
   nodeId: "memory-id"
 });
 
 // Get entire memory cluster
-const cluster = await graph_get_subgraph({
+const cluster = await memory_get_subgraph({
   startNodeId: "memory-id",
   depth: 2
 });
@@ -226,7 +226,7 @@ const cluster = await graph_get_subgraph({
 
 **1. Link memories:**
 ```typescript
-await graph_add_edge({
+await memory_add_edge({
   source: "task-id",
   target: "concept-id",
   type: "related_to"
@@ -284,24 +284,24 @@ const details = await get_todo({ id: authMemory.id });
 
 ```typescript
 // Store with relationships
-const projectNode = await graph_add_node({
+const projectNode = await memory_add_node({
   type: "project",
   label: "E-commerce Platform"
 });
 
-const authPhase = await graph_add_node({
+const authPhase = await memory_add_node({
   type: "phase",
   label: "Authentication Phase"
 });
 
-await graph_add_edge({
+await memory_add_edge({
   source: projectNode.id,
   target: authPhase.id,
   type: "contains"
 });
 
 // Later: "What was the auth work part of?"
-const parentProject = await graph_get_neighbors({
+const parentProject = await memory_get_neighbors({
   nodeId: authPhase.id,
   direction: "in",
   edgeType: "contains"
@@ -383,12 +383,12 @@ const allPhases = await list_todos({
 const inProgress = await list_todos({ status: "in_progress" });
 
 // "What was the auth project about?"
-const authMemories = await graph_search_nodes_ranked({
+const authMemories = await memory_search_nodes_ranked({
   searchTerm: "authentication"
 });
 
 // Get full context
-const context = await graph_get_subgraph({
+const context = await memory_get_subgraph({
   startNodeId: authMemories[0].id,
   depth: 2,
   linearize: true // Get human-readable description
@@ -475,7 +475,7 @@ await batch_create_todos({
 ```typescript
 // Unconnected memories
 await create_todo({ title: "Auth task" });
-await graph_add_node({ type: "file", properties: { title: "jwt.ts" });
+await memory_add_node({ type: "file", properties: { title: "jwt.ts" });
 // No relationship = can't find by association
 ```
 
@@ -483,8 +483,8 @@ await graph_add_node({ type: "file", properties: { title: "jwt.ts" });
 ```typescript
 // Connected memories
 const task = await create_todo({ title: "Auth task", addToGraph: true });
-const file = await graph_add_node({ type: "file", properties: { title: "jwt.ts" });
-await graph_add_edge({
+const file = await memory_add_node({ type: "file", properties: { title: "jwt.ts" });
+await memory_add_edge({
   source: task.id,
   target: file.id,
   type: "references"
@@ -499,7 +499,7 @@ await graph_add_edge({
 
 ```typescript
 // See what's stored
-const stats = await graph_get_stats();
+const stats = await memory_get_stats();
 
 console.log(`Memories stored: ${stats.nodeCount}`);
 console.log(`Connections: ${stats.edgeCount}`);
@@ -510,7 +510,7 @@ console.log(`Memory types: ${JSON.stringify(stats.nodeTypeBreakdown)}`);
 
 ```typescript
 // Compact export (60-80% token reduction)
-const overview = await graph_export_compact({
+const overview = await memory_export_compact({
   includeEdges: true,
   nodeTypes: ["task", "concept"]
 });
@@ -521,7 +521,7 @@ const overview = await graph_export_compact({
 **Good indicators:**
 - Message token count stays stable over time
 - You reference memory IDs instead of repeating details
-- You use `get_todo` and `graph_search_nodes` regularly
+- You use `get_todo` and `memory_search_nodes` regularly
 - Stats show growing memory graph
 
 **Bad indicators:**
@@ -539,13 +539,13 @@ const overview = await graph_export_compact({
 | Store memory | `create_todo` | Store task with context |
 | Recall memory | `get_todo` | Retrieve by ID |
 | List memories | `list_todos` | Filter by status/priority |
-| Search memories | `graph_search_nodes_ranked` | Find by keyword |
-| Link memories | `graph_add_edge` | Build associations |
-| Get related | `graph_get_neighbors` | Associative recall |
-| Get cluster | `graph_get_subgraph` | Memory neighborhood |
+| Search memories | `memory_search_nodes_ranked` | Find by keyword |
+| Link memories | `memory_add_edge` | Build associations |
+| Get related | `memory_get_neighbors` | Associative recall |
+| Get cluster | `memory_get_subgraph` | Memory neighborhood |
 | Append to memory | `update_todo_context` | Incremental updates |
 | Bulk store | `batch_create_todos` | Many memories at once |
-| Memory stats | `graph_get_stats` | System health |
+| Memory stats | `memory_get_stats` | System health |
 
 ---
 

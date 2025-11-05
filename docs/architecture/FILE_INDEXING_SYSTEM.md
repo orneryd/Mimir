@@ -34,9 +34,10 @@
 │  │ MCP Tools        │    │ Watch Manager    │                  │
 │  │                  │    │                  │                  │
 │  │ • index_folder   │───▶│ • Add/Remove     │                  │
-│  │ • watch_folder   │    │ • List active    │                  │
-│  │ • unwatch_folder │    │ • Load config    │                  │
-│  │ • list_watches   │    │ • Save config    │                  │
+│  │   (auto-watch)   │    │ • List active    │                  │
+│  │ • remove_folder  │    │ • Load config    │                  │
+│  │ • list_watched_  │    │ • Save config    │                  │
+│  │   folders        │    │                  │                  │
 │  └──────────────────┘    └────────┬─────────┘                  │
 │                                   │                             │
 │                                   ▼                             │
@@ -92,18 +93,20 @@ User/Agent Call                     System Processing
 │ folder()   │─────────────────────▶│ 2. Apply .ignore │
 └────────────┘                      │ 3. Parse files   │
                                     │ 4. Index to Neo4j│
+                                    │ 5. Start watcher │
+                                    │ 6. Save to config│
                                     └──────────────────┘
                                               │
                                               ▼
 ┌────────────┐                      ┌──────────────────┐
-│ watch_     │                      │ 1. Start watcher │
-│ folder()   │─────────────────────▶│ 2. Save to config│
+│ remove_    │                      │ 1. Stop watcher  │
+│ folder()   │─────────────────────▶│ 2. Remove config │
 └────────────┘                      │ 3. Monitor events│
                                     └──────────────────┘
                                               │
                                               ▼
 ┌──────────────────┐                 ┌──────────────────┐
-│ graph_get_node() │                │ 1. Fetch node    │
+│ memory_get_node() │                │ 1. Fetch node    │
 │                  │────────────────▶│ 2. Find related  │
 └──────────────────┘                │    files (graph) │
                                     │ 3. Enrich payload│
@@ -270,13 +273,13 @@ User/Agent Call                     System Processing
 }
 ```
 
-### Tool 4: `list_watched_folders`
+### Tool 4: `list_folders`
 
 **Purpose:** List all currently watched folders
 
 ```typescript
 {
-  name: "list_watched_folders",
+  name: "list_folders",
   description: "List all folders currently being watched for file changes",
   inputSchema: {
     type: "object",
@@ -565,7 +568,7 @@ class GitignoreHandler {
 When a node is fetched, automatically include related file content:
 
 ```typescript
-// Original: graph_get_node returns just the node
+// Original: memory_get_node returns just the node
 {
   "id": "node-todo-123",
   "type": "todo",
@@ -577,7 +580,7 @@ When a node is fetched, automatically include related file content:
   }
 }
 
-// Enhanced: graph_get_node with RAG enrichment
+// Enhanced: memory_get_node with RAG enrichment
 {
   "id": "node-todo-123",
   "type": "todo",
@@ -910,7 +913,7 @@ class FileWatchManager {
 **Tasks:**
 1. ✅ Create `FileWatchManager` class
 2. ✅ Implement persistent config (`watch-config.json`)
-3. ✅ Create `watch_folder`, `unwatch_folder`, `list_watched_folders` tools
+3. ✅ Create `watch_folder`, `unwatch_folder`, `list_folders` tools
 4. ✅ Add server startup hook to load persisted watches
 5. ✅ Implement debouncing and queue management
 
@@ -923,8 +926,8 @@ class FileWatchManager {
 
 **Tasks:**
 1. ✅ Implement `enrichWithRelatedFiles()` method
-2. ✅ Update `graph_get_node` tool to auto-include related files
-3. ✅ Update `graph_search_nodes` tool to auto-include related files
+2. ✅ Update `memory_get_node` tool to auto-include related files
+3. ✅ Update `memory_search_nodes` tool to auto-include related files
 4. ✅ Add relevance scoring algorithm
 5. ✅ Add configuration for max related files
 
@@ -1082,7 +1085,7 @@ await mcp.call('watch_folder', {
 ### Example 3: Get TODO Node with Related Files
 
 ```typescript
-await mcp.call('graph_get_node', { id: 'node-todo-123' });
+await mcp.call('memory_get_node', { id: 'node-todo-123' });
 
 // Response includes:
 {

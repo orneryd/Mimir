@@ -37,7 +37,7 @@
                    ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                   MCP Graph Search Tool                          │
-│                 graph_search_nodes()                             │
+│                 memory_search_nodes()                             │
 └──────────────────┬──────────────────────────────────────────────┘
                    │
                    ▼
@@ -398,7 +398,7 @@ await mcp.call('unwatch_folder', {
 
 ```typescript
 // Agent searches across ALL indexed projects:
-await mcp.call('graph_search_nodes', {
+await mcp.call('memory_search_nodes', {
   query: 'GraphManager Neo4j'
 });
 
@@ -507,7 +507,7 @@ await mcp.call('watch_folder', {
 
 ```typescript
 // Agent checks current watches
-await mcp.call('list_watched_folders');
+await mcp.call('list_folders');
 
 // Response:
 {
@@ -660,7 +660,7 @@ await mcp.call('watch_folder', {
 
 ```typescript
 // Agent searches for "GraphManager"
-await mcp.call('graph_search_nodes', {
+await mcp.call('memory_search_nodes', {
   query: 'GraphManager Neo4j implementation',
   max_results: 5,
   include_content: true
@@ -1082,7 +1082,7 @@ export class RAGSearchEngine {
           entity.id AS id,
           entity.type AS type,
           (avg_relevance * log(1 + relation_count)) AS relevance,
-          'graph_traversal' AS match_type
+          'memory_traversal' AS match_type
         ORDER BY relevance DESC
         LIMIT 50
       `, { query });
@@ -1347,12 +1347,12 @@ OPTIONS {
 
 ## 🎯 MCP Tool Integration
 
-### Updated `graph_search_nodes` Tool
+### Updated `memory_search_nodes` Tool
 
 ```typescript
 // src/tools/graph.tools.ts
 export const GRAPH_SEARCH_TOOL = {
-  name: "graph_search_nodes",
+  name: "memory_search_nodes",
   description: `
 Search the knowledge graph and automatically retrieve related files, functions, and context.
 
@@ -1440,11 +1440,11 @@ export async function handleGraphSearch(
 }
 ```
 
-### Updated `graph_get_node` Tool (Auto-Enriched)
+### Updated `memory_get_node` Tool (Auto-Enriched)
 
 ```typescript
 export const GRAPH_GET_NODE_TOOL = {
-  name: "graph_get_node",
+  name: "memory_get_node",
   description: `
 Get a node by ID with automatic RAG context enrichment.
 
@@ -1544,7 +1544,7 @@ export async function handleGetNode(
 
 ```json
 {
-  "tool": "graph_search_nodes",
+  "tool": "memory_search_nodes",
   "arguments": {
     "query": "orchestration",
     "max_results": 5,
@@ -1571,7 +1571,7 @@ export async function handleGetNode(
         "line_count": 456
       },
       "relevance": 0.95,
-      "match_types": ["fulltext_content", "graph_traversal"],
+      "match_types": ["fulltext_content", "memory_traversal"],
       "score_breakdown": {
         "fulltext": 0.38,
         "vector": 0.27,
@@ -1597,7 +1597,7 @@ export async function handleGetNode(
         "docstring": "Manages workflow orchestration and agent coordination"
       },
       "relevance": 0.87,
-      "match_types": ["fulltext_class", "graph_traversal"]
+      "match_types": ["fulltext_class", "memory_traversal"]
     },
     {
       "id": "todo-4-xxx",
@@ -1735,8 +1735,8 @@ export async function handleGetNode(
 - [ ] Incremental updates on file changes
 
 #### 1.5: MCP Tool Integration (Week 4)
-- [ ] Update `graph_search_nodes` tool
-- [ ] Update `graph_get_node` tool
+- [ ] Update `memory_search_nodes` tool
+- [ ] Update `memory_get_node` tool
 - [ ] Add RAG config environment variables
 - [ ] Test end-to-end workflow
 - [ ] Performance optimization
@@ -1796,7 +1796,7 @@ export async function handleGetNode(
 ## �� Success Criteria
 
 **Agent Experience:**
-1. ✅ Single tool call (`graph_search_nodes`) returns comprehensive context
+1. ✅ Single tool call (`memory_search_nodes`) returns comprehensive context
 2. ✅ No manual file listing or traversal needed
 3. ✅ Results explain relevance (why this file/function matters)
 4. ✅ Response includes actual code, not just references

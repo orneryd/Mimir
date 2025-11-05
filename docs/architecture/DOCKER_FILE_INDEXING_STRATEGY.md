@@ -812,7 +812,7 @@ const SECURITY_PATTERNS = [
 ### Phase 2: MCP Tools
 - [ ] Implement `watch_folder` tool
 - [ ] Implement `unwatch_folder` tool
-- [ ] Implement `list_watched_folders` tool
+- [ ] Implement `list_folders` tool
 - [ ] Update `index_folder` to optionally start watching
 - [ ] Add configuration validation
 

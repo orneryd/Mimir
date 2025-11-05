@@ -8,7 +8,7 @@ This document contains test prompts to verify the MCP server is working correctl
 
 **Prompt for Cursor:**
 ```
-Create a TODO using the graph_add_node tool with these properties:
+Create a TODO using the memory_add_node tool with these properties:
 - type: "todo"
 - description: "Test MCP connection from Cursor"
 - status: "pending"
@@ -26,7 +26,7 @@ Create a TODO using the graph_add_node tool with these properties:
 
 **Prompt for Cursor:**
 ```
-Query all TODO nodes using graph_query_nodes with type "todo"
+Query all TODO nodes using memory_query_nodes with type "todo"
 ```
 
 **Expected Result:**
@@ -69,7 +69,7 @@ Get the subgraph for the project node we just created with depth 2
 
 **Prompt for Cursor:**
 ```
-Search for nodes containing "MCP" using graph_search_nodes
+Search for nodes containing "MCP" using memory_search_nodes
 ```
 
 **Expected Result:**
@@ -128,7 +128,7 @@ Create 3 TODO nodes in a single batch operation:
 What are the current graph statistics? How many nodes and edges do we have?
 ```
 
-**Note:** This might require calling graph_query_nodes without filters or checking multiple types.
+**Note:** This might require calling memory_query_nodes without filters or checking multiple types.
 
 ---
 
@@ -158,25 +158,25 @@ If a tool call fails:
 Cursor should show these 17 tools:
 
 **Single Operations:**
-- graph_add_node
-- graph_get_node
-- graph_update_node
-- graph_delete_node
-- graph_add_edge
-- graph_delete_edge
-- graph_query_nodes
-- graph_search_nodes
-- graph_get_edges
-- graph_get_neighbors
-- graph_get_subgraph
-- graph_clear
+- memory_add_node
+- memory_get_node
+- memory_update_node
+- memory_delete_node
+- memory_add_edge
+- memory_delete_edge
+- memory_query_nodes
+- memory_search_nodes
+- memory_get_edges
+- memory_get_neighbors
+- memory_get_subgraph
+- memory_clear
 
 **Batch Operations:**
-- graph_add_nodes
-- graph_update_nodes
-- graph_delete_nodes
-- graph_add_edges
-- graph_delete_edges
+- memory_add_nodes
+- memory_update_nodes
+- memory_delete_nodes
+- memory_add_edges
+- memory_delete_edges
 
 ---
 

@@ -205,7 +205,7 @@ Code Quality:
 
 ```typescript
 // Worker should store output
-graph_update_node({
+memory_update_node({
   id: 'task-id',
   properties: {
     workerOutput: "Implementation complete. Created src/auth/routes.ts...",
@@ -218,7 +218,7 @@ graph_update_node({
 });
 
 // QC should store verification
-graph_update_node({
+memory_update_node({
   id: 'task-id',
   properties: {
     qcVerification: {
@@ -251,7 +251,7 @@ Types: {"file":3,"todo":4}
 ### Code Archaeology Needed
 
 **Where to look:**
-1. `src/orchestrator/task-executor.ts` - Does it call `graph_update_node` after worker execution?
+1. `src/orchestrator/task-executor.ts` - Does it call `memory_update_node` after worker execution?
 2. `src/orchestrator/agent-chain.ts` - Does QC agent update graph with verification results?
 3. Worker agent preamble (`docs/agents/claudette-worker.md`?) - Does it know to store `workerOutput`?
 4. QC agent preamble (`docs/agents/claudette-qc.md`?) - Does it know to store `qcVerification`?
@@ -503,7 +503,7 @@ function hashToolSequence(sequence: ToolCall[]): string {
 
 1. **Fix Graph Persistence**
    - **File:** `src/orchestrator/task-executor.ts`
-   - **Change:** Add `graph_update_node` after worker execution:
+   - **Change:** Add `memory_update_node` after worker execution:
      ```typescript
      await graphManager.updateNode(taskId, {
        workerOutput: workerResult.output,
@@ -515,7 +515,7 @@ function hashToolSequence(sequence: ToolCall[]): string {
      });
      ```
    - **File:** `src/orchestrator/agent-chain.ts` (or QC executor)
-   - **Change:** Add `graph_update_node` after QC verification:
+   - **Change:** Add `memory_update_node` after QC verification:
      ```typescript
      await graphManager.updateNode(taskId, {
        qcVerification: {

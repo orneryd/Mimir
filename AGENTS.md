@@ -20,7 +20,7 @@ This repository contains **Mimir** - a production-ready MCP (Model Context Proto
 ### ✅ **COMPLETED** - Core Infrastructure
 
 - **Neo4j Graph Database**: Persistent storage with full CRUD operations
-- **MCP Server**: 26 tools (22 graph + 4 file indexing)
+- **MCP Server**: 13 tools (6 memory + 3 file indexing + 2 vector search + 2 todo management)
 - **File Indexing**: Automatic file watching and indexing with .gitignore support
 - **Multi-Agent Locking**: Optimistic locking for concurrent agent execution
 - **Context Isolation**: Filtered context delivery per agent type (PM/Worker/QC)
@@ -50,14 +50,16 @@ This repository contains **Mimir** - a production-ready MCP (Model Context Proto
 
 - Persistent storage for nodes (TODOs, files, concepts) and relationships
 - Full-text search with indexing
+- **Vector embeddings**: Automatic semantic embeddings for ALL node types (1024 dimensions, mxbai-embed-large model)
 - Multi-hop graph traversal for associative memory
 - Atomic transactions with ACID compliance
 
-**2. MCP Tools (26 total)**
+**2. MCP Tools (13 total)**
 
-- **Graph Operations**: 12 single + 5 batch + 4 locking + 1 context isolation
-- **File Indexing**: 4 tools for automatic file watching and indexing
-- **Multi-Agent Support**: Optimistic locking and context filtering
+- **Memory Operations**: 6 consolidated tools (node, edge, batch, lock, clear, get_task_context)
+- **File Indexing**: 3 tools for automatic file watching and indexing
+- **Vector Search**: 2 tools for semantic search with embeddings
+- **Todo Management**: 2 tools for todo and todo list operations
 
 **3. Agent Orchestration**
 
@@ -148,48 +150,57 @@ This repository contains **Mimir** - a production-ready MCP (Model Context Proto
 
 ---
 
-## 🔧 Available MCP Tools (26 Total)
+## 🔧 Available MCP Tools (13 Total)
 
-**Graph Operations - Single Node Management (12 tools):**
+**Memory Operations (6 consolidated tools):**
 
-- `graph_add_node` - Create nodes (todo, file, concept, person, project, etc.)
-- `graph_get_node` - Retrieve node by ID with full context
-- `graph_update_node` - Update node properties (merge operation)
-- `graph_delete_node` - Delete node and cascade relationships
-- `graph_add_edge` - Create relationships between nodes
-- `graph_delete_edge` - Remove specific relationships
-- `graph_query_nodes` - Filter nodes by type/properties
-- `graph_search_nodes` - Full-text search across all nodes
-- `graph_get_edges` - Get relationships connected to a node
-- `graph_get_neighbors` - Find connected nodes (with depth traversal)
-- `graph_get_subgraph` - Extract connected subgraph (multi-hop)
-- `graph_clear` - Clear data from graph (by type or ALL)
-
-**Graph Operations - Batch Processing (5 tools):**
-
-- `graph_add_nodes` - Bulk create multiple nodes
-- `graph_update_nodes` - Bulk update multiple nodes
-- `graph_delete_nodes` - Bulk delete multiple nodes
-- `graph_add_edges` - Bulk create multiple relationships
-- `graph_delete_edges` - Bulk delete multiple relationships
-
-**Graph Operations - Multi-Agent Locking (4 tools):**
-
-- `graph_lock_node` - Acquire exclusive lock on node (with timeout)
-- `graph_unlock_node` - Release lock on node
-- `graph_query_available_nodes` - Query unlocked nodes only
-- `graph_cleanup_locks` - Clean up expired locks
-
-**File Indexing System (4 tools):**
-
-- `watch_folder` - Start watching directories for file changes
-- `unwatch_folder` - Stop watching directories
-- `index_folder` - Manual bulk indexing of directory
-- `list_watched_folders` - View active file watchers
-
-**Context Management (1 tool):**
+- `memory_node` - All node operations (add, get, update, delete, query, search)
+  - **add**: Create nodes with type and properties
+  - **get**: Retrieve node by ID with full context
+  - **update**: Update node properties (merge operation)
+  - **delete**: Delete node and cascade relationships
+  - **query**: Filter nodes by type/properties
+  - **search**: Full-text search across all nodes
+  
+- `memory_edge` - All edge/relationship operations (add, delete, get, neighbors, subgraph)
+  - **add**: Create relationships between nodes
+  - **delete**: Remove specific relationships
+  - **get**: Get relationships connected to a node
+  - **neighbors**: Find connected nodes (with depth traversal)
+  - **subgraph**: Extract connected subgraph (multi-hop)
+  
+- `memory_batch` - Bulk operations (add_nodes, update_nodes, delete_nodes, add_edges, delete_edges)
+  - **add_nodes**: Bulk create multiple nodes
+  - **update_nodes**: Bulk update multiple nodes
+  - **delete_nodes**: Bulk delete multiple nodes
+  - **add_edges**: Bulk create multiple relationships
+  - **delete_edges**: Bulk delete multiple relationships
+  
+- `memory_lock` - Multi-agent locking (acquire, release, query_available, cleanup)
+  - **acquire**: Acquire exclusive lock on node (with timeout)
+  - **release**: Release lock on node
+  - **query_available**: Query unlocked nodes only
+  - **cleanup**: Clean up expired locks
+  
+- `memory_clear` - Clear data from graph (by type or ALL)
 
 - `get_task_context` - Get filtered context by agent type (PM/Worker/QC)
+
+**File Indexing System (3 tools):**
+
+- `index_folder` - Index files in a directory and automatically start watching for changes
+- `remove_folder` - Stop watching a directory and remove indexed files from database
+- `list_folders` - View active file watchers
+
+**Vector Search (2 tools):**
+
+- `vector_search_nodes` - Semantic search across ALL node types (todos, memories, files, concepts) using vector embeddings
+- `get_embedding_stats` - Get statistics about nodes with embeddings, broken down by type
+
+**Todo Management (2 tools):**
+
+- `todo` - Individual todo operations (create, get, update, complete, delete, list)
+- `todo_list` - Todo list operations (create, get, update, archive, delete, list, add_todo, remove_todo, get_stats)
 
 ---
 
@@ -208,31 +219,44 @@ This repository contains **Mimir** - a production-ready MCP (Model Context Proto
 
 **ALWAYS use for:**
 
-- ✅ Multi-file projects (>3 files) → track tasks + store file context
+- ✅ Multi-file projects (>3 files) → track tasks + store file context + semantic search across codebase
 - ✅ Complex tasks with multiple phases → hierarchical TODO structure + memory network
 - ✅ Long conversations (>50 messages) → prevent context overflow via TODO/memory offloading
 - ✅ Team collaboration and handoffs → shared TODO list + knowledge base
 - ✅ Any work requiring audit trails → timestamped TODO notes + provenance tracking
 - ✅ Multi-agent orchestration scenarios → agent-scoped TODO assignment + context isolation
+- ✅ Finding related information → semantic search to recall similar concepts, bugs, or solutions by meaning
 
 ### Standard Workflow (Single Agent)
 
 **For TODO Tracking:**
 
-1. **Create TODOs**: `graph_add_node` with type="todo" for tasks/phases with rich context
+1. **Create TODOs**: `memory_node(operation='add', type='todo', properties={...})` for tasks/phases with rich context
 2. **Track Progress**: Update status (`pending` → `in_progress` → `completed`)
 3. **Add Context**: Store file paths, errors, decisions in node properties
-4. **Organize**: Use `graph_add_edge` with "depends_on"/"part_of" relationships
+4. **Organize**: Use `memory_edge(operation='add', source='todo-1', target='project-1', type='part_of')`
 
 **For Memory Management:**
 
-1. **Store Context**: `graph_add_node` + properties field to offload file paths, errors, decisions
+1. **Store Context**: `memory_node(operation='add', properties={...})` to offload file paths, errors, decisions
 2. **Reference by ID**: Use "Working on node-1-xxx" instead of repeating details in every message
-3. **Recall On-Demand**: `graph_get_node(id)` to retrieve stored context when actively working
-4. **Search When Lost**: `graph_search_nodes('keyword')` to find forgotten context
-5. **Build Knowledge Graph**: Link related entities with `graph_add_edge`
+3. **Recall On-Demand**: `memory_node(operation='get', id='node-1-xxx')` to retrieve stored context when actively working
+4. **Search When Lost**: 
+   - Text search: `memory_node(operation='search', query='keyword')` for exact matches
+   - Semantic search: `vector_search_nodes(query='concept or question', limit=10)` for meaning-based retrieval
+5. **Build Knowledge Graph**: Link related entities with `memory_edge(operation='add', ...)`
 
-**Combined Approach:** Store TODOs with rich context, track them to completion, link them to knowledge graph entities (files, concepts, dependencies)
+**For Semantic Search (Universal Embeddings):**
+
+1. **Automatic Embeddings**: ALL nodes (todos, memories, files, concepts) get vector embeddings automatically
+2. **Find Related Content**: Use `vector_search_nodes(query='your question or concept')` to find semantically similar nodes
+3. **Cross-Type Search**: Search returns results across all node types ranked by similarity
+4. **Example Use Cases**:
+   - "Find all discussions about authentication" → returns todos, files, and memory nodes
+   - "What do we know about API design?" → semantic retrieval across documentation and code
+   - "Similar bugs or issues" → find related problems by meaning, not just keywords
+
+**Combined Approach:** Store TODOs with rich context, track them to completion, link them to knowledge graph entities (files, concepts, dependencies), and use semantic search to recall relevant information by meaning
 
 ### Multi-Agent Orchestration (✅ IMPLEMENTED)
 
@@ -257,8 +281,8 @@ PM Agent (Long-lived)          Worker Agents (Ephemeral)        QC Agent (Valida
 **PM Agent Workflow:**
 
 1. **Research Phase**: Gather requirements with full context
-2. **Task Breakdown**: Create `graph_add_node(type: 'todo', ...)` for each subtask
-3. **Dependency Mapping**: Link tasks with `graph_add_edge(task_1, depends_on, task_2)`
+2. **Task Breakdown**: Create `memory_node(operation='add', type='todo', properties={...})` for each subtask
+3. **Dependency Mapping**: Link tasks with `memory_edge(operation='add', source='task-1', target='task-2', type='depends_on')`
 4. **Context Handoff**: Store ALL necessary context in task node properties
 5. **Sleep**: PM exits or monitors, doesn't execute tasks
 
@@ -266,10 +290,11 @@ PM Agent (Long-lived)          Worker Agents (Ephemeral)        QC Agent (Valida
 
 1. **Claim Task**: Atomically lock task (prevents duplicate work)
    ```javascript
-   graph_lock_node({
-     nodeId: "task-id",
-     agentId: "worker-1",
-     timeoutMs: 300000,
+   memory_lock({
+     operation: "acquire",
+     node_id: "task-id",
+     agent_id: "worker-1",
+     timeout_ms: 300000,
    });
    ```
 2. **Pull Filtered Context**: Use `get_task_context` for automatic 90%+ context reduction
@@ -279,8 +304,8 @@ PM Agent (Long-lived)          Worker Agents (Ephemeral)        QC Agent (Valida
    - Returns ONLY: title, requirements, description, workerRole, files (max 10), dependencies (max 5)
    - Strips 90%+ of PM research, planningNotes, alternatives, full subgraph
 3. **Execute**: Complete task with focused context (zero prior conversation history)
-4. **Store Output**: `graph_update_node({id: 'task-id', properties: {workerOutput, status: 'awaiting_qc'}})`
-5. **Release Lock**: `graph_unlock_node({nodeId: 'task-id', agentId: 'worker-1'})`
+4. **Store Output**: `memory_node(operation='update', id='task-id', properties={workerOutput, status: 'awaiting_qc'})`
+5. **Release Lock**: `memory_lock(operation='release', node_id='task-id', agent_id='worker-1')`
 6. **Terminate**: Worker exits immediately (context naturally pruned)
 
 **QC Agent Workflow:**
@@ -288,14 +313,14 @@ PM Agent (Long-lived)          Worker Agents (Ephemeral)        QC Agent (Valida
 1. **Pull QC Context**: Get requirements + worker output for verification
    ```javascript
    get_task_context({ taskId: "task-id", agentType: "qc" });
-   graph_get_subgraph({ nodeId: "task-id", depth: 2 }); // For dependencies
+   memory_edge(operation='subgraph', node_id='task-id', depth=2); // For dependencies
    ```
    - QC context includes: requirements, workerOutput, verificationCriteria
    - No unnecessary PM research or worker implementation details
 2. **Verify Requirements**: Compare output against verification criteria from graph
 3. **Decision**:
-   - ✅ **Pass**: `graph_update_node({id: 'task-id', properties: {qcVerification: {passed: true, score, feedback}, status: 'completed'}})`
-   - ❌ **Fail**: `graph_update_node({id: 'task-id', properties: {status: 'pending', attemptNumber: ++, errorContext: {qcFeedback, issues, requiredFixes}}})`
+   - ✅ **Pass**: `memory_node(operation='update', id='task-id', properties={qcVerification: {passed: true, score, feedback}, status: 'completed'})`
+   - ❌ **Fail**: `memory_node(operation='update', id='task-id', properties={status: 'pending', attemptNumber: ++, errorContext: {qcFeedback, issues, requiredFixes}})`
 4. **Feedback Loop**: Failed tasks go back to worker (if attemptNumber ≤ maxRetries) with errorContext
 
 **Key Benefits:**
@@ -310,13 +335,14 @@ PM Agent (Long-lived)          Worker Agents (Ephemeral)        QC Agent (Valida
 
 ```javascript
 // Optimistic Locking Pattern
-try {
-  graph_lock_node({
-    nodeId: "task-id",
-    agentId: "worker-1",
-    timeoutMs: 300000, // 5 min auto-expiry
-  });
-} catch (VersionConflictError) {
+const result = await memory_lock({
+  operation: "acquire",
+  node_id: "task-id",
+  agent_id: "worker-1",
+  timeout_ms: 300000, // 5 min auto-expiry
+});
+
+if (!result.locked) {
   // Another worker claimed task - retry with different task
 }
 ```
@@ -327,7 +353,7 @@ try {
 ❌ Not tracking tasks with TODOs (losing sight of what's pending/in-progress/completed)  
 ❌ Repeating file lists in every message (store in TODO context once, recall by ID)  
 ❌ Restating error messages already stored in TODOs (memory duplication)  
-❌ Asking user "what were we working on?" (check `graph_query_nodes({type: 'todo', filters: {status: 'in_progress'}})` first)  
+❌ Asking user "what were we working on?" (check `memory_node(operation='query', type='todo', filters={status: 'in_progress'})` first)  
 ❌ Abandoning TODO tracker after 20+ messages (exactly when task tracking is most valuable!)  
 ❌ Not using graph relationships for complex projects (flat lists instead of hierarchical structure)
 
@@ -357,18 +383,18 @@ Before starting work:
 
 **Every 15 messages, you MUST:**
 
-1. Call `graph_query_nodes({type: 'todo', filters: {status: 'in_progress'}})` to sync
+1. Call `memory_node(operation='query', type='todo', filters={status: 'in_progress'})` to sync
 2. Review progress on current TODO
 3. Update TODO status if completed
-4. Add progress notes via `graph_update_node`
+4. Add progress notes via `memory_node(operation='update', ...)`
 
 ### After Context Summarization
 
 **IMMEDIATELY:**
 
-1. Call `graph_query_nodes({type: 'todo', filters: {status: 'in_progress'}})`
-2. Call `graph_get_node(id)` for each active TODO
-3. Use `graph_search_nodes('keyword')` if details are missing
+1. Call `memory_node(operation='query', type='todo', filters={status: 'in_progress'})`
+2. Call `memory_node(operation='get', id='...')` for each active TODO
+3. Use `memory_node(operation='search', query='keyword')` if details are missing
 4. **NEVER** ask user "what were we working on?"
 
 ---
@@ -378,7 +404,7 @@ Before starting work:
 1. **Store, don't repeat**: 90% context reduction by using MCP tools
 2. **Query on-demand**: Only retrieve context when actively working on it
 3. **Use the graph**: Model relationships instead of flat lists
-4. **Search when lost**: `graph_search_nodes` is your recovery tool
+4. **Search when lost**: `memory_node(operation='search', ...)` is your recovery tool
 5. **Periodic refresh**: Don't abandon tools over time
 
 ---

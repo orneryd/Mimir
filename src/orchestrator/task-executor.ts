@@ -2231,7 +2231,7 @@ ${originalPlan}
 
 **To retrieve full output later, use:**
 \`\`\`
-graph_get_node('${result.graphNodeId}')
+memory_get_node('${result.graphNodeId}')
 \`\`\`
 
 `;

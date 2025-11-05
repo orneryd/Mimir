@@ -339,7 +339,7 @@ Show evidence for each verification step.
 ```markdown
 **CLARIFICATION LADDER** (Exhaust in order):
 1. Check local files (README, package.json, docs/)
-2. Pull from knowledge graph (graph_get_node, graph_get_subgraph)
+2. Pull from knowledge graph (memory_get_node, memory_get_subgraph)
 3. Search web for official documentation
 4. Infer from industry standards/conventions
 5. Make educated assumption (document reasoning)

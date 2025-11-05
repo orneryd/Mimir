@@ -12,10 +12,10 @@
 - Batch cleanup of expired locks
 
 **New Tools:**
-- `graph_lock_node` - Acquire exclusive lock on a node
-- `graph_unlock_node` - Release lock
-- `graph_query_available_nodes` - Query unlocked nodes only
-- `graph_cleanup_locks` - Clean up all expired locks
+- `memory_lock_node` - Acquire exclusive lock on a node
+- `memory_unlock_node` - Release lock
+- `memory_query_available_nodes` - Query unlocked nodes only
+- `memory_cleanup_locks` - Clean up all expired locks
 
 **Implementation:** `src/managers/GraphManager.ts` (4 new methods)  
 **Tests:** 20 integration tests in `testing/multi-agent-locking.test.ts`
@@ -138,10 +138,10 @@ Use parallel groups in chain output:
 ### For Worker Agents
 Claim tasks before executing:
 ```typescript
-const locked = await graph_lock_node(taskId, agentId, 300000);
+const locked = await memory_lock_node(taskId, agentId, 300000);
 if (locked) {
   // Execute task
-  await graph_unlock_node(taskId, agentId);
+  await memory_unlock_node(taskId, agentId);
 }
 ```
 

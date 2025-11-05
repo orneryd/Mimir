@@ -3,9 +3,10 @@
 // ============================================================================
 
 import { GraphManager } from './GraphManager.js';
+import { TodoManager } from './TodoManager.js';
 import type { IGraphManager } from '../types/index.js';
 
-export { GraphManager };
+export { GraphManager, TodoManager };
 export type { IGraphManager };
 
 /**
@@ -30,4 +31,12 @@ export async function createGraphManager(): Promise<GraphManager> {
   console.log('✅ GraphManager initialized and connected to Neo4j');
   
   return manager;
+}
+
+/**
+ * Create a TodoManager instance
+ * Requires an initialized GraphManager
+ */
+export function createTodoManager(graphManager: IGraphManager): TodoManager {
+  return new TodoManager(graphManager);
 }

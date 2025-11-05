@@ -7,12 +7,104 @@ import { Driver } from 'neo4j-driver';
 import { promises as fs } from 'fs';
 import { FileWatchManager } from '../indexing/FileWatchManager.js';
 import { WatchConfigManager } from '../indexing/WatchConfigManager.js';
+import { LLMConfigLoader } from '../config/LLMConfigLoader.js';
 import type {
   WatchConfigInput,
   WatchFolderResponse,
   IndexFolderResponse,
   ListWatchedFoldersResponse
 } from '../types/index.js';
+
+// ============================================================================
+// Path Translation Utilities
+// ============================================================================
+
+/**
+ * Detect if we're running in Docker container
+ */
+function isRunningInDocker(): boolean {
+  const isDocker = process.env.WORKSPACE_ROOT === '/workspace';
+  console.log(`🐳 Docker detection: WORKSPACE_ROOT=${process.env.WORKSPACE_ROOT}, isDocker=${isDocker}`);
+  return isDocker;
+}
+
+/**
+ * Get the host workspace root from environment
+ * Default: ~/src (expanded to actual home directory)
+ * When running in Docker, HOST_WORKSPACE_ROOT should be pre-expanded by docker-compose
+ */
+function getHostWorkspaceRoot(): string {
+  const hostRoot = process.env.HOST_WORKSPACE_ROOT;
+  
+  // If not set, use default
+  if (!hostRoot) {
+    const defaultRoot = '~/src';
+    // Only expand ~ if not in Docker (in Docker, this would be wrong)
+    if (!isRunningInDocker() && defaultRoot.startsWith('~/')) {
+      const homeDir = process.env.HOME || process.env.USERPROFILE || '';
+      const expanded = defaultRoot.replace('~', homeDir);
+      console.log(`🏠 Host workspace root (default): ${defaultRoot} → ${expanded}`);
+      return expanded;
+    }
+    console.log(`🏠 Host workspace root (default): ${defaultRoot}`);
+    return defaultRoot;
+  }
+  
+  // HOST_WORKSPACE_ROOT is set - use it as-is (should be pre-expanded)
+  console.log(`🏠 Host workspace root (from env): ${hostRoot}`);
+  return hostRoot;
+}
+
+/**
+ * Translate host path to container path
+ * Example: /Users/username/src/project -> /workspace/project
+ */
+function translateHostToContainer(hostPath: string): string {
+  if (!isRunningInDocker()) {
+    return hostPath; // Not in Docker, use path as-is
+  }
+
+  const hostRoot = getHostWorkspaceRoot();
+  
+  // Normalize paths (remove trailing slashes)
+  const normalizedHostRoot = hostRoot.replace(/\/$/, '');
+  const normalizedHostPath = hostPath.replace(/\/$/, '');
+  
+  // Check if the path starts with the host root
+  if (normalizedHostPath.startsWith(normalizedHostRoot)) {
+    // Replace host root with container workspace
+    const relativePath = normalizedHostPath.substring(normalizedHostRoot.length);
+    return `/workspace${relativePath}`;
+  }
+  
+  // If path doesn't start with host root, assume it's already a container path
+  return hostPath;
+}
+
+/**
+ * Translate container path to host path
+ * Example: /workspace/project -> /Users/username/src/project
+ */
+function translateContainerToHost(containerPath: string): string {
+  if (!isRunningInDocker()) {
+    return containerPath; // Not in Docker, use path as-is
+  }
+
+  const hostRoot = getHostWorkspaceRoot();
+  
+  // Normalize paths
+  const normalizedContainerPath = containerPath.replace(/\/$/, '');
+  
+  // Check if the path starts with /workspace
+  if (normalizedContainerPath.startsWith('/workspace')) {
+    // Replace /workspace with host root
+    const relativePath = normalizedContainerPath.substring('/workspace'.length);
+    return `${hostRoot}${relativePath}`;
+  }
+  
+  // If path doesn't start with /workspace, return as-is
+  return containerPath;
+}
 
 export function createFileIndexingTools(
   driver: Driver,
@@ -22,17 +114,17 @@ export function createFileIndexingTools(
 
   return [
     // ========================================================================
-    // watch_folder
+    // index_folder
     // ========================================================================
     {
-      name: 'watch_folder',
-      description: 'Start watching a folder for file changes. Files will be automatically indexed on add/change/delete. REQUIRES: Path must exist on filesystem.',
+      name: 'index_folder',
+      description: 'Index all files in a folder and automatically start watching it for changes. Files will be indexed into Neo4j and the folder will be monitored for future changes. REQUIRES: Path must exist on filesystem.',
       inputSchema: {
         type: 'object',
         properties: {
           path: {
             type: 'string',
-            description: 'Absolute path to folder to watch (e.g., /workspace/src/my-project)'
+            description: 'Absolute path to folder to index and watch (e.g., /workspace/src/my-project)'
           },
           recursive: {
             type: 'boolean',
@@ -56,8 +148,8 @@ export function createFileIndexingTools(
           },
           generate_embeddings: {
             type: 'boolean',
-            description: 'Generate vector embeddings (Phase 2, default: false)',
-            default: false
+            description: 'Generate vector embeddings (default: auto-detected from global config)',
+            default: undefined
           }
         },
         required: ['path']
@@ -65,22 +157,17 @@ export function createFileIndexingTools(
     },
 
     // ========================================================================
-    // unwatch_folder
+    // remove_folder
     // ========================================================================
     {
-      name: 'unwatch_folder',
-      description: 'Stop watching a folder and optionally remove indexed files from Neo4j.',
+      name: 'remove_folder',
+      description: 'Stop watching a folder and remove all indexed files from Neo4j. This will delete all File nodes for files under this path.',
       inputSchema: {
         type: 'object',
         properties: {
           path: {
             type: 'string',
-            description: 'Path to folder to stop watching'
-          },
-          remove_indexed_files: {
-            type: 'boolean',
-            description: 'Remove all indexed files from Neo4j (default: false)',
-            default: false
+            description: 'Path to folder to stop watching and remove from database'
           }
         },
         required: ['path']
@@ -88,28 +175,10 @@ export function createFileIndexingTools(
     },
 
     // ========================================================================
-    // index_folder
+    // list_folders
     // ========================================================================
     {
-      name: 'index_folder',
-      description: 'Manually index all files in a folder immediately. REQUIRES: Path must exist AND be in watch list (use watch_folder first). This triggers a one-time scan of all files.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          path: {
-            type: 'string',
-            description: 'Absolute path to folder to index (must already be watched)'
-          }
-        },
-        required: ['path']
-      }
-    },
-
-    // ========================================================================
-    // list_watched_folders
-    // ========================================================================
-    {
-      name: 'list_watched_folders',
+      name: 'list_folders',
       description: 'List all folders currently being watched for file changes.',
       inputSchema: {
         type: 'object',
@@ -120,118 +189,7 @@ export function createFileIndexingTools(
 }
 
 /**
- * Handle watch_folder tool call
- */
-export async function handleWatchFolder(
-  params: any,
-  driver: Driver,
-  watchManager: FileWatchManager
-): Promise<WatchFolderResponse> {
-  const configManager = new WatchConfigManager(driver);
-  
-  // Validate path exists
-  try {
-    await fs.access(params.path);
-  } catch (error) {
-    return {
-      watch_id: '',
-      path: params.path,
-      status: 'error',
-      message: `Path '${params.path}' does not exist on filesystem.`
-    };
-  }
-
-  // Check if already watching
-  const existing = await configManager.getByPath(params.path);
-  if (existing) {
-    return {
-      watch_id: existing.id,
-      path: params.path,
-      status: 'already_watching',
-      message: `Already watching this folder.`
-    };
-  }
-
-  // Create watch config
-  const input: WatchConfigInput = {
-    path: params.path,
-    recursive: params.recursive ?? true,
-    debounce_ms: params.debounce_ms ?? 500,
-    file_patterns: params.file_patterns ?? null,
-    ignore_patterns: params.ignore_patterns ?? [],
-    generate_embeddings: params.generate_embeddings ?? false
-  };
-
-  const config = await configManager.createWatch(input);
-
-  // Start watching
-  // await watchManager.startWatch(config);
-
-  return {
-    watch_id: config.id,
-    path: config.path,
-    status: 'active',
-    message: 'Folder is now being watched. Use index_folder to index existing files.'
-  };
-}
-
-/**
- * Handle unwatch_folder tool call
- */
-export async function handleUnwatchFolder(
-  params: any,
-  driver: Driver,
-  watchManager: FileWatchManager
-): Promise<any> {
-  const configManager = new WatchConfigManager(driver);
-  
-  const config = await configManager.getByPath(params.path);
-  if (!config) {
-    return {
-      status: 'error',
-      message: `Path '${params.path}' is not being watched.`
-    };
-  }
-
-  // Stop watcher
-  await watchManager.stopWatch(params.path);
-
-  // Mark inactive in Neo4j
-  await configManager.markInactive(config.id);
-
-  // Optionally remove indexed files
-  if (params.remove_indexed_files) {
-    const session = driver.session();
-    try {
-      const result = await session.run(`
-        MATCH (f:File)
-        WHERE f.path STARTS WITH $pathPrefix
-        DETACH DELETE f
-        RETURN count(f) AS deleted
-      `, { pathPrefix: params.path });
-      
-      const deleted = result.records[0]?.get('deleted')?.toNumber() || 0;
-      
-      return {
-        status: 'success',
-        path: params.path,
-        files_removed: deleted,
-        message: `Folder watch stopped and ${deleted} indexed files removed.`
-      };
-    } finally {
-      await session.close();
-    }
-  }
-
-  return {
-    status: 'success',
-    path: params.path,
-    message: 'Folder watch stopped. Indexed files remain in Neo4j.'
-  };
-}
-
-/**
- * Handle index_folder tool call
+ * Handle index_folder tool call - now combines watch and index
  */
 export async function handleIndexFolder(
   params: any,
@@ -241,45 +199,124 @@ export async function handleIndexFolder(
   const configManager = new WatchConfigManager(driver);
   const startTime = Date.now();
 
-  // Validation 1: Path exists
+  // Translate host path to container path if running in Docker
+  const userProvidedPath = params.path;
+  const containerPath = translateHostToContainer(userProvidedPath);
+  
+  console.log(`📍 Path translation: ${userProvidedPath} -> ${containerPath}`);
+
+  // Validation: Path exists (using container path)
   try {
-    await fs.access(params.path);
+    await fs.access(containerPath);
   } catch (error) {
     return {
       status: 'error',
       error: 'path_not_found',
-      message: `Path '${params.path}' does not exist on filesystem.`,
-      path: params.path
+      message: `Path '${userProvidedPath}' (container: '${containerPath}') does not exist on filesystem.`,
+      path: userProvidedPath
     };
   }
 
-  // Validation 2: Path is watched
-  const config = await configManager.getByPath(params.path);
+  // Check global embeddings configuration
+  const configLoader = LLMConfigLoader.getInstance();
+  const embeddingsConfig = await configLoader.getEmbeddingsConfig();
+  const globalEmbeddingsEnabled = embeddingsConfig?.enabled ?? false;
+  
+  // Use global setting if not explicitly overridden
+  const generateEmbeddings = params.generate_embeddings ?? globalEmbeddingsEnabled;
+  
+  console.log(`🔍 Embeddings: global=${globalEmbeddingsEnabled}, requested=${params.generate_embeddings}, final=${generateEmbeddings}`);
+
+  // Check if already watching (using container path)
+  let config = await configManager.getByPath(containerPath);
+  
   if (!config) {
-    return {
-      status: 'error',
-      error: 'folder_not_watched',
-      message: `Path '${params.path}' is not in watch list. Call watch_folder first.`,
-      hint: 'Use watch_folder tool to add this path to the watch list',
-      path: params.path
+    // Create watch config if it doesn't exist
+    const input: WatchConfigInput = {
+      path: containerPath,  // Store container path
+      recursive: params.recursive ?? true,
+      debounce_ms: params.debounce_ms ?? 500,
+      file_patterns: params.file_patterns ?? null,
+      ignore_patterns: params.ignore_patterns ?? [],
+      generate_embeddings: generateEmbeddings
     };
+
+    config = await configManager.createWatch(input);
+    
+    // Start watching
+    await watchManager.startWatch(config);
   }
 
-  // Index all files
-  const filesIndexed = await watchManager.indexFolder(params.path, config);
+  // Index all files (using container path)
+  const filesIndexed = await watchManager.indexFolder(containerPath, config);
 
   const elapsed = Date.now() - startTime;
 
   return {
     status: 'success',
-    path: params.path,
+    path: userProvidedPath,  // Return original path to user
+    containerPath: containerPath,  // Also include container path for transparency
     files_indexed: filesIndexed,
     elapsed_ms: elapsed
   };
 }
 
 /**
- * Handle list_watched_folders tool call
+ * Handle remove_folder tool call (renamed from unwatch_folder)
+ */
+export async function handleRemoveFolder(
+  params: any,
+  driver: Driver,
+  watchManager: FileWatchManager
+): Promise<any> {
+  const configManager = new WatchConfigManager(driver);
+  
+  // Translate host path to container path if running in Docker
+  const userProvidedPath = params.path;
+  const containerPath = translateHostToContainer(userProvidedPath);
+  
+  console.log(`📍 Path translation for removal: ${userProvidedPath} -> ${containerPath}`);
+  
+  const config = await configManager.getByPath(containerPath);
+  if (!config) {
+    return {
+      status: 'error',
+      message: `Path '${userProvidedPath}' (container: '${containerPath}') is not being watched.`
+    };
+  }
+
+  // Stop watcher (using container path)
+  await watchManager.stopWatch(containerPath);
+
+  // Mark inactive in Neo4j
+  await configManager.markInactive(config.id);
+
+  // Remove all indexed files from this folder (using container path)
+  const session = driver.session();
+  try {
+    const result = await session.run(`
+      MATCH (f:File)
+      WHERE f.path STARTS WITH $pathPrefix OR f.absolute_path STARTS WITH $pathPrefix
+      DETACH DELETE f
+      RETURN count(f) AS deleted
+    `, { pathPrefix: containerPath });
+    
+    const deleted = result.records[0]?.get('deleted')?.toNumber() || 0;
+    
+    return {
+      status: 'success',
+      path: userProvidedPath,  // Return original path to user
+      containerPath: containerPath,  // Also include container path for transparency
+      files_removed: deleted,
+      message: `Folder watch stopped and ${deleted} indexed files removed from database.`
+    };
+  } finally {
+    await session.close();
+  }
+}
+
+/**
+ * Handle list_folders tool call
  */
 export async function handleListWatchedFolders(
   driver: Driver
@@ -291,7 +328,8 @@ export async function handleListWatchedFolders(
   return {
     watches: configs.map(config => ({
       watch_id: config.id,
-      folder: config.path,
+      folder: translateContainerToHost(config.path),  // Translate back to host path for display
+      containerPath: config.path,  // Also show container path
       recursive: config.recursive,
       files_indexed: config.files_indexed || 0,
       last_update: config.last_updated || config.added_date,

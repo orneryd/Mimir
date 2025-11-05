@@ -30,7 +30,7 @@ curl -s -X POST http://localhost:3000/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -H "Mcp-Session-Id: $SESSION_ID" \
-  -d '{"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "graph_add_node", "arguments": {"type": "todo", "properties": {"description": "Test TODO", "status": "pending", "priority": "high"}}}, "id": 3}' | jq '.'
+  -d '{"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "memory_add_node", "arguments": {"type": "todo", "properties": {"description": "Test TODO", "status": "pending", "priority": "high"}}}, "id": 3}' | jq '.'
 echo ""
 
 echo "✅ Test complete!"

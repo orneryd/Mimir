@@ -25,11 +25,15 @@ export interface IGraphManager {
   
   /**
    * Add a single node to the graph
+   * @param type - Node type (defaults to 'memory' if not specified)
+   * @param properties - Node properties
    */
-  addNode(type: NodeType, properties: Record<string, any>): Promise<Node>;
+  addNode(type?: NodeType, properties?: Record<string, any>): Promise<Node>;
   
   /**
    * Get a node by ID
+   * Returns full node content including any large text fields.
+   * This is a single-node operation so all content is included.
    */
   getNode(id: string): Promise<Node | null>;
   
@@ -109,6 +113,8 @@ export interface IGraphManager {
   
   /**
    * Query nodes by type and/or properties
+   * Note: Large content fields (>10KB) are stripped to prevent massive responses.
+   * Use getNode() for individual nodes to retrieve full content.
    */
   queryNodes(
     type?: NodeType,
@@ -117,6 +123,9 @@ export interface IGraphManager {
   
   /**
    * Full-text search across node properties
+   * Note: Large content fields (>10KB) are stripped, but relevant line numbers
+   * and snippets matching the search query are included.
+   * Use getNode() for individual nodes to retrieve full content.
    */
   searchNodes(
     query: string,

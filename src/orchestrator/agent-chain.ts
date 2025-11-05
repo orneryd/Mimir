@@ -541,7 +541,7 @@ For EACH task prompt, ensure it includes (when applicable):
 
 5. **Tool-Based Execution**: Which tools to use, what NOT to create
    - ❌ BAD: "Parse [data]" or "Create [utility]" (implies implementation)
-   - ✅ GOOD: "Use read_file to read [data], parse in-memory, store with graph_add_node. Do NOT create new source files."
+   - ✅ GOOD: "Use read_file to read [data], parse in-memory, store with memory_add_node. Do NOT create new source files."
 
 Use the templates from your preamble (v2/01-pm-preamble.md) for each category.
 

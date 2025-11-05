@@ -161,10 +161,10 @@ WORKER → QC AGENT → ❌ FAIL → SPECIALIST (Prompt Debugger)
 
 **RULE #1: FIRST ACTION - GATHER ALL CONTEXT**
 Before writing prompt, pull from knowledge graph:
-1. [ ] Task node: `graph_get_node(task_id)` 
-2. [ ] Parent task: `graph_get_neighbors(task_id, {direction: 'in'})`
-3. [ ] Dependencies: `graph_get_neighbors(task_id, {edgeType: 'depends_on'})`
-4. [ ] Project context: `graph_get_subgraph(project_id, {depth: 1})`
+1. [ ] Task node: `memory_get_node(task_id)` 
+2. [ ] Parent task: `memory_get_neighbors(task_id, {direction: 'in'})`
+3. [ ] Dependencies: `memory_get_neighbors(task_id, {edgeType: 'depends_on'})`
+4. [ ] Project context: `memory_get_subgraph(project_id, {depth: 1})`
 
 Don't ask for context. Fetch it autonomously.
 
@@ -247,8 +247,8 @@ Don't ask which type. Infer from task verbs:
 
 #### For PM Agents:
 ```markdown
-✅ Include: Research protocol, graph_query patterns, subgraph exploration
-✅ Include: "Store findings in graph using graph_add_node"
+✅ Include: Research protocol, memory_query patterns, subgraph exploration
+✅ Include: "Store findings in graph using memory_add_node"
 ✅ Include: Task decomposition templates
 ❌ Exclude: Implementation details, code examples
 ```
@@ -256,16 +256,16 @@ Don't ask which type. Infer from task verbs:
 #### For Worker Agents:
 ```markdown
 ✅ Include: Step-by-step execution checklist
-✅ Include: "Pull context: graph_get_node(task_id)"
+✅ Include: "Pull context: memory_get_node(task_id)"
 ✅ Include: Concrete file paths, commands, examples
-✅ Include: "Update status: graph_update_node(task_id, {status: 'completed'})"
+✅ Include: "Update status: memory_update_node(task_id, {status: 'completed'})"
 ❌ Exclude: Research instructions, planning phases
 ```
 
 #### For QC Agents:
 ```markdown
 ✅ Include: Adversarial verification mindset
-✅ Include: "Pull requirements: graph_get_subgraph(task_id, depth=2)"
+✅ Include: "Pull requirements: memory_get_subgraph(task_id, depth=2)"
 ✅ Include: Binary decision framework (PASS/FAIL)
 ✅ Include: Correction prompt generation template
 ❌ Exclude: Implementation guidance, how to fix issues
@@ -307,7 +307,7 @@ Before delivering optimized prompt, verify:
 2. [ ] MANDATORY RULES section exists (5-10 rules)
 3. [ ] Explicit stop condition stated ("Don't stop until X")
 4. [ ] Verification checklist included (5+ concrete items)
-5. [ ] Context retrieval commands included (graph_get_node, etc.)
+5. [ ] Context retrieval commands included (memory_get_node, etc.)
 6. [ ] No permission-seeking language ("Shall I", "Would you like")
 7. [ ] Target agent type is clear (PM/Worker/QC)
 
@@ -418,7 +418,7 @@ curl http://localhost:3000/health
 - [ ] Route added to src/http-server.ts
 - [ ] Server starts without errors
 - [ ] curl returns expected JSON
-- [ ] Task updated: graph_update_node('task-id', {status: 'completed'})
+- [ ] Task updated: memory_update_node('task-id', {status: 'completed'})
 
 Don't stop until all 4 criteria verified.
 ```
@@ -460,7 +460,7 @@ async function createTaskGraph(projectDescription: string) {
     });
     
     // Store optimized prompt in task node
-    await graph_update_node(task.id, {
+    await memory_update_node(task.id, {
       properties: {
         worker_prompt: optimizedPrompt.prompt,
         success_criteria: optimizedPrompt.criteria,
@@ -491,7 +491,7 @@ async function executeTask(taskId: string) {
   if (!claimed) return;
   
   // 2. Pull optimized prompt from task node
-  const task = await graph_get_node(taskId);
+  const task = await memory_get_node(taskId);
   const prompt = task.properties.worker_prompt; // ← Specialist-optimized
   
   // 3. Execute with clear instructions
@@ -504,7 +504,7 @@ async function executeTask(taskId: string) {
   const result = await executePrompt(prompt);
   
   // 4. Update task node
-  await graph_update_node(taskId, {
+  await memory_update_node(taskId, {
     properties: {
       status: 'completed',
       result: result.output
@@ -729,7 +729,7 @@ Provide evidence for each verification step.
 ```markdown
 **CLARIFICATION LADDER** (Exhaust in order before asking user):
 1. Check local files (README, package.json, docs/)
-2. Pull from knowledge graph (graph_get_node, graph_get_subgraph)
+2. Pull from knowledge graph (memory_get_node, memory_get_subgraph)
 3. Search web for official documentation
 4. Infer from industry standards and conventions
 5. Make educated assumption with documented reasoning

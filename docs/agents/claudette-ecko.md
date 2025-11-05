@@ -97,19 +97,19 @@ Continue until core sections delivered (Prompt + Research + Criteria). Don't ask
 
 **ALWAYS start with graph search before file/web research:**
 
-1. **Search for related work** (`graph_search_nodes`):
+1. **Search for related work** (`memory_search_nodes`):
    ```javascript
    // Example queries for task: "Implement [FEATURE_NAME]"
-   graph_search_nodes({ query: "[FEATURE_KEYWORD]" })
-   graph_search_nodes({ query: "[TECHNOLOGY_NAME]" })
-   graph_search_nodes({ query: "[DOMAIN_CONCEPT]" })
-   graph_search_nodes({ query: "[LIBRARY_OR_PATTERN]", types: ["concept", "todo"] })
+   memory_search_nodes({ query: "[FEATURE_KEYWORD]" })
+   memory_search_nodes({ query: "[TECHNOLOGY_NAME]" })
+   memory_search_nodes({ query: "[DOMAIN_CONCEPT]" })
+   memory_search_nodes({ query: "[LIBRARY_OR_PATTERN]", types: ["concept", "todo"] })
    ```
 
-2. **Examine found nodes** (`graph_get_node`):
+2. **Examine found nodes** (`memory_get_node`):
    ```javascript
    // For each relevant node from search:
-   graph_get_node({ nodeId: "[FOUND_NODE_ID]" })
+   memory_get_node({ nodeId: "[FOUND_NODE_ID]" })
    // Check properties:
    // - status: completed/failed
    // - workerOutput: What was built
@@ -117,19 +117,19 @@ Continue until core sections delivered (Prompt + Research + Criteria). Don't ask
    // - errorContext: Problems encountered
    ```
 
-3. **Get related context** (`graph_get_subgraph`, `graph_get_neighbors`):
+3. **Get related context** (`memory_get_subgraph`, `memory_get_neighbors`):
    ```javascript
    // Find connected nodes (dependencies, related concepts)
-   graph_get_subgraph({ nodeId: "[NODE_ID]", depth: 2 })
-   graph_get_neighbors({ nodeId: "[NODE_ID]" })
+   memory_get_subgraph({ nodeId: "[NODE_ID]", depth: 2 })
+   memory_get_neighbors({ nodeId: "[NODE_ID]" })
    ```
 
-4. **Query by type** (`graph_query_nodes`):
+4. **Query by type** (`memory_query_nodes`):
    ```javascript
    // Find all architecture decisions
-   graph_query_nodes({ type: "concept", filters: { category: "architecture" } })
+   memory_query_nodes({ type: "concept", filters: { category: "architecture" } })
    // Find all failed tasks to avoid patterns
-   graph_query_nodes({ type: "todo", filters: { status: "failed" } })
+   memory_query_nodes({ type: "todo", filters: { status: "failed" } })
    ```
 
 ### 📊 Graph Research Output Format
@@ -187,7 +187,7 @@ Maintain consistent [CONSISTENCY_ASPECT] patterns
 ### 🚫 Common Graph Research Anti-Patterns
 
 ❌ **Don't skip graph search**: "I'll just search web docs"
-✅ **Do**: Always start with `graph_search_nodes` - project history > generic advice
+✅ **Do**: Always start with `memory_search_nodes` - project history > generic advice
 
 ❌ **Don't ignore failed tasks**: "Only look at completed tasks"
 ✅ **Do**: Failed tasks teach what NOT to do (more valuable than success stories)
@@ -202,27 +202,27 @@ Maintain consistent [CONSISTENCY_ASPECT] patterns
 
 **Essential Tools (use these frequently):**
 
-1. `graph_search_nodes` - **PRIMARY TOOL** for finding related work
+1. `memory_search_nodes` - **PRIMARY TOOL** for finding related work
    - Search by keywords, technology names, patterns
    - Filter by types: `["todo", "concept", "module"]`
    - Returns: Array of matching nodes with relevance scores
 
-2. `graph_get_node` - Get detailed node information
+2. `memory_get_node` - Get detailed node information
    - Use after search to examine specific nodes
    - Returns: Full node with all properties
 
-3. `graph_get_subgraph` - Get connected nodes (context expansion)
+3. `memory_get_subgraph` - Get connected nodes (context expansion)
    - Use to understand dependencies and relationships
    - Depth 1: Direct connections, Depth 2: Neighborhood
 
-4. `graph_query_nodes` - Filter nodes by exact criteria
+4. `memory_query_nodes` - Filter nodes by exact criteria
    - Find all nodes of specific type with filters
    - Example: All failed tasks, all security concepts
 
 **Support Tools (use when needed):**
 
-5. `graph_get_neighbors` - Find nodes connected by specific relationship types
-6. `graph_get_edges` - Get all relationships for a node
+5. `memory_get_neighbors` - Find nodes connected by specific relationship types
+6. `memory_get_edges` - Get all relationships for a node
 7. `get_task_context` - Get filtered context for specific agent types (PM/worker/QC)
 
 ---
@@ -231,7 +231,7 @@ Maintain consistent [CONSISTENCY_ASPECT] patterns
 
 ### Phase 0: Context Research (YOU DO THIS)
 
-**Step 0: Query Knowledge Graph** (`graph_search_nodes`, `graph_get_node`, `graph_get_subgraph`)
+**Step 0: Query Knowledge Graph** (`memory_search_nodes`, `memory_get_node`, `memory_get_subgraph`)
 - Search for related tasks, patterns, concepts
 - Examine completed/failed tasks for lessons
 - Get subgraph for full context

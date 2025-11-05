@@ -43,53 +43,53 @@ Knowledge Graph → Nodes (entities) + Edges (relationships)
 ####  Project Management
 ```typescript
 // Create project node
-graph_add_node({ type: "project", properties: { title: "User Authentication System" } })
+memory_add_node({ type: "project", properties: { title: "User Authentication System" } })
 
 // Create person nodes
-graph_add_node({ type: "person", properties: { title: "John Doe", role: "developer" } })
+memory_add_node({ type: "person", properties: { title: "John Doe", role: "developer" } })
 
 // Create TODO and link to project
 create_todo({ title: "Implement JWT", addToGraph: true })
-graph_add_edge({ source: "todo-1-...", target: "project-node-id", type: "contains" })
+memory_add_edge({ source: "todo-1-...", target: "project-node-id", type: "contains" })
 
 // Assign to person
-graph_add_edge({ source: "john-doe-id", target: "todo-1-...", type: "assigned_to" })
+memory_add_edge({ source: "john-doe-id", target: "todo-1-...", type: "assigned_to" })
 ```
 
 #### File Tracking
 ```typescript
 // Track which files are related to which TODOs
-graph_add_node({ type: "file", properties: { title: "auth.ts", path: "src/auth/auth.ts" })
-graph_add_edge({ source: "todo-1-...", target: "file-node-id", type: "references" })
+memory_add_node({ type: "file", properties: { title: "auth.ts", path: "src/auth/auth.ts" })
+memory_add_edge({ source: "todo-1-...", target: "file-node-id", type: "references" })
 
 // Find all TODOs related to a file
-graph_get_neighbors({ nodeId: "file-node-id", direction: "in", edgeType: "references" })
+memory_get_neighbors({ nodeId: "file-node-id", direction: "in", edgeType: "references" })
 ```
 
 #### Dependency Tracking
 ```typescript
 // Create dependency chain
-graph_add_edge({ source: "todo-2-...", target: "todo-1-...", type: "depends_on" })
+memory_add_edge({ source: "todo-2-...", target: "todo-1-...", type: "depends_on" })
 
 // Find what must be done before a task
-graph_get_neighbors({ nodeId: "todo-2-...", direction: "out", edgeType: "depends_on" })
+memory_get_neighbors({ nodeId: "todo-2-...", direction: "out", edgeType: "depends_on" })
 ```
 
 ####  Concept Mapping
 ```typescript
 // Track concepts/requirements
-graph_add_node({ type: "concept", properties: { title: "OAuth 2.0 Flow" } }
-graph_add_node({ type: "concept", properties: { title: "JWT Tokens" } }
+memory_add_node({ type: "concept", properties: { title: "OAuth 2.0 Flow" } }
+memory_add_node({ type: "concept", properties: { title: "JWT Tokens" } }
 
 // Link TODOs to concepts
-graph_add_edge({ source: "todo-1-...", target: "oauth-concept-id", type: "related_to" })
+memory_add_edge({ source: "todo-1-...", target: "oauth-concept-id", type: "related_to" })
 ```
 
 ## 🛠️ New Tools Available
 
 ### Knowledge Graph Tools (8 new tools)
 
-#### 1. `graph_add_node`
+#### 1. `memory_add_node`
 Create a node in the knowledge graph.
 
 ```json
@@ -103,7 +103,7 @@ Create a node in the knowledge graph.
 }
 ```
 
-#### 2. `graph_add_edge`
+#### 2. `memory_add_edge`
 Create a relationship between two nodes.
 
 ```json
@@ -117,7 +117,7 @@ Create a relationship between two nodes.
 }
 ```
 
-#### 3. `graph_get_node`
+#### 3. `memory_get_node`
 Retrieve a specific node.
 
 ```json
@@ -126,7 +126,7 @@ Retrieve a specific node.
 }
 ```
 
-#### 4. `graph_query_nodes`
+#### 4. `memory_query_nodes`
 Find nodes matching criteria.
 
 ```json
@@ -138,7 +138,7 @@ Find nodes matching criteria.
 }
 ```
 
-#### 5. `graph_get_neighbors`
+#### 5. `memory_get_neighbors`
 Get connected nodes.
 
 ```json
@@ -149,7 +149,7 @@ Get connected nodes.
 }
 ```
 
-#### 6. `graph_get_stats`
+#### 6. `memory_get_stats`
 Get graph statistics.
 
 ```json
@@ -174,7 +174,7 @@ Returns:
 }
 ```
 
-#### 7. `graph_export`
+#### 7. `memory_export`
 Export entire graph.
 
 ```json
@@ -217,7 +217,7 @@ Clear everything (enhanced).
 
 ```typescript
 // 1. Create a project
-graph_add_node({
+memory_add_node({
   type: "project",
   label: "E-commerce Platform",
   properties: { status: "active", budget: 50000 }
@@ -225,14 +225,14 @@ graph_add_node({
 // Returns: node-1-1234567890
 
 // 2. Add team members
-graph_add_node({
+memory_add_node({
   type: "person",
   label: "Alice",
   properties: { role: "backend", email: "alice@example.com" }
 })
 // Returns: node-2-1234567891
 
-graph_add_node({
+memory_add_node({
   type: "person",
   label: "Bob",
   properties: { role: "frontend", email: "bob@example.com" }
@@ -257,68 +257,68 @@ create_todo({
 // Returns: todo-2-1234567894
 
 // 4. Link TODOs to project
-graph_add_edge({
+memory_add_edge({
   source: "node-1-1234567890",  // project
   target: "todo-1-1234567893",  // API TODO
   type: "contains"
 })
 
-graph_add_edge({
+memory_add_edge({
   source: "node-1-1234567890",  // project
   target: "todo-2-1234567894",  // UI TODO
   type: "contains"
 })
 
 // 5. Assign TODOs to people
-graph_add_edge({
+memory_add_edge({
   source: "node-2-1234567891",  // Alice
   target: "todo-1-1234567893",  // API TODO
   type: "assigned_to"
 })
 
-graph_add_edge({
+memory_add_edge({
   source: "node-3-1234567892",  // Bob
   target: "todo-2-1234567894",  // UI TODO
   type: "assigned_to"
 })
 
 // 6. Add file references
-graph_add_node({
+memory_add_node({
   type: "file",
   label: "api/routes.ts",
   properties: { path: "src/api/routes.ts" }
 })
 // Returns: node-4-1234567895
 
-graph_add_edge({
+memory_add_edge({
   source: "todo-1-1234567893",  // API TODO
   target: "node-4-1234567895",  // file
   type: "references"
 })
 
 // 7. Query: What's Alice working on?
-graph_get_neighbors({
+memory_get_neighbors({
   nodeId: "node-2-1234567891",  // Alice
   direction: "out",
   edgeType: "assigned_to"
 })
 
 // 8. Query: What files are related to the API TODO?
-graph_get_neighbors({
+memory_get_neighbors({
   nodeId: "todo-1-1234567893",
   direction: "out",
   edgeType: "references"
 })
 
 // 9. Query: What's in the project?
-graph_get_neighbors({
+memory_get_neighbors({
   nodeId: "node-1-1234567890",  // project
   direction: "out",
   edgeType: "contains"
 })
 
 // 10. Get overview
-graph_get_stats()
+memory_get_stats()
 ```
 
 ## 🚀 How to Enable
@@ -351,7 +351,7 @@ Completely quit and restart Cursor to pick up the new server.
 
 Try in Cursor chat:
 ```
-Use graph_get_stats to show me the current knowledge graph statistics
+Use memory_get_stats to show me the current knowledge graph statistics
 ```
 
 ## 🎯 Benefits
@@ -438,7 +438,7 @@ You can export the graph and visualize it with:
 Example export usage:
 ```typescript
 // Export graph
-const graph = graph_export()
+const graph = memory_export()
 
 // graph.nodes → array of all nodes
 // graph.edges → array of all edges with source/target
@@ -465,7 +465,7 @@ const graph = graph_export()
 
 ### 4. Regular Cleanup
 - Remove obsolete nodes/edges
-- Use `graph_get_stats` to monitor size
+- Use `memory_get_stats` to monitor size
 - Export for backup before major changes
 
 ## 🆚 Comparison: Before vs After
@@ -480,16 +480,16 @@ add_todo_note("todo-1", "Related to login.ts")
 ### After (TODO + KG)
 ```
 create_todo("Fix bug in auth")
-graph_add_node({ type: "file", properties: { title: "login.ts" } })
-graph_add_node({ type: "person", properties: { title: "Alice" } })
-graph_add_edge({ source: "todo-1", target: "file-1", type: "references" })
-graph_add_edge({ source: "person-1", target: "todo-1", type: "assigned_to" })
+memory_add_node({ type: "file", properties: { title: "login.ts" } })
+memory_add_node({ type: "person", properties: { title: "Alice" } })
+memory_add_edge({ source: "todo-1", target: "file-1", type: "references" })
+memory_add_edge({ source: "person-1", target: "todo-1", type: "assigned_to" })
 
 // Now you can query:
-graph_get_neighbors({ nodeId: "file-1", direction: "in", edgeType: "references" })
+memory_get_neighbors({ nodeId: "file-1", direction: "in", edgeType: "references" })
 // → "Which TODOs reference login.ts?"
 
-graph_get_neighbors("person-1", "out", "assigned_to")
+memory_get_neighbors("person-1", "out", "assigned_to")
 // → "What's Alice working on?"
 ```
 

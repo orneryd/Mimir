@@ -9,6 +9,8 @@
  */
 export type NodeType = 
   | 'todo'              // Tasks, action items (replaces TodoManager)
+  | 'todoList'          // Collection/list of todos (can only contain relationships to todo nodes)
+  | 'memory'            // Memory/knowledge entries for agent recall
   | 'file'              // Source files
   | 'function'          // Functions, methods
   | 'class'             // Classes, interfaces

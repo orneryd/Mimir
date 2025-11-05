@@ -50,7 +50,7 @@ Integration plan for adding lightweight local LLM inference and vector embedding
 - **Example**: Agent working on "authentication" task gets semantically similar nodes (security, login, tokens) even without explicit edges
 
 **B. Semantic Search Tool**
-- **New Tool**: `graph_semantic_search`
+- **New Tool**: `memory_semantic_search`
 - **Input**: Natural language query + optional filters (node type, agent context)
 - **Output**: Top-K nodes ranked by embedding similarity + graph distance
 - **Use Case**: Agent searches "how to handle errors" → returns error-handling patterns from codebase
@@ -153,7 +153,7 @@ VECTOR_INDEX_NAME=node_embeddings
 
 **Non-Breaking Changes**:
 - ✅ Embeddings are **optional**: Existing nodes without embeddings work normally
-- ✅ New tools are **additive**: `graph_semantic_search` doesn't affect existing tools
+- ✅ New tools are **additive**: `memory_semantic_search` doesn't affect existing tools
 - ✅ Configuration is **opt-in**: Default config disables embeddings unless Ollama detected
 - ✅ Graceful degradation: If Ollama unavailable, vector search returns empty results with warning
 
@@ -241,7 +241,7 @@ describe('Neo4jVectorIndex', () => {
 
 **C. Semantic Search Tests** (`test/tools/semantic-search.test.ts`):
 ```typescript
-describe('graph_semantic_search tool', () => {
+describe('memory_semantic_search tool', () => {
   test('should find semantically similar nodes', async () => {
     // Setup: Create nodes with similar content
     await graph.addNode({ type: 'todo', properties: { 
@@ -255,7 +255,7 @@ describe('graph_semantic_search tool', () => {
     await embeddings.embedAllNodes();
     
     // Query
-    const results = await tools.graph_semantic_search({
+    const results = await tools.memory_semantic_search({
       query: 'security issues with user login',
       topK: 5
     });
@@ -265,7 +265,7 @@ describe('graph_semantic_search tool', () => {
   });
 
   test('should combine semantic + graph filters', async () => {
-    const results = await tools.graph_semantic_search({
+    const results = await tools.memory_semantic_search({
       query: 'database connections',
       filters: { type: 'file', lockedBy: null },
       topK: 10
@@ -277,7 +277,7 @@ describe('graph_semantic_search tool', () => {
 
   test('should return empty array if embeddings not available', async () => {
     // Simulate Ollama down
-    const results = await tools.graph_semantic_search({
+    const results = await tools.memory_semantic_search({
       query: 'test query'
     });
     
@@ -461,7 +461,7 @@ if (indexSize >= maxSize) {
 ### Phase 3: Semantic Search Tool (Week 3)
 
 **Goals**:
-- New MCP tool: `graph_semantic_search`
+- New MCP tool: `memory_semantic_search`
 - Hybrid search (semantic + graph filters)
 - Context isolation integration
 - Tool tests
@@ -769,7 +769,7 @@ test('should throw helpful error on dimension mismatch', async () => {
 - Rollback instructions
 
 **3. Tool Documentation** (`docs/tools/SEMANTIC_SEARCH.md`):
-- `graph_semantic_search` tool spec
+- `memory_semantic_search` tool spec
 - Example queries
 - Performance characteristics
 - Integration with other tools

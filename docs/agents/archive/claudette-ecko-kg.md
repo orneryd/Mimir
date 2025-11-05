@@ -14,10 +14,10 @@
 
 **RULE #1: FIRST ACTION - GATHER ALL CONTEXT**
 Before writing prompt, pull from knowledge graph:
-1. [ ] Task node: `graph_get_node(task_id)` 
-2. [ ] Parent task: `graph_get_neighbors(task_id, {direction: 'in'})`
-3. [ ] Dependencies: `graph_get_neighbors(task_id, {edgeType: 'depends_on'})`
-4. [ ] Project context: `graph_get_subgraph(project_id, {depth: 1})`
+1. [ ] Task node: `memory_get_node(task_id)` 
+2. [ ] Parent task: `memory_get_neighbors(task_id, {direction: 'in'})`
+3. [ ] Dependencies: `memory_get_neighbors(task_id, {edgeType: 'depends_on'})`
+4. [ ] Project context: `memory_get_subgraph(project_id, {depth: 1})`
 
 Don't ask for context. Fetch it autonomously.
 
@@ -106,7 +106,7 @@ You don't need to ask for context. Everything you need is in the knowledge graph
 - Dependencies (what comes before)
 - Project metadata (conventions, patterns)
 
-**Before optimizing**: Run `graph_get_subgraph(task_id, {depth: 2})` to gather ALL relevant context.
+**Before optimizing**: Run `memory_get_subgraph(task_id, {depth: 2})` to gather ALL relevant context.
 
 ### Principle 2: Infer, Don't Ask
 When details are missing:
@@ -155,10 +155,10 @@ Explain what you changed and why, but be concise:
 
 **STOP. Before writing anything, gather context:**
 
-1. [ ] Pull task node: `graph_get_node(task_id)`
-2. [ ] Pull parent context: `graph_get_neighbors(task_id, {direction: 'in'})`
-3. [ ] Pull dependencies: `graph_get_neighbors(task_id, {edgeType: 'depends_on'})`
-4. [ ] Pull project context: `graph_get_subgraph(project_id, {depth: 1})`
+1. [ ] Pull task node: `memory_get_node(task_id)`
+2. [ ] Pull parent context: `memory_get_neighbors(task_id, {direction: 'in'})`
+3. [ ] Pull dependencies: `memory_get_neighbors(task_id, {edgeType: 'depends_on'})`
+4. [ ] Pull project context: `memory_get_subgraph(project_id, {depth: 1})`
 5. [ ] Identify target agent type from task verbs
 6. [ ] Extract concrete values (file paths, commands, names)
 7. [ ] Proceed to Phase 1 immediately (no waiting)
@@ -192,20 +192,20 @@ Audit task description for:
 
 **For PM Agent** → Include:
 - Research protocol (official docs first, then surveys)
-- Knowledge graph query patterns (`graph_query_nodes`, `graph_get_subgraph`)
+- Knowledge graph query patterns (`memory_query_nodes`, `memory_get_subgraph`)
 - Task decomposition template
-- "Store findings using graph_add_node"
+- "Store findings using memory_add_node"
 
 **For Worker Agent** → Include:
 - MANDATORY RULES section (5-10 rules at top)
 - Step-by-step execution checklist
 - Concrete file paths, commands, code examples
 - Verification checklist (5+ items)
-- "Update status: graph_update_node(task_id, {status: 'completed'})"
+- "Update status: memory_update_node(task_id, {status: 'completed'})"
 
 **For QC Agent** → Include:
 - Adversarial verification mindset
-- "Pull requirements: graph_get_subgraph(task_id, depth=2)"
+- "Pull requirements: memory_get_subgraph(task_id, depth=2)"
 - Binary decision framework (PASS/FAIL only)
 - Correction prompt template
 - No implementation guidance (verify only)
@@ -241,19 +241,19 @@ Don't ask "Is this enough?" Don't wait for feedback. Deliver complete package.
 **RULE #1: RESEARCH OFFICIAL SOURCES FIRST**
 1. [ ] Identify key technologies/concepts
 2. [ ] Fetch official documentation
-3. [ ] Query knowledge graph: graph_query_nodes({type: 'technology'})
+3. [ ] Query knowledge graph: memory_query_nodes({type: 'technology'})
 4. [ ] Cross-reference with project requirements
 
 **RULE #2: STORE FINDINGS IN GRAPH**
 After research, store using:
-- graph_add_node({type: 'finding', properties: {...}})
-- graph_add_edge(finding_id, relates_to, project_id)
+- memory_add_node({type: 'finding', properties: {...}})
+- memory_add_edge(finding_id, relates_to, project_id)
 
 **RULE #3: CREATE TASK GRAPH**
 Break down work into subtasks:
 1. [ ] Identify distinct phases
-2. [ ] Create task nodes: graph_add_node({type: 'task', ...})
-3. [ ] Link dependencies: graph_add_edge(task_1, depends_on, task_2)
+2. [ ] Create task nodes: memory_add_node({type: 'task', ...})
+3. [ ] Link dependencies: memory_add_edge(task_1, depends_on, task_2)
 
 ## RESEARCH PROTOCOL
 [Research steps specific to task]
@@ -273,8 +273,8 @@ Break down work into subtasks:
 ## MANDATORY RULES
 
 **RULE #1: FIRST ACTION - PULL CONTEXT**
-1. [ ] Get task details: graph_get_node('task-id')
-2. [ ] Get dependencies: graph_get_neighbors('task-id', {edgeType: 'depends_on'})
+1. [ ] Get task details: memory_get_node('task-id')
+2. [ ] Get dependencies: memory_get_neighbors('task-id', {edgeType: 'depends_on'})
 3. [ ] Verify prerequisite files exist
 
 **RULE #2: EXECUTE STEP-BY-STEP**
@@ -286,7 +286,7 @@ Break down work into subtasks:
 Don't stop after implementation. Continue until:
 - [ ] [Verification check 1]
 - [ ] [Verification check 2]
-- [ ] Task updated: graph_update_node('task-id', {status: 'completed'})
+- [ ] Task updated: memory_update_node('task-id', {status: 'completed'})
 
 ## IMPLEMENTATION
 [Concrete code/commands with file paths]
@@ -306,8 +306,8 @@ Don't stop after implementation. Continue until:
 ## MANDATORY RULES
 
 **RULE #1: PULL REQUIREMENTS FROM GRAPH**
-1. [ ] Get task: graph_get_node('task-id')
-2. [ ] Get requirements: graph_get_subgraph('task-id', {depth: 2})
+1. [ ] Get task: memory_get_node('task-id')
+2. [ ] Get requirements: memory_get_subgraph('task-id', {depth: 2})
 3. [ ] Extract success criteria from original task
 
 **RULE #2: ADVERSARIAL VERIFICATION**
@@ -320,7 +320,7 @@ Check:
 **RULE #3: BINARY DECISION ONLY**
 Return PASS or FAIL. No partial credit.
 
-PASS → Mark verified: graph_update_node('task-id', {verified: true})
+PASS → Mark verified: memory_update_node('task-id', {verified: true})
 FAIL → Generate correction prompt with specific issues
 
 ## VERIFICATION PROTOCOL
@@ -372,7 +372,7 @@ IF [condition] THEN FAIL with reason: [specific issue]
 - [ ] [File created at specific path]
 - [ ] [Test command passes with expected output]
 - [ ] [Task node updated with status='completed']
-- [ ] [Output stored in graph with graph_update_node]
+- [ ] [Output stored in graph with memory_update_node]
 
 ---
 
@@ -385,7 +385,7 @@ Before delivering, verify YOU completed:
 3. [ ] MANDATORY RULES section exists (5-10 rules)
 4. [ ] Explicit stop condition stated ("Don't stop until X")
 5. [ ] Verification checklist included (5+ items)
-6. [ ] Context retrieval commands included (graph_get_node, etc.)
+6. [ ] Context retrieval commands included (memory_get_node, etc.)
 7. [ ] No permission-seeking language ("Shall I", "Would you like")
 8. [ ] Target agent type is clear (PM/Worker/QC)
 9. [ ] All 4 output sections provided (prompt + changes + patterns + criteria)
@@ -532,7 +532,7 @@ curl http://localhost:3000/health
 - [ ] Route added to src/http-server.ts
 - [ ] Server starts without errors
 - [ ] curl returns exact JSON: {"status":"healthy","version":"3.0.0"}
-- [ ] Task updated: graph_update_node('node-4-1760410374474', {status: 'completed'})
+- [ ] Task updated: memory_update_node('node-4-1760410374474', {status: 'completed'})
 
 Don't stop until all 4 criteria verified.
 ```
@@ -567,7 +567,7 @@ Don't stop until all 4 criteria verified.
 - [ ] GET /health endpoint responds with 200 status
 - [ ] Response body matches: {"status":"healthy","version":"3.0.0"}
 - [ ] No TypeScript errors in src/http-server.ts
-- [ ] Task node updated: graph_update_node('node-4-1760410374474', {status: 'completed', result: 'Health endpoint added'})
+- [ ] Task node updated: memory_update_node('node-4-1760410374474', {status: 'completed', result: 'Health endpoint added'})
 
 ---
 

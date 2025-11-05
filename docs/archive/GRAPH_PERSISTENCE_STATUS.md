@@ -180,13 +180,13 @@ This means:
 **Problem:** The chain-output.md includes dependency mapping:
 
 ```typescript
-graph_add_edge('task-1.1', 'depends_on', 'task-2.1');
-graph_add_edge('task-2.1', 'depends_on', 'task-3.1');
-graph_add_edge('task-2.1', 'depends_on', 'task-4.1');
-graph_add_edge('task-3.1', 'depends_on', 'task-5.1');
-graph_add_edge('task-4.1', 'depends_on', 'task-5.1');
-graph_add_edge('task-5.1', 'depends_on', 'task-6.1');
-graph_add_edge('task-6.1', 'depends_on', 'task-7.1');
+memory_add_edge('task-1.1', 'depends_on', 'task-2.1');
+memory_add_edge('task-2.1', 'depends_on', 'task-3.1');
+memory_add_edge('task-2.1', 'depends_on', 'task-4.1');
+memory_add_edge('task-3.1', 'depends_on', 'task-5.1');
+memory_add_edge('task-4.1', 'depends_on', 'task-5.1');
+memory_add_edge('task-5.1', 'depends_on', 'task-6.1');
+memory_add_edge('task-6.1', 'depends_on', 'task-7.1');
 ```
 
 **Expected:**
@@ -252,7 +252,7 @@ await fetch(MCP_SERVER_URL, {
   body: JSON.stringify({
     jsonrpc: '2.0',
     method: 'tools/call',
-    params: { name: 'graph_add_node', ... }
+    params: { name: 'memory_add_node', ... }
   })
 });
 ```
@@ -507,13 +507,13 @@ task-1.2: {
 ### ✅ Queryable Task Progress
 ```bash
 # Get all pending tasks
-graph_query_nodes({ type: 'todo', filters: { status: 'pending' } })
+memory_query_nodes({ type: 'todo', filters: { status: 'pending' } })
 
 # Get failed tasks
-graph_query_nodes({ type: 'todo', filters: { status: 'failed' } })
+memory_query_nodes({ type: 'todo', filters: { status: 'failed' } })
 
 # Get task with full history
-graph_get_node('task-1.2')
+memory_get_node('task-1.2')
 # Returns:
 # - All QC attempts
 # - Worker outputs

@@ -16,11 +16,13 @@ import type {
   Subgraph,
   ClearType
 } from '../types/index.js';
+import { EmbeddingsService } from '../indexing/EmbeddingsService.js';
 
 export class GraphManager implements IGraphManager {
   private driver: Driver;
   private nodeCounter = 0;
   private edgeCounter = 0;
+  private embeddingsService: EmbeddingsService | null = null;
 
   constructor(uri: string, user: string, password: string) {
     this.driver = neo4j.driver(
@@ -32,6 +34,13 @@ export class GraphManager implements IGraphManager {
         connectionTimeout: 30000
       }
     );
+    
+    // Initialize embeddings service
+    this.embeddingsService = new EmbeddingsService();
+    this.embeddingsService.initialize().catch(err => {
+      console.warn('⚠️  Failed to initialize embeddings service:', err.message);
+      this.embeddingsService = null;
+    });
   }
 
   /**
@@ -93,6 +102,23 @@ export class GraphManager implements IGraphManager {
         FOR (f:File) ON EACH [f.content, f.path, f.name]
       `);
 
+      // Vector index for semantic search (1024 dimensions for mxbai-embed-large)
+      await session.run(`
+        CREATE VECTOR INDEX node_embedding_index IF NOT EXISTS
+        FOR (n:Node) ON (n.embedding)
+        OPTIONS {indexConfig: {
+          \`vector.dimensions\`: 1024,
+          \`vector.similarity_function\`: 'cosine'
+        }}
+      `);
+
+      // Migration: Add Node label to existing File nodes and set type property
+      await session.run(`
+        MATCH (f:File)
+        WHERE NOT f:Node
+        SET f:Node, f.type = 'file'
+      `);
+
       console.log('✅ Neo4j schema initialized (with file indexing support)');
     } catch (error: any) {
       console.error('❌ Schema initialization failed:', error.message);
@@ -121,28 +147,127 @@ export class GraphManager implements IGraphManager {
   // SINGLE OPERATIONS
   // ============================================================================
 
-  async addNode(type: NodeType, properties: Record<string, any>): Promise<Node> {
+  /**
+   * Extract text content from node properties for embedding generation
+   * Prioritizes: content, description, title, then concatenates all string values
+   */
+  private extractTextContent(properties: Record<string, any>): string {
+    const parts: string[] = [];
+    
+    // Priority fields
+    if (properties.content && typeof properties.content === 'string') {
+      parts.push(properties.content);
+    }
+    if (properties.description && typeof properties.description === 'string') {
+      parts.push(properties.description);
+    }
+    if (properties.title && typeof properties.title === 'string') {
+      parts.push(properties.title);
+    }
+    if (properties.name && typeof properties.name === 'string') {
+      parts.push(properties.name);
+    }
+    
+    // If we have priority fields, use those
+    if (parts.length > 0) {
+      return parts.join('\n\n');
+    }
+    
+    // Otherwise, concatenate all string values
+    for (const [key, value] of Object.entries(properties)) {
+      if (typeof value === 'string' && value.trim().length > 0) {
+        // Skip system fields
+        if (!['id', 'type', 'created', 'updated'].includes(key)) {
+          parts.push(value);
+        }
+      }
+    }
+    
+    return parts.join('\n');
+  }
+
+  async addNode(type?: NodeType | Record<string, any>, properties?: Record<string, any>): Promise<Node> {
     const session = this.driver.session();
     try {
+      // Handle flexible arguments: addNode(properties) or addNode(type, properties)
+      let actualType: NodeType;
+      let actualProperties: Record<string, any>;
+
+      if (typeof type === 'object' && type !== null) {
+        // First arg is properties, use default type
+        actualType = 'memory';
+        actualProperties = type as Record<string, any>;
+      } else {
+        // Standard: type specified
+        actualType = type || 'memory';
+        actualProperties = properties || {};
+      }
+
       // Use provided ID if present, otherwise generate one
-      const id = properties.id || `${type}-${++this.nodeCounter}-${Date.now()}`;
+      const id = actualProperties.id || `${actualType}-${++this.nodeCounter}-${Date.now()}`;
       const now = new Date().toISOString();
+
+      // Generate embeddings if enabled, not already provided, and content is available
+      let embeddingData: any = null;
+      const hasExistingEmbedding = actualProperties.embedding || actualProperties.has_embedding === true;
+      
+      console.error(`🔍 Embedding check for ${actualType} node: service=${!!this.embeddingsService}, hasExisting=${hasExistingEmbedding}`);
+      
+      if (this.embeddingsService && !hasExistingEmbedding) {
+          // Ensure embeddings service is initialized
+          if (!this.embeddingsService.isEnabled()) {
+            console.error(`🔄 Initializing embeddings service for ${actualType} node`);
+            await this.embeddingsService.initialize();
+          }
+          
+          console.error(`📊 Embeddings service enabled: ${this.embeddingsService.isEnabled()}`);
+          
+          if (this.embeddingsService.isEnabled()) {
+            // Extract text content for embedding generation
+            const textContent = this.extractTextContent(actualProperties);
+            
+            console.error(`📝 Extracted text content length: ${textContent?.length || 0} chars`);
+            
+            if (textContent && textContent.trim().length > 0) {
+              try {
+                console.error(`🧮 Generating embedding for ${actualType} node: ${id}`);
+                const result = await this.embeddingsService.generateEmbedding(textContent);
+                embeddingData = {
+                  embedding: result.embedding,
+                  embedding_dimensions: result.dimensions,
+                  embedding_model: result.model,
+                  has_embedding: true
+                };
+                console.error(`✅ Generated embedding for ${actualType} node: ${id} (${result.dimensions} dimensions)`);
+              } catch (error: any) {
+                console.error(`⚠️  Failed to generate embedding for ${actualType} node: ${error.message}`);
+                console.error(error.stack);
+              }
+            } else {
+              console.error(`⏭️  No text content to embed for ${actualType} node: ${id}`);
+            }
+          }
+        } else if (hasExistingEmbedding) {
+          console.error(`⏭️  Skipping embedding generation (already exists): ${id}`);
+        }
 
       // Flatten properties into the node (Neo4j doesn't support nested objects)
       const nodeProps = {
         id,
-        type,
+        type: actualType,
         created: now,
         updated: now,
-        ...properties  // Spread properties at top level
+        ...actualProperties,  // Spread properties at top level
+        ...(embeddingData || { has_embedding: false })  // Add embedding data if available
       };
 
       const result = await session.run(
-        'CREATE (n:Node $props) RETURN n',
+        'CREATE (n:Node $props) RETURN n { .*, embedding: null }',
         { props: nodeProps }
       );
 
-      return this.nodeFromRecord(result.records[0].get('n'));
+      // Single node operation - return full content (don't strip)
+      return this.nodeFromRecord(result.records[0].get('n'), undefined, false);
     } finally {
       await session.close();
     }
@@ -152,7 +277,7 @@ export class GraphManager implements IGraphManager {
     const session = this.driver.session();
     try {
       const result = await session.run(
-        'MATCH (n:Node {id: $id}) RETURN n',
+        'MATCH (n:Node {id: $id}) RETURN n { .*, embedding: null }',
         { id }
       );
 
@@ -160,7 +285,8 @@ export class GraphManager implements IGraphManager {
         return null;
       }
 
-      return this.nodeFromRecord(result.records[0].get('n'));
+      // Single node query - return full content (don't strip)
+      return this.nodeFromRecord(result.records[0].get('n'), undefined, false);
     } finally {
       await session.close();
     }
@@ -178,7 +304,7 @@ export class GraphManager implements IGraphManager {
         `
         MATCH (n:Node {id: $id})
         SET n += $properties
-        RETURN n
+        RETURN n { .*, embedding: null }
         `,
         { id, properties: setProperties }
       );
@@ -187,7 +313,8 @@ export class GraphManager implements IGraphManager {
         throw new Error(`Node not found: ${id}`);
       }
 
-      return this.nodeFromRecord(result.records[0].get('n'));
+      // Single node operation - return full content (don't strip)
+      return this.nodeFromRecord(result.records[0].get('n'), undefined, false);
     } finally {
       await session.close();
     }
@@ -220,6 +347,28 @@ export class GraphManager implements IGraphManager {
   ): Promise<Edge> {
     const session = this.driver.session();
     try {
+      // Validate todoList relationships - can only connect to todo nodes
+      const validationResult = await session.run(
+        `
+        MATCH (s:Node {id: $source})
+        MATCH (t:Node {id: $target})
+        RETURN s.type AS sourceType, t.type AS targetType
+        `,
+        { source, target }
+      );
+
+      if (validationResult.records.length === 0) {
+        throw new Error(`Failed to create edge: source or target not found`);
+      }
+
+      const sourceType = validationResult.records[0].get('sourceType');
+      const targetType = validationResult.records[0].get('targetType');
+
+      // Enforce todoList constraint: can only contain relationships to todo nodes
+      if (sourceType === 'todoList' && targetType !== 'todo') {
+        throw new Error(`todoList nodes can only have relationships to todo nodes. Target type: ${targetType}`);
+      }
+
       const id = `edge-${++this.edgeCounter}-${Date.now()}`;
       const now = new Date().toISOString();
 
@@ -240,10 +389,6 @@ export class GraphManager implements IGraphManager {
         `,
         { source, target, edgeProps }
       );
-
-      if (result.records.length === 0) {
-        throw new Error(`Failed to create edge: source or target not found`);
-      }
 
       return this.edgeFromRecord(result.records[0].get('e'), source, target);
     } finally {
@@ -293,7 +438,7 @@ export class GraphManager implements IGraphManager {
         UNWIND $nodes as node
         CREATE (n:Node)
         SET n = node
-        RETURN n
+        RETURN n { .*, embedding: null }
         `,
         { nodes: nodesWithIds }
       );
@@ -320,7 +465,7 @@ export class GraphManager implements IGraphManager {
         UNWIND $updates as update
         MATCH (n:Node {id: update.id})
         SET n += update.properties
-        RETURN n
+        RETURN n { .*, embedding: null }
         `,
         { updates: updatesWithTimestamp }
       );
@@ -450,10 +595,29 @@ export class GraphManager implements IGraphManager {
         query += filterConditions.join(' AND ');
       }
 
-      query += ' RETURN n';
+      // Strip large content at query level: exclude embedding, conditionally strip content
+      query += ` RETURN n {
+        .*, 
+        embedding: null,
+        content: CASE 
+          WHEN size(coalesce(n.content, '')) > 1000 
+          THEN null 
+          ELSE n.content 
+        END,
+        _contentStripped: CASE 
+          WHEN size(coalesce(n.content, '')) > 1000 
+          THEN true 
+          ELSE null 
+        END,
+        _contentLength: CASE 
+          WHEN size(coalesce(n.content, '')) > 1000 
+          THEN size(n.content) 
+          ELSE null 
+        END
+      } as n`;
 
       const result = await session.run(query, params);
-      return result.records.map(r => this.nodeFromRecord(r.get('n')));
+      return result.records.map(r => this.nodeFromRecord(r.get('n'), undefined, false));
     } finally {
       await session.close();
     }
@@ -481,7 +645,31 @@ export class GraphManager implements IGraphManager {
           (n.type IS NOT NULL AND toLower(n.type) CONTAINS toLower($query))
         )
         ${options.types && options.types.length > 0 ? `AND (n.type IN $types OR ANY(t IN $types WHERE (toUpper(left(t, 1)) + substring(t, 1)) IN labels(n)))` : ''}
-        RETURN n
+        WITH n
+        RETURN n {
+          .*, 
+          embedding: null,
+          content: CASE 
+            WHEN size(coalesce(n.content, '')) > 1000 
+            THEN null 
+            ELSE n.content 
+          END,
+          _contentStripped: CASE 
+            WHEN size(coalesce(n.content, '')) > 1000 
+            THEN true 
+            ELSE null 
+          END,
+          _contentLength: CASE 
+            WHEN size(coalesce(n.content, '')) > 1000 
+            THEN size(n.content) 
+            ELSE null 
+          END,
+          relevantLines: CASE
+            WHEN size(coalesce(n.content, '')) > 1000 AND n.content IS NOT NULL
+            THEN [line IN split(n.content, '\\n') WHERE toLower(line) CONTAINS toLower($query) | line][0..10]
+            ELSE null
+          END
+        } as n
         SKIP $offset
         LIMIT $limit
         `,
@@ -493,7 +681,7 @@ export class GraphManager implements IGraphManager {
         }
       );
 
-      return result.records.map(r => this.nodeFromRecord(r.get('n')));
+      return result.records.map(r => this.nodeFromRecord(r.get('n'), undefined, false));
     } finally {
       await session.close();
     }
@@ -532,12 +720,30 @@ export class GraphManager implements IGraphManager {
         `
         MATCH (start:Node {id: $nodeId})-[e:EDGE*1..${depth}]-(neighbor:Node)
         ${edgeType ? 'WHERE ALL(rel IN e WHERE rel.type = $edgeType)' : ''}
-        RETURN DISTINCT neighbor
+        RETURN DISTINCT neighbor {
+          .*, 
+          embedding: null,
+          content: CASE 
+            WHEN size(coalesce(neighbor.content, '')) > 1000 
+            THEN null 
+            ELSE neighbor.content 
+          END,
+          _contentStripped: CASE 
+            WHEN size(coalesce(neighbor.content, '')) > 1000 
+            THEN true 
+            ELSE null 
+          END,
+          _contentLength: CASE 
+            WHEN size(coalesce(neighbor.content, '')) > 1000 
+            THEN size(neighbor.content) 
+            ELSE null 
+          END
+        } as neighbor
         `,
         { nodeId, edgeType }
       );
 
-      return result.records.map(r => this.nodeFromRecord(r.get('neighbor')));
+      return result.records.map(r => this.nodeFromRecord(r.get('neighbor'), undefined, false));
     } finally {
       await session.close();
     }
@@ -551,7 +757,25 @@ export class GraphManager implements IGraphManager {
         MATCH path = (start:Node {id: $nodeId})-[e:EDGE*0..${depth}]-(connected:Node)
         WITH nodes(path) as pathNodes, relationships(path) as pathEdges
         UNWIND pathNodes as node
-        WITH collect(DISTINCT node) as allNodes, pathEdges
+        WITH collect(DISTINCT node {
+          .*, 
+          embedding: null,
+          content: CASE 
+            WHEN size(coalesce(node.content, '')) > 1000 
+            THEN null 
+            ELSE node.content 
+          END,
+          _contentStripped: CASE 
+            WHEN size(coalesce(node.content, '')) > 1000 
+            THEN true 
+            ELSE null 
+          END,
+          _contentLength: CASE 
+            WHEN size(coalesce(node.content, '')) > 1000 
+            THEN size(node.content) 
+            ELSE null 
+          END
+        }) as allNodes, pathEdges
         UNWIND pathEdges as edge
         WITH allNodes, collect(DISTINCT edge) as allEdges
         RETURN allNodes, allEdges
@@ -564,7 +788,7 @@ export class GraphManager implements IGraphManager {
       }
 
       const record = result.records[0];
-      const nodes = record.get('allNodes').map((n: any) => this.nodeFromRecord(n));
+      const nodes = record.get('allNodes').map((n: any) => this.nodeFromRecord(n, undefined, false));
       const edges = record.get('allEdges').map((e: any) => 
         this.edgeFromRecord(e, e.start, e.end)
       );
@@ -680,16 +904,25 @@ export class GraphManager implements IGraphManager {
   // PRIVATE HELPERS
   // ============================================================================
 
-  private nodeFromRecord(record: any): Node {
-    const props = record.properties;
+  /**
+   * Convert Neo4j record to Node object
+   * Content stripping is now handled at the Neo4j query level for efficiency
+   * Handles both node objects (with .properties) and map projections (plain objects)
+   */
+  private nodeFromRecord(record: any, searchQuery?: string, stripContent: boolean = true): Node {
+    // Handle map projection (plain object) vs node object (with .properties)
+    const props = record.properties || record;
     
     // Extract system properties
     const { id, type, created, updated, ...userProperties } = props;
     
+    // Note: embedding is already stripped at the database level in all queries
+    // Keep metadata about embeddings (has_embedding, embedding_dimensions, embedding_model)
+    
     return {
       id,
       type,
-      properties: userProperties,  // All other properties
+      properties: userProperties,  // All other properties (content already stripped at query level if needed)
       created,
       updated
     };
@@ -741,7 +974,7 @@ export class GraphManager implements IGraphManager {
             n.lockedAt = $now,
             n.lockExpiresAt = $lockExpiresAt,
             n.version = COALESCE(n.version, 0) + 1
-        RETURN n
+        RETURN n { .*, embedding: null }
         `,
         {
           nodeId,
@@ -773,7 +1006,7 @@ export class GraphManager implements IGraphManager {
         MATCH (n:Node {id: $nodeId})
         WHERE n.lockedBy = $agentId
         REMOVE n.lockedBy, n.lockedAt, n.lockExpiresAt
-        RETURN n
+        RETURN n { .*, embedding: null }
         `,
         { nodeId, agentId }
       );
@@ -825,10 +1058,29 @@ export class GraphManager implements IGraphManager {
         params.now = new Date().toISOString();
       }
 
-      cypher += ' RETURN n';
+      // Strip large content at query level
+      cypher += ` RETURN n {
+        .*, 
+        embedding: null,
+        content: CASE 
+          WHEN size(coalesce(n.content, '')) > 1000 
+          THEN null 
+          ELSE n.content 
+        END,
+        _contentStripped: CASE 
+          WHEN size(coalesce(n.content, '')) > 1000 
+          THEN true 
+          ELSE null 
+        END,
+        _contentLength: CASE 
+          WHEN size(coalesce(n.content, '')) > 1000 
+          THEN size(n.content) 
+          ELSE null 
+        END
+      } as n`;
 
       const result = await session.run(cypher, params);
-      return result.records.map(record => this.nodeFromRecord(record.get('n')));
+      return result.records.map(record => this.nodeFromRecord(record.get('n'), undefined, false));
     } finally {
       await session.close();
     }
@@ -847,18 +1099,18 @@ export class GraphManager implements IGraphManager {
         `
         MATCH (n:Node)
         WHERE n.lockedBy IS NOT NULL 
-          AND n.lockExpiresAt IS NOT NULL
+          AND n.lockExpiresAt IS NOT NULL 
           AND n.lockExpiresAt < $now
-        REMOVE n.lockedBy, n.lockedAt, n.lockExpiresAt
+        REMOVE n.lockedBy, n.lockExpiresAt
         RETURN count(n) as cleaned
         `,
         { now: new Date().toISOString() }
       );
 
-      const count = result.records[0]?.get('cleaned');
-      return count ? count.toNumber() : 0;
+      return result.records[0]?.get('cleaned').toNumber() || 0;
     } finally {
       await session.close();
     }
   }
+
 }

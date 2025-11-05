@@ -26,7 +26,7 @@
 
 **Query:** Search for task execution nodes
 ```javascript
-graph_search_nodes('Task Execution')
+memory_search_nodes('Task Execution')
 // Result: "No results"
 ```
 

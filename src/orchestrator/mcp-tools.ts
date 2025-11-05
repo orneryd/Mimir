@@ -59,42 +59,42 @@ async function callMCPTool(toolName: string, args: Record<string, any>): Promise
  */
 
 export const graphAddNodeTool = new DynamicStructuredTool({
-  name: 'graph_add_node',
+  name: 'memory_add_node',
   description: 'Add a node to the knowledge graph. Nodes represent entities like projects, phases, tasks, files, concepts.',
   schema: z.object({
     type: z.string().describe('Node type (e.g., "project", "phase", "task", "file", "concept")'),
     properties: z.record(z.string(), z.any()).describe('Node properties as key-value pairs'),
   }),
   func: async ({ type, properties }) => {
-    return await callMCPTool('graph_add_node', { type, properties });
+    return await callMCPTool('memory_add_node', { type, properties });
   },
 });
 
 export const graphGetNodeTool = new DynamicStructuredTool({
-  name: 'graph_get_node',
+  name: 'memory_get_node',
   description: 'Retrieve a node from the knowledge graph by its ID.',
   schema: z.object({
     id: z.string().describe('Node ID to retrieve'),
   }),
   func: async ({ id }) => {
-    return await callMCPTool('graph_get_node', { id });
+    return await callMCPTool('memory_get_node', { id });
   },
 });
 
 export const graphUpdateNodeTool = new DynamicStructuredTool({
-  name: 'graph_update_node',
+  name: 'memory_update_node',
   description: 'Update properties of an existing node in the knowledge graph.',
   schema: z.object({
     id: z.string().describe('Node ID to update'),
     properties: z.record(z.string(), z.any()).describe('Properties to update (will be merged with existing)'),
   }),
   func: async ({ id, properties }) => {
-    return await callMCPTool('graph_update_node', { id, properties });
+    return await callMCPTool('memory_update_node', { id, properties });
   },
 });
 
 export const graphAddEdgeTool = new DynamicStructuredTool({
-  name: 'graph_add_edge',
+  name: 'memory_add_edge',
   description: 'Add a relationship edge between two nodes in the knowledge graph.',
   schema: z.object({
     from: z.string().describe('Source node ID'),
@@ -103,58 +103,58 @@ export const graphAddEdgeTool = new DynamicStructuredTool({
     properties: z.record(z.string(), z.any()).optional().describe('Optional edge properties'),
   }),
   func: async ({ from, to, type, properties }) => {
-    return await callMCPTool('graph_add_edge', { from, to, type, properties });
+    return await callMCPTool('memory_add_edge', { from, to, type, properties });
   },
 });
 
 export const graphQueryNodesTool = new DynamicStructuredTool({
-  name: 'graph_query_nodes',
+  name: 'memory_query_nodes',
   description: 'Query nodes by type and/or properties. Returns matching nodes.',
   schema: z.object({
     type: z.string().optional().describe('Filter by node type'),
     properties: z.record(z.string(), z.any()).optional().describe('Filter by property values'),
   }),
   func: async ({ type, properties }) => {
-    return await callMCPTool('graph_query_nodes', { type, properties });
+    return await callMCPTool('memory_query_nodes', { type, properties });
   },
 });
 
 export const graphGetSubgraphTool = new DynamicStructuredTool({
-  name: 'graph_get_subgraph',
+  name: 'memory_get_subgraph',
   description: 'Get subgraph (nodes and edges) within N hops of a starting node',
   schema: z.object({
     nodeId: z.string().describe('Starting node ID'),
     depth: z.number().optional().describe('Traversal depth (default: 2)'),
   }),
   func: async ({ nodeId, depth }) => {
-    return await callMCPTool('graph_get_subgraph', { nodeId, depth });
+    return await callMCPTool('memory_get_subgraph', { nodeId, depth });
   },
 });
 
 export const graphDeleteNodeTool = new DynamicStructuredTool({
-  name: 'graph_delete_node',
+  name: 'memory_delete_node',
   description: 'Delete a node and all its relationships from the graph',
   schema: z.object({
     nodeId: z.string().describe('Node ID to delete'),
   }),
   func: async ({ nodeId }) => {
-    return await callMCPTool('graph_delete_node', { id: nodeId });
+    return await callMCPTool('memory_delete_node', { id: nodeId });
   },
 });
 
 export const graphDeleteEdgeTool = new DynamicStructuredTool({
-  name: 'graph_delete_edge',
+  name: 'memory_delete_edge',
   description: 'Delete a relationship edge between two nodes',
   schema: z.object({
     edgeId: z.string().describe('Edge ID to delete'),
   }),
   func: async ({ edgeId }) => {
-    return await callMCPTool('graph_delete_edge', { edgeId });
+    return await callMCPTool('memory_delete_edge', { edgeId });
   },
 });
 
 export const graphSearchNodesTool = new DynamicStructuredTool({
-  name: 'graph_search_nodes',
+  name: 'memory_search_nodes',
   description: 'Full-text search across all nodes in the graph - CRITICAL for finding related tasks, patterns, decisions',
   schema: z.object({
     query: z.string().describe('Search query text (e.g., "authentication", "JWT token", "Docker setup")'),
@@ -165,24 +165,24 @@ export const graphSearchNodesTool = new DynamicStructuredTool({
     const options: any = {};
     if (types) options.types = types;
     if (limit) options.limit = limit;
-    return await callMCPTool('graph_search_nodes', { query, options });
+    return await callMCPTool('memory_search_nodes', { query, options });
   },
 });
 
 export const graphGetEdgesTool = new DynamicStructuredTool({
-  name: 'graph_get_edges',
+  name: 'memory_get_edges',
   description: 'Get all edges connected to a node',
   schema: z.object({
     nodeId: z.string().describe('Node ID'),
     direction: z.enum(['in', 'out', 'both']).optional().describe('Edge direction (default: both)'),
   }),
   func: async ({ nodeId, direction }) => {
-    return await callMCPTool('graph_get_edges', { nodeId, direction });
+    return await callMCPTool('memory_get_edges', { nodeId, direction });
   },
 });
 
 export const graphGetNeighborsTool = new DynamicStructuredTool({
-  name: 'graph_get_neighbors',
+  name: 'memory_get_neighbors',
   description: 'Find all nodes connected to a given node',
   schema: z.object({
     nodeId: z.string().describe('Starting node ID'),
@@ -190,12 +190,12 @@ export const graphGetNeighborsTool = new DynamicStructuredTool({
     edgeType: z.string().optional().describe('Filter by edge type'),
   }),
   func: async ({ nodeId, depth, edgeType }) => {
-    return await callMCPTool('graph_get_neighbors', { nodeId, depth, edgeType });
+    return await callMCPTool('memory_get_neighbors', { nodeId, depth, edgeType });
   },
 });
 
 export const graphAddNodesBulkTool = new DynamicStructuredTool({
-  name: 'graph_add_nodes_bulk',
+  name: 'memory_add_nodes_bulk',
   description: 'Bulk create multiple nodes in one efficient transaction',
   schema: z.object({
     nodes: z.array(z.object({
@@ -204,12 +204,12 @@ export const graphAddNodesBulkTool = new DynamicStructuredTool({
     })).describe('Array of nodes to create'),
   }),
   func: async ({ nodes }) => {
-    return await callMCPTool('graph_add_nodes', { nodes });
+    return await callMCPTool('memory_add_nodes', { nodes });
   },
 });
 
 export const graphUpdateNodesBulkTool = new DynamicStructuredTool({
-  name: 'graph_update_nodes_bulk',
+  name: 'memory_update_nodes_bulk',
   description: 'Bulk update multiple nodes in one transaction',
   schema: z.object({
     updates: z.array(z.object({
@@ -218,12 +218,12 @@ export const graphUpdateNodesBulkTool = new DynamicStructuredTool({
     })).describe('Array of node updates'),
   }),
   func: async ({ updates }) => {
-    return await callMCPTool('graph_update_nodes', { updates });
+    return await callMCPTool('memory_update_nodes', { updates });
   },
 });
 
 export const graphAddEdgesBulkTool = new DynamicStructuredTool({
-  name: 'graph_add_edges_bulk',
+  name: 'memory_add_edges_bulk',
   description: 'Bulk create multiple relationships in one transaction',
   schema: z.object({
     edges: z.array(z.object({
@@ -234,12 +234,12 @@ export const graphAddEdgesBulkTool = new DynamicStructuredTool({
     })).describe('Array of edges to create'),
   }),
   func: async ({ edges }) => {
-    return await callMCPTool('graph_add_edges', { edges });
+    return await callMCPTool('memory_add_edges', { edges });
   },
 });
 
 export const graphLockNodeTool = new DynamicStructuredTool({
-  name: 'graph_lock_node',
+  name: 'memory_lock_node',
   description: 'Acquire exclusive lock on a node for multi-agent coordination',
   schema: z.object({
     nodeId: z.string().describe('Node ID to lock'),
@@ -247,24 +247,24 @@ export const graphLockNodeTool = new DynamicStructuredTool({
     timeoutMs: z.number().optional().describe('Lock expiry in ms (default: 300000 = 5 min)'),
   }),
   func: async ({ nodeId, agentId, timeoutMs }) => {
-    return await callMCPTool('graph_lock_node', { nodeId, agentId, timeoutMs });
+    return await callMCPTool('memory_lock_node', { nodeId, agentId, timeoutMs });
   },
 });
 
 export const graphUnlockNodeTool = new DynamicStructuredTool({
-  name: 'graph_unlock_node',
+  name: 'memory_unlock_node',
   description: 'Release lock on a node',
   schema: z.object({
     nodeId: z.string().describe('Node ID to unlock'),
     agentId: z.string().describe('Agent ID releasing the lock'),
   }),
   func: async ({ nodeId, agentId }) => {
-    return await callMCPTool('graph_unlock_node', { nodeId, agentId });
+    return await callMCPTool('memory_unlock_node', { nodeId, agentId });
   },
 });
 
 export const graphQueryAvailableNodesTool = new DynamicStructuredTool({
-  name: 'graph_query_available_nodes',
+  name: 'memory_query_available_nodes',
   description: 'Query nodes filtered by lock status - find available unlocked tasks',
   schema: z.object({
     type: z.string().optional().describe('Node type filter'),
@@ -272,7 +272,7 @@ export const graphQueryAvailableNodesTool = new DynamicStructuredTool({
     availableOnly: z.boolean().optional().describe('Only return unlocked nodes (default: true)'),
   }),
   func: async ({ type, filters, availableOnly }) => {
-    return await callMCPTool('graph_query_available_nodes', { type, filters, availableOnly });
+    return await callMCPTool('memory_query_available_nodes', { type, filters, availableOnly });
   },
 });
 

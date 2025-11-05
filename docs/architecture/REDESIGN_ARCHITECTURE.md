@@ -290,50 +290,50 @@ export class InMemoryGraphManager {
 
 ```typescript
 // OLD: 18 tools (11 KG + 7 TODO)
-graph_add_node, graph_get_node, graph_update_node, graph_delete_node, graph_add_edge, ...
+memory_add_node, memory_get_node, memory_update_node, memory_delete_node, memory_add_edge, ...
 create_todo, get_todo, update_todo, list_todos, ...
 
 // NEW: 17 unified tools (12 single + 5 batch)
 
 // === Single Operations (12 tools - Primary) ===
-graph_add_node        // Works for TODOs too
-graph_get_node        // Get any node by ID
-graph_update_node     // Update any node
-graph_delete_node     // Delete any node
-graph_add_edge        // Link nodes
-graph_delete_edge     // Remove relationship
-graph_query_nodes     // Query by type/filters (replaces list_todos)
-graph_search_nodes    // Full-text search
-graph_get_edges       // Get relationships
-graph_get_neighbors   // Get related nodes
-graph_get_subgraph    // Get context
-graph_clear           // Clear all
+memory_add_node        // Works for TODOs too
+memory_get_node        // Get any node by ID
+memory_update_node     // Update any node
+memory_delete_node     // Delete any node
+memory_add_edge        // Link nodes
+memory_delete_edge     // Remove relationship
+memory_query_nodes     // Query by type/filters (replaces list_todos)
+memory_search_nodes    // Full-text search
+memory_get_edges       // Get relationships
+memory_get_neighbors   // Get related nodes
+memory_get_subgraph    // Get context
+memory_clear           // Clear all
 
 // === Batch Operations (5 tools - Performance) ===
-graph_add_nodes       // Bulk create nodes (file indexing)
-graph_update_nodes    // Bulk update nodes
-graph_delete_nodes    // Bulk delete nodes
-graph_add_edges       // Bulk create relationships
-graph_delete_edges    // Bulk remove relationships
+memory_add_nodes       // Bulk create nodes (file indexing)
+memory_update_nodes    // Bulk update nodes
+memory_delete_nodes    // Bulk delete nodes
+memory_add_edges       // Bulk create relationships
+memory_delete_edges    // Bulk remove relationships
 ```
 
 **Why Batch Operations?**
 
 ```typescript
 // WITHOUT BATCH: Index a file with 20 functions = 41 tool calls! ❌
-const file = await graph_add_node("file", {path: "utils.ts"});
+const file = await memory_add_node("file", {path: "utils.ts"});
 for (let i = 0; i < 20; i++) {
-  const fn = await graph_add_node("function", {name: funcs[i]});
-  await graph_add_edge(file.id, fn.id, "contains");
+  const fn = await memory_add_node("function", {name: funcs[i]});
+  await memory_add_edge(file.id, fn.id, "contains");
 }
 // = 1 + 20 + 20 = 41 calls, ~60 seconds, massive token cost
 
 // WITH BATCH: Same operation = 3 tool calls! ✅
-const file = await graph_add_node("file", {path: "utils.ts"});
-const fns = await graph_add_nodes(
+const file = await memory_add_node("file", {path: "utils.ts"});
+const fns = await memory_add_nodes(
   funcs.map(f => ({type: "function", properties: {name: f}}))
 );
-await graph_add_edges(
+await memory_add_edges(
   fns.map(fn => ({source: file.id, target: fn.id, type: "contains"}))
 );
 // = 3 calls, ~2 seconds, minimal token cost (10-20x faster!)

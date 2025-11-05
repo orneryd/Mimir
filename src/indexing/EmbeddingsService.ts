@@ -23,6 +23,13 @@ export interface TextChunk {
   endOffset: number;
 }
 
+// Chunking configuration based on model context limits
+// Model limits: all-minilm (512 tokens), nomic-embed-text (2048 tokens), mxbai-embed-large (512 tokens)
+// Configurable via environment variables for flexibility
+const getChunkSize = () => parseInt(process.env.MIMIR_EMBEDDINGS_CHUNK_SIZE || '1024', 10);
+const getChunkOverlap = () => parseInt(process.env.MIMIR_EMBEDDINGS_CHUNK_OVERLAP || '100', 10);
+const getMaxRetries = () => parseInt(process.env.MIMIR_EMBEDDINGS_MAX_RETRIES || '3', 10);
+
 export class EmbeddingsService {
   private configLoader: LLMConfigLoader;
   private enabled: boolean = false;
@@ -76,7 +83,54 @@ export class EmbeddingsService {
   }
 
   /**
+   * Chunk text into smaller pieces for embedding
+   * Uses sliding window with overlap to maintain context
+   */
+  private chunkText(text: string): string[] {
+    if (text.length <= getChunkSize()) {
+      return [text];
+    }
+
+    const chunks: string[] = [];
+    let start = 0;
+
+    while (start < text.length) {
+      let end = start + getChunkSize();
+      
+      // If this isn't the last chunk, try to break at a natural boundary
+      if (end < text.length) {
+        // Try to break at paragraph boundary
+        const paragraphBreak = text.lastIndexOf('\n\n', end);
+        if (paragraphBreak > start + getChunkSize() / 2) {
+          end = paragraphBreak + 2;
+        } else {
+          // Try to break at sentence boundary
+          const sentenceBreak = text.lastIndexOf('. ', end);
+          if (sentenceBreak > start + getChunkSize() / 2) {
+            end = sentenceBreak + 2;
+          } else {
+            // Try to break at word boundary
+            const wordBreak = text.lastIndexOf(' ', end);
+            if (wordBreak > start + getChunkSize() / 2) {
+              end = wordBreak + 1;
+            }
+          }
+        }
+      }
+
+      chunks.push(text.substring(start, end).trim());
+      
+      // Move start position with overlap for context continuity
+      start = end - getChunkOverlap();
+      if (start < 0) start = 0;
+    }
+
+    return chunks;
+  }
+
+  /**
    * Generate embedding for a single text
+   * Automatically chunks large texts and averages embeddings
    */
   async generateEmbedding(text: string): Promise<EmbeddingResult> {
     if (!this.enabled) {
@@ -87,52 +141,147 @@ export class EmbeddingsService {
       throw new Error('Cannot generate embedding for empty text');
     }
 
-    if (this.provider === 'copilot' || this.provider === 'openai') {
-      return this.generateOpenAIEmbedding(text);
-    } else {
-      return this.generateOllamaEmbedding(text);
+    // Chunk text if it's too large
+    const chunks = this.chunkText(text);
+    
+    // If only one chunk, process normally
+    if (chunks.length === 1) {
+      if (this.provider === 'copilot' || this.provider === 'openai') {
+        return this.generateOpenAIEmbedding(text);
+      } else {
+        return this.generateOllamaEmbedding(text);
+      }
     }
+
+    // For multiple chunks, generate embeddings for each and average them
+    console.log(`📄 Chunking large text into ${chunks.length} pieces`);
+    const embeddings: number[][] = [];
+    
+    for (let i = 0; i < chunks.length; i++) {
+      try {
+        let result: EmbeddingResult;
+        if (this.provider === 'copilot' || this.provider === 'openai') {
+          result = await this.generateOpenAIEmbedding(chunks[i]);
+        } else {
+          result = await this.generateOllamaEmbedding(chunks[i]);
+        }
+        embeddings.push(result.embedding);
+        
+        // Small delay between chunks to avoid overwhelming the API
+        if (i < chunks.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+      } catch (error: any) {
+        console.warn(`⚠️  Failed to generate embedding for chunk ${i + 1}/${chunks.length}: ${error.message}`);
+        // Continue with other chunks
+      }
+    }
+
+    if (embeddings.length === 0) {
+      throw new Error('Failed to generate embeddings for all chunks');
+    }
+
+    // Average the embeddings
+    const dimensions = embeddings[0].length;
+    const avgEmbedding = new Array(dimensions).fill(0);
+    
+    for (const emb of embeddings) {
+      for (let i = 0; i < dimensions; i++) {
+        avgEmbedding[i] += emb[i];
+      }
+    }
+    
+    for (let i = 0; i < dimensions; i++) {
+      avgEmbedding[i] /= embeddings.length;
+    }
+
+    return {
+      embedding: avgEmbedding,
+      dimensions: dimensions,
+      model: this.model,
+    };
+  }
+
+  /**
+   * Retry wrapper for embedding generation with exponential backoff
+   * Handles EOF errors and other transient failures from Ollama
+   */
+  private async retryWithBackoff<T>(
+    fn: () => Promise<T>,
+    operation: string,
+    maxRetries: number = getMaxRetries()
+  ): Promise<T> {
+    let lastError: Error | null = null;
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await fn();
+      } catch (error: any) {
+        lastError = error;
+        const isEOFError = error.message?.includes('EOF') || 
+                          error.message?.includes('unexpected end') ||
+                          error.code === 'ECONNRESET';
+        
+        // Only retry on EOF/connection errors, not on other errors
+        if (!isEOFError || attempt === maxRetries) {
+          throw error;
+        }
+        
+        // Exponential backoff: 1s, 2s, 4s, 8s...
+        const delayMs = Math.min(1000 * Math.pow(2, attempt), 10000);
+        console.warn(
+          `⚠️  ${operation} failed with EOF error (attempt ${attempt + 1}/${maxRetries + 1}). ` +
+          `Retrying in ${delayMs}ms...`
+        );
+        
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
+    
+    throw lastError || new Error(`${operation} failed after ${maxRetries + 1} attempts`);
   }
 
   /**
    * Generate embedding using Ollama
    */
   private async generateOllamaEmbedding(text: string): Promise<EmbeddingResult> {
-    try {
-      const response = await fetch(`${this.baseUrl}/api/embeddings`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+    return this.retryWithBackoff(async () => {
+      try {
+        const response = await fetch(`${this.baseUrl}/api/embeddings`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: this.model,
+            prompt: text,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Ollama API error (${response.status}): ${errorText}`);
+        }
+
+        const data = await response.json();
+        
+        if (!data.embedding || !Array.isArray(data.embedding)) {
+          throw new Error('Invalid response from Ollama: missing embedding array');
+        }
+
+        return {
+          embedding: data.embedding,
+          dimensions: data.embedding.length,
           model: this.model,
-          prompt: text,
-        }),
-      });
+        };
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Ollama API error (${response.status}): ${errorText}`);
+      } catch (error: any) {
+        if (error.code === 'ECONNREFUSED') {
+          throw new Error(`Cannot connect to Ollama at ${this.baseUrl}. Make sure Ollama is running.`);
+        }
+        throw error;
       }
-
-      const data = await response.json();
-      
-      if (!data.embedding || !Array.isArray(data.embedding)) {
-        throw new Error('Invalid response from Ollama: missing embedding array');
-      }
-
-      return {
-        embedding: data.embedding,
-        dimensions: data.embedding.length,
-        model: this.model,
-      };
-
-    } catch (error: any) {
-      if (error.code === 'ECONNREFUSED') {
-        throw new Error(`Cannot connect to Ollama at ${this.baseUrl}. Make sure Ollama is running.`);
-      }
-      throw error;
-    }
+    }, `Ollama embedding (${text.substring(0, 50)}...)`);
   }
 
   /**
@@ -149,7 +298,7 @@ export class EmbeddingsService {
         body: JSON.stringify({
           model: this.model,
           input: text,
-          encoding_format: 'float',
+          // Note: encoding_format removed - copilot-api may not support it
         }),
       });
 
@@ -209,53 +358,6 @@ export class EmbeddingsService {
     }
 
     return results;
-  }
-
-  /**
-   * Split text into chunks for embedding
-   */
-  async chunkText(text: string): Promise<TextChunk[]> {
-    const config = await this.configLoader.getEmbeddingsConfig();
-    const chunkSize = config?.chunkSize || 512;
-    const chunkOverlap = config?.chunkOverlap || 50;
-
-    const chunks: TextChunk[] = [];
-    const lines = text.split('\n');
-    
-    let currentChunk = '';
-    let startOffset = 0;
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const potentialChunk = currentChunk + (currentChunk ? '\n' : '') + line;
-
-      if (potentialChunk.length > chunkSize && currentChunk.length > 0) {
-        // Save current chunk
-        chunks.push({
-          text: currentChunk,
-          startOffset: startOffset,
-          endOffset: startOffset + currentChunk.length,
-        });
-
-        // Start new chunk with overlap
-        const overlapText = currentChunk.slice(-chunkOverlap);
-        currentChunk = overlapText + '\n' + line;
-        startOffset = startOffset + currentChunk.length - overlapText.length - 1;
-      } else {
-        currentChunk = potentialChunk;
-      }
-    }
-
-    // Add final chunk
-    if (currentChunk.length > 0) {
-      chunks.push({
-        text: currentChunk,
-        startOffset: startOffset,
-        endOffset: startOffset + currentChunk.length,
-      });
-    }
-
-    return chunks;
   }
 
   /**

@@ -90,6 +90,12 @@ export class LLMConfigLoader {
       console.log(`🔧 Ollama URL: ${process.env.OLLAMA_BASE_URL}`);
     }
 
+    // Override Copilot baseUrl
+    if (process.env.COPILOT_BASE_URL && config.providers.copilot) {
+      config.providers.copilot.baseUrl = process.env.COPILOT_BASE_URL;
+      console.log(`🔧 Copilot URL: ${process.env.COPILOT_BASE_URL}`);
+    }
+
     // Feature flags
     if (process.env.MIMIR_FEATURE_PM_MODEL_SUGGESTIONS !== undefined) {
       config.features = config.features || {};
@@ -115,6 +121,11 @@ export class LLMConfigLoader {
       };
       config.embeddings.enabled = process.env.MIMIR_EMBEDDINGS_ENABLED === 'true';
       console.log(`🔧 Embeddings Enabled: ${config.embeddings.enabled}`);
+    }
+
+    if (process.env.MIMIR_EMBEDDINGS_PROVIDER && config.embeddings) {
+      config.embeddings.provider = process.env.MIMIR_EMBEDDINGS_PROVIDER;
+      console.log(`🔧 Embeddings Provider: ${config.embeddings.provider}`);
     }
 
     if (process.env.MIMIR_EMBEDDINGS_MODEL && config.embeddings) {
@@ -158,12 +169,16 @@ export class LLMConfigLoader {
       if (error.code === 'ENOENT') {
         console.warn(`⚠️  LLM config not found at ${this.configPath}, using defaults`);
         this.config = this.getDefaultConfig();
+        // Apply environment overrides to default config too
+        this.applyEnvironmentOverrides(this.config);
         return this.config;
       }
       
       // JSON parse error or validation error
       console.warn(`⚠️  Error loading LLM config: ${error.message}, using defaults`);
       this.config = this.getDefaultConfig();
+      // Apply environment overrides to default config too
+      this.applyEnvironmentOverrides(this.config);
       return this.config;
     }
   }
@@ -172,6 +187,21 @@ export class LLMConfigLoader {
     const config: LLMConfig = {
       defaultProvider: 'ollama',
       providers: {
+        copilot: {
+          baseUrl: process.env.COPILOT_BASE_URL || 'http://localhost:4141/v1',
+          defaultModel: 'gpt-4.1',
+          models: {
+            'gpt-4.1': {
+              name: 'gpt-4.1',
+              contextWindow: 128000,
+              description: 'GitHub Copilot GPT-4 model via copilot-api proxy',
+              recommendedFor: ['pm', 'worker', 'qc'],
+              config: {
+                temperature: 0.0,
+              },
+            },
+          },
+        },
         ollama: {
           baseUrl: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
           defaultModel: 'gpt-oss',

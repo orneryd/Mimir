@@ -296,7 +296,7 @@ curl -s -X POST http://localhost:3000/mcp \
     "jsonrpc": "2.0",
     "method": "tools/call",
     "params": {
-      "name": "graph_export",
+      "name": "memory_export",
       "arguments": {}
     },
     "id": 2
@@ -411,7 +411,7 @@ curl -s -X POST http://localhost:3000/mcp \
     "jsonrpc": "2.0",
     "method": "tools/call",
     "params": {
-      "name": "graph_add_node",
+      "name": "memory_add_node",
       "arguments": {
         "type": "concept",
         "label": "Docker Deployment",
@@ -436,7 +436,7 @@ curl -s -X POST http://localhost:3000/mcp \
     "jsonrpc": "2.0",
     "method": "tools/call",
     "params": {
-      "name": "graph_update_node",
+      "name": "memory_update_node",
       "arguments": {
         "id": "<node-id>",
         "properties": {
@@ -460,7 +460,7 @@ curl -s -X POST http://localhost:3000/mcp \
     "jsonrpc": "2.0",
     "method": "tools/call",
     "params": {
-      "name": "graph_get_stats",
+      "name": "memory_get_stats",
       "arguments": {}
     },
     "id": 6
@@ -473,7 +473,7 @@ See [AGENTS.md](../AGENTS.md) for complete list of 33 available MCP tools.
 
 **Tool Categories**:
 - **TODO Management** (7 tools): `create_todo`, `list_todos`, `get_todo`, `update_todo`, `delete_todo`, `add_todo_note`, `update_todo_context`
-- **Knowledge Graph** (11 tools): `graph_add_node`, `graph_update_node`, `graph_delete_node`, `graph_add_edge`, `graph_delete_edge`, `graph_get_node`, `graph_query_nodes`, `graph_search_nodes`, `graph_get_neighbors`, `graph_get_stats`, `graph_export`
+- **Knowledge Graph** (11 tools): `memory_add_node`, `memory_update_node`, `memory_delete_node`, `memory_add_edge`, `memory_delete_edge`, `memory_get_node`, `memory_query_nodes`, `memory_search_nodes`, `memory_get_neighbors`, `memory_get_stats`, `memory_export`
 - **Advanced** (15 tools): Batch operations, ranked queries, subgraph extraction, and more
 
 ---

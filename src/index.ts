@@ -15,7 +15,14 @@ import {
 
 import { createGraphManager, type IGraphManager } from "./managers/index.js";
 import { ContextManager } from "./managers/ContextManager.js";
-import { GRAPH_TOOLS } from "./tools/index.js";
+import { 
+  GRAPH_TOOLS,
+  handleMemoryNode,
+  handleMemoryEdge,
+  handleMemoryBatch,
+  handleMemoryLock,
+  handleMemoryClear
+} from "./tools/index.js";
 import type { NodeType, EdgeType, ClearType } from "./types/index.js";
 import type { AgentType } from "./types/context.types.js";
 
@@ -24,18 +31,24 @@ import { FileWatchManager } from "./indexing/FileWatchManager.js";
 import { WatchConfigManager } from "./indexing/WatchConfigManager.js";
 import {
   createFileIndexingTools,
-  handleWatchFolder,
-  handleUnwatchFolder,
   handleIndexFolder,
+  handleRemoveFolder,
   handleListWatchedFolders
 } from "./tools/fileIndexing.tools.js";
 
 // Vector Search
 import {
   createVectorSearchTools,
-  handleVectorSearchFiles,
+  handleVectorSearchNodes,
   handleGetEmbeddingStats
 } from "./tools/vectorSearch.tools.js";
+
+// Todo Management
+import {
+  createTodoListTools,
+  handleTodo,
+  handleTodoList
+} from "./tools/todoList.tools.js";
 
 // ============================================================================
 // Global State
@@ -75,274 +88,47 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     switch (name) {
       // ========================================================================
-      // SINGLE OPERATIONS
+      // CONSOLIDATED MEMORY OPERATIONS (6 tools instead of 22)
       // ========================================================================
 
-      case "graph_add_node": {
-        const { type, properties } = args as { type: NodeType; properties: Record<string, any> };
-        const node = await graphManager.addNode(type, properties);
+      case "memory_node": {
+        const result = await handleMemoryNode(args, graphManager);
         return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ success: true, node }, null, 2)
-            }
-          ]
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
         };
       }
 
-      case "graph_get_node": {
-        const { id } = args as { id: string };
-        const node = await graphManager.getNode(id);
+      case "memory_edge": {
+        const result = await handleMemoryEdge(args, graphManager);
         return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ success: true, node }, null, 2)
-            }
-          ]
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
         };
       }
 
-      case "graph_update_node": {
-        const { id, properties } = args as { id: string; properties: Record<string, any> };
-        const node = await graphManager.updateNode(id, properties);
+      case "memory_batch": {
+        const result = await handleMemoryBatch(args, graphManager);
         return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ success: true, node }, null, 2)
-            }
-          ]
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
         };
       }
 
-      case "graph_delete_node": {
-        const { id } = args as { id: string };
-        const deleted = await graphManager.deleteNode(id);
+      case "memory_lock": {
+        const result = await handleMemoryLock(args, graphManager);
         return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ success: true, deleted }, null, 2)
-            }
-          ]
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
         };
       }
 
-      case "graph_add_edge": {
-        const { source, target, type, properties } = args as {
-          source: string;
-          target: string;
-          type: EdgeType;
-          properties?: Record<string, any>;
-        };
-        const edge = await graphManager.addEdge(source, target, type, properties);
+      case "memory_clear": {
+        const result = await handleMemoryClear(args, graphManager);
         return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ success: true, edge }, null, 2)
-            }
-          ]
-        };
-      }
-
-      case "graph_delete_edge": {
-        const { edgeId } = args as { edgeId: string };
-        const deleted = await graphManager.deleteEdge(edgeId);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ success: true, deleted }, null, 2)
-            }
-          ]
-        };
-      }
-
-      case "graph_query_nodes": {
-        const { type, filters } = args as { type?: NodeType; filters?: Record<string, any> };
-        const nodes = await graphManager.queryNodes(type, filters);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ success: true, count: nodes.length, nodes }, null, 2)
-            }
-          ]
-        };
-      }
-
-      case "graph_search_nodes": {
-        const { query, options } = args as { query: string; options?: any };
-        const nodes = await graphManager.searchNodes(query, options);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ success: true, count: nodes.length, nodes }, null, 2)
-            }
-          ]
-        };
-      }
-
-      case "graph_get_edges": {
-        const { nodeId, direction } = args as { nodeId: string; direction?: 'in' | 'out' | 'both' };
-        const edges = await graphManager.getEdges(nodeId, direction);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ success: true, count: edges.length, edges }, null, 2)
-            }
-          ]
-        };
-      }
-
-      case "graph_get_neighbors": {
-        const { nodeId, edgeType, depth } = args as { nodeId: string; edgeType?: EdgeType; depth?: number };
-        const neighbors = await graphManager.getNeighbors(nodeId, edgeType, depth);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ success: true, count: neighbors.length, neighbors }, null, 2)
-            }
-          ]
-        };
-      }
-
-      case "graph_get_subgraph": {
-        const { nodeId, depth } = args as { nodeId: string; depth?: number };
-        const subgraph = await graphManager.getSubgraph(nodeId, depth);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ success: true, subgraph }, null, 2)
-            }
-          ]
-        };
-      }
-
-      case "graph_clear": {
-        const type = args?.type as ClearType | undefined;
-        const result = await graphManager.clear(type);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ 
-                success: true,
-                ...result,
-                message: type === 'ALL'
-                  ? `Cleared ALL data: ${result.deletedNodes} nodes, ${result.deletedEdges} edges`
-                  : type
-                  ? `Cleared ${result.deletedNodes} nodes of type '${type}' and ${result.deletedEdges} edges`
-                  : `No type provided. Use type='ALL' to clear entire graph.`
-              }, null, 2)
-            }
-          ]
-        };
-      }
-
-      // ========================================================================
-      // BATCH OPERATIONS
-      // ========================================================================
-
-      case "graph_add_nodes": {
-        const { nodes } = args as { nodes: Array<{ type: NodeType; properties: Record<string, any> }> };
-        const created = await graphManager.addNodes(nodes);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ success: true, count: created.length, nodes: created }, null, 2)
-            }
-          ]
-        };
-      }
-
-      case "graph_update_nodes": {
-        const { updates } = args as { updates: Array<{ id: string; properties: Record<string, any> }> };
-        const updated = await graphManager.updateNodes(updates);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ success: true, count: updated.length, nodes: updated }, null, 2)
-            }
-          ]
-        };
-      }
-
-      case "graph_delete_nodes": {
-        const { ids } = args as { ids: string[] };
-        const result = await graphManager.deleteNodes(ids);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ success: true, result }, null, 2)
-            }
-          ]
-        };
-      }
-
-      case "graph_add_edges": {
-        const { edges } = args as { edges: Array<{ source: string; target: string; type: EdgeType; properties?: Record<string, any> }> };
-        const created = await graphManager.addEdges(edges);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ success: true, count: created.length, edges: created }, null, 2)
-            }
-          ]
-        };
-      }
-
-      case "graph_delete_edges": {
-        const { edgeIds } = args as { edgeIds: string[] };
-        const result = await graphManager.deleteEdges(edgeIds);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ success: true, result }, null, 2)
-            }
-          ]
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
         };
       }
 
       // ========================================================================
       // FILE INDEXING OPERATIONS
       // ========================================================================
-
-      case "watch_folder": {
-        const result = await handleWatchFolder(args, graphManager.getDriver(), fileWatchManager);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2)
-            }
-          ]
-        };
-      }
-
-      case "unwatch_folder": {
-        const result = await handleUnwatchFolder(args, graphManager.getDriver(), fileWatchManager);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2)
-            }
-          ]
-        };
-      }
 
       case "index_folder": {
         const result = await handleIndexFolder(args, graphManager.getDriver(), fileWatchManager);
@@ -356,7 +142,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      case "list_watched_folders": {
+      case "remove_folder": {
+        const result = await handleRemoveFolder(args, graphManager.getDriver(), fileWatchManager);
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(result, null, 2)
+            }
+          ]
+        };
+      }
+
+      case "list_folders": {
         const result = await handleListWatchedFolders(graphManager.getDriver());
         return {
           content: [
@@ -372,15 +170,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       // VECTOR SEARCH OPERATIONS
       // ========================================================================
 
-      case "vector_search_files": {
-        const result = await handleVectorSearchFiles(args, graphManager.getDriver());
+      case "vector_search_nodes": {
+        const result = await handleVectorSearchNodes(args, graphManager.getDriver());
         return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2)
-            }
-          ]
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
         };
       }
 
@@ -397,90 +190,35 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       // ========================================================================
-      // MULTI-AGENT LOCKING OPERATIONS
+      // TODO MANAGEMENT OPERATIONS
       // ========================================================================
 
-      case "graph_lock_node": {
-        const { nodeId, agentId, timeoutMs } = args as { nodeId: string; agentId: string; timeoutMs?: number };
-        const locked = await graphManager.lockNode(nodeId, agentId, timeoutMs);
+      case "todo": {
+        const result = await handleTodo(args, graphManager);
         return {
           content: [
             {
               type: "text",
-              text: JSON.stringify({ 
-                success: true, 
-                locked,
-                message: locked 
-                  ? `Lock acquired by ${agentId} on ${nodeId}` 
-                  : `Node ${nodeId} is already locked by another agent`
-              }, null, 2)
+              text: JSON.stringify(result, null, 2)
             }
           ]
         };
       }
 
-      case "graph_unlock_node": {
-        const { nodeId, agentId } = args as { nodeId: string; agentId: string };
-        const unlocked = await graphManager.unlockNode(nodeId, agentId);
+      case "todo_list": {
+        const result = await handleTodoList(args, graphManager);
         return {
           content: [
             {
               type: "text",
-              text: JSON.stringify({ 
-                success: true, 
-                unlocked,
-                message: unlocked 
-                  ? `Lock released by ${agentId} on ${nodeId}` 
-                  : `Node ${nodeId} was not locked by ${agentId}`
-              }, null, 2)
-            }
-          ]
-        };
-      }
-
-      case "graph_query_available_nodes": {
-        const { type, filters, availableOnly } = args as { 
-          type?: NodeType; 
-          filters?: Record<string, any>; 
-          availableOnly?: boolean 
-        };
-        const nodes = await graphManager.queryNodesWithLockStatus(
-          type, 
-          filters, 
-          availableOnly !== false  // Default to true
-        );
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ 
-                success: true, 
-                count: nodes.length, 
-                nodes 
-              }, null, 2)
-            }
-          ]
-        };
-      }
-
-      case "graph_cleanup_locks": {
-        const cleaned = await graphManager.cleanupExpiredLocks();
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ 
-                success: true, 
-                cleaned,
-                message: `Cleaned up ${cleaned} expired lock(s)`
-              }, null, 2)
+              text: JSON.stringify(result, null, 2)
             }
           ]
         };
       }
 
       // ========================================================================
-      // CONTEXT ISOLATION
+      // CONTEXT ISOLATION (specialized tool)
       // ========================================================================
 
       case "get_task_context": {
@@ -532,13 +270,20 @@ export async function initializeGraphManager() {
     // Initialize file watch manager
     fileWatchManager = new FileWatchManager(graphManager.getDriver());
     
-    // Restore watchers from Neo4j
-    await restoreFileWatchers();
+    // Restore watchers from Neo4j in background (non-blocking)
+    // This allows the server to start immediately and handle requests
+    // while file indexing happens asynchronously
+    setImmediate(() => {
+      restoreFileWatchers().catch(err => {
+        console.error('❌ Failed to restore file watchers:', err.message);
+      });
+    });
     
     // Combine all tools
     const fileIndexingTools = createFileIndexingTools(graphManager.getDriver(), fileWatchManager);
     const vectorSearchTools = createVectorSearchTools(graphManager.getDriver());
-    allTools = [...GRAPH_TOOLS, ...fileIndexingTools, ...vectorSearchTools];
+    const todoTools = createTodoListTools();
+    allTools = [...GRAPH_TOOLS, ...fileIndexingTools, ...vectorSearchTools, ...todoTools];
   }
   return graphManager;
 }

@@ -6,7 +6,7 @@ A production-ready Model Context Protocol (MCP) server that provides **Graph-RAG
 
 **PRODUCTION READY** - Fully implemented and tested:
 - **Neo4j Graph Database**: Persistent storage with ACID compliance
-- **26 MCP Tools**: 22 graph operations + 4 file indexing tools
+- **13 MCP Tools**: 6 memory + 3 file indexing + 2 vector search + 2 todo management
 - **Multi-Agent Locking**: Optimistic locking for concurrent execution
 - **Context Isolation**: 90%+ context reduction for worker agents
 - **File Indexing**: Automatic file watching with .gitignore support
@@ -212,7 +212,7 @@ docker compose up -d
    - Scans directory for matching files (`*.ts`, `*.js`, `*.json`, `*.md`)
    - Respects `.gitignore` patterns automatically
    - Stores file nodes in Neo4j with content and metadata
-   - Agents can query indexed files via `graph_search_nodes`
+   - Agents can query indexed files via `memory_search_nodes`
 
 4. **Agent Integration**:
    ```bash
@@ -263,15 +263,15 @@ docker exec mcp_server node setup-watch.js
 // List currently watched folders
 await mcp.call('list_watched_folders');
 
-// Stop watching a folder
-await mcp.call('unwatch_folder', {
-  path: '/workspace/src'
-});
-
-// Manually index a folder (one-time)
+// Index a folder (automatically starts watching)
 await mcp.call('index_folder', {
   path: '/workspace/new-project',
   recursive: true
+});
+
+// Stop watching and remove indexed files from database
+await mcp.call('remove_folder', {
+  path: '/workspace/src'
 });
 ```
 
@@ -279,7 +279,7 @@ await mcp.call('index_folder', {
 - **Automatic Detection**: Files are indexed on add/change/delete
 - **Gitignore Support**: Respects `.gitignore` files automatically
 - **Content Analysis**: Extracts file content, metadata, and relationships
-- **Graph Storage**: Files stored as nodes with content searchable via `graph_search_nodes`
+- **Graph Storage**: Files stored as nodes with content searchable via `memory_search_nodes`
 
 ### Usage
 
@@ -309,52 +309,62 @@ npm run start:http  # Starts on port 3000
 - Multi-hop graph traversal for associative memory
 - Atomic transactions with ACID compliance
 
-**2. MCP Tools (26 total)**
+**2. MCP Tools (25 total)**
 - **Graph Operations**: 12 single + 5 batch + 4 locking + 1 context isolation
-- **File Indexing**: 4 tools for automatic file watching and indexing
+- **File Indexing**: 3 tools for automatic file watching and indexing
 
 **3. Multi-Agent Support**
 - **Optimistic Locking**: Race condition prevention
 - **Context Isolation**: Agent-specific filtered context delivery
 - **Ephemeral Workers**: Clean context management
 
-## 🛠️ Available Tools
+## 🛠️ Available Tools (13 Total)
 
-### Graph Operations - Single Node Management (12 tools)
-- `graph_add_node` - Create nodes (todo, file, concept, etc.)
-- `graph_get_node` - Retrieve node by ID with full context
-- `graph_update_node` - Update node properties (merge operation)
-- `graph_delete_node` - Delete node and cascade relationships
-- `graph_add_edge` - Create relationships between nodes
-- `graph_delete_edge` - Remove specific relationships
-- `graph_query_nodes` - Filter nodes by type/properties
-- `graph_search_nodes` - Full-text search across all nodes
-- `graph_get_edges` - Get relationships connected to a node
-- `graph_get_neighbors` - Find connected nodes (with depth traversal)
-- `graph_get_subgraph` - Extract connected subgraph (multi-hop)
-- `graph_clear` - Clear data from graph (by type or ALL)
+### Memory Operations (6 consolidated tools)
+- `memory_node` - All node operations (add, get, update, delete, query, search)
+  - **add**: Create nodes with type and properties
+  - **get**: Retrieve node by ID with full context
+  - **update**: Update node properties (merge operation)
+  - **delete**: Delete node and cascade relationships
+  - **query**: Filter nodes by type/properties
+  - **search**: Full-text search across all nodes
+  
+- `memory_edge` - All edge/relationship operations (add, delete, get, neighbors, subgraph)
+  - **add**: Create relationships between nodes
+  - **delete**: Remove specific relationships
+  - **get**: Get relationships connected to a node
+  - **neighbors**: Find connected nodes (with depth traversal)
+  - **subgraph**: Extract connected subgraph (multi-hop)
+  
+- `memory_batch` - Bulk operations (add_nodes, update_nodes, delete_nodes, add_edges, delete_edges)
+  - **add_nodes**: Bulk create multiple nodes
+  - **update_nodes**: Bulk update multiple nodes
+  - **delete_nodes**: Bulk delete multiple nodes
+  - **add_edges**: Bulk create multiple relationships
+  - **delete_edges**: Bulk delete multiple relationships
+  
+- `memory_lock` - Multi-agent locking (acquire, release, query_available, cleanup)
+  - **acquire**: Acquire exclusive lock on node (with timeout)
+  - **release**: Release lock on node
+  - **query_available**: Query unlocked nodes only
+  - **cleanup**: Clean up expired locks
+  
+- `memory_clear` - Clear data from graph (by type or ALL)
 
-### Graph Operations - Batch Processing (5 tools)
-- `graph_add_nodes` - Bulk create multiple nodes
-- `graph_update_nodes` - Bulk update multiple nodes  
-- `graph_delete_nodes` - Bulk delete multiple nodes
-- `graph_add_edges` - Bulk create multiple relationships
-- `graph_delete_edges` - Bulk delete multiple relationships
-
-### Graph Operations - Multi-Agent Locking (4 tools)
-- `graph_lock_node` - Acquire exclusive lock on node (with timeout)
-- `graph_unlock_node` - Release lock on node
-- `graph_query_available_nodes` - Query unlocked nodes only
-- `graph_cleanup_locks` - Clean up expired locks
-
-### File Indexing System (4 tools)
-- `watch_folder` - Start watching directories for file changes
-- `unwatch_folder` - Stop watching directories
-- `index_folder` - Manual bulk indexing of directory
-- `list_watched_folders` - View active file watchers
-
-### Context Management (1 tool)
 - `get_task_context` - Get filtered context by agent type (PM/Worker/QC)
+
+### File Indexing System (3 tools)
+- `index_folder` - Index files in a directory and automatically start watching for changes
+- `remove_folder` - Stop watching a directory and remove indexed files from database
+- `list_folders` - View active file watchers
+
+### Vector Search (2 tools)
+- `vector_search_files` - Semantic search for files using vector embeddings
+- `get_embedding_stats` - Get statistics about indexed files with embeddings
+
+### Todo Management (2 tools)
+- `todo` - Individual todo operations (create, get, update, complete, delete, list)
+- `todo_list` - Todo list operations (create, get, update, archive, delete, list, add_todo, remove_todo, get_stats)
 
 ## 🔧 Troubleshooting
 
@@ -463,7 +473,8 @@ node -e "const {ChatOpenAI} = require('@langchain/openai'); const llm = new Chat
 ### Single Agent Workflow
 ```javascript
 // 1. Create a task
-const task = await graph_add_node({
+const task = await memory_node({
+  operation: "add",
   type: "todo",
   properties: {
     title: "Implement user auth",
@@ -478,13 +489,13 @@ const task = await graph_add_node({
 });
 
 // 2. Work on the task
-await graph_update_node({
+await memory_update_node({
   id: task.id,
   properties: { status: "in_progress", startedAt: Date.now() }
 });
 
 // 3. Add progress notes
-await graph_update_node({
+await memory_update_node({
   id: task.id, 
   properties: {
     notes: "Implemented JWT middleware, need to add password hashing",
@@ -493,7 +504,7 @@ await graph_update_node({
 });
 
 // 4. Complete the task
-await graph_update_node({
+await memory_update_node({
   id: task.id,
   properties: { status: "completed", completedAt: Date.now() }
 });
@@ -502,12 +513,12 @@ await graph_update_node({
 ### Multi-Agent Workflow
 ```javascript
 // PM Agent: Create task breakdown
-const project = await graph_add_node({type: "project", properties: {...}});
-const task1 = await graph_add_node({type: "todo", properties: {...}});
-await graph_add_edge({source: task1.id, target: project.id, type: "part_of"});
+const project = await memory_node({operation: "add", type: "project", properties: {...}});
+const task1 = await memory_node({operation: "add", type: "todo", properties: {...}});
+await memory_edge({operation: "add", source: task1.id, target: project.id, type: "part_of"});
 
 // Worker Agent: Claim and execute
-const locked = await graph_lock_node({
+const locked = await memory_lock_node({
   nodeId: task1.id, 
   agentId: "worker-1", 
   timeoutMs: 300000
@@ -519,12 +530,12 @@ const context = await get_task_context({
 });
 
 // Execute task with clean context...
-await graph_update_node({
+await memory_update_node({
   id: task1.id,
   properties: {workerOutput: result, status: "awaiting_qc"}
 });
 
-await graph_unlock_node({nodeId: task1.id, agentId: "worker-1"});
+await memory_unlock_node({nodeId: task1.id, agentId: "worker-1"});
 
 // QC Agent: Verify output
 const qcContext = await get_task_context({
@@ -766,7 +777,7 @@ curl -s -X POST http://localhost:3000/mcp \
 
 **✅ Implemented:**
 - **Automatic Context Enrichment**: TODOs are auto-enriched with temporal, hierarchical, file, and error context for 49-67% better search accuracy (Anthropic Contextual Retrieval research)
-- **Subgraph Extraction (`graph_get_subgraph`)**: Extract connected relationship graphs for multi-hop reasoning with optional natural language linearization (Graph-RAG methodology)
+- **Subgraph Extraction (`memory_get_subgraph`)**: Extract connected relationship graphs for multi-hop reasoning with optional natural language linearization (Graph-RAG methodology)
 - **Event-Driven Context Management**: Pull→Prune→Pull pattern validated by "Lost in the Middle" research for 90%+ context retention
 
 **🚀 In Development (v3.0+):**
@@ -784,10 +795,10 @@ Prevent race conditions in multi-agent scenarios with optimistic locking:
 
 ```typescript
 // Worker claims task
-const locked = await graph_lock_node(taskId, 'worker-1', 300000);
+const locked = await memory_lock_node(taskId, 'worker-1', 300000);
 if (locked) {
   // Execute task...
-  await graph_unlock_node(taskId, 'worker-1');
+  await memory_unlock_node(taskId, 'worker-1');
 }
 ```
 

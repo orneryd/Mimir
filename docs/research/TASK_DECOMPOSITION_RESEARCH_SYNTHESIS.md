@@ -294,7 +294,7 @@ Before finalizing success criteria:
 ### STEP 0: LEARN FROM PAST FAILURES (NEW)
 
 Before planning, query historical failures:
-1. `graph_query_nodes({type: 'todo', filters: {status: 'failure'}})`
+1. `memory_query_nodes({type: 'todo', filters: {status: 'failure'}})`
 2. Review QC feedback for common failure patterns
 3. Avoid repeating failed task structures
 4. Document lessons learned in planning notes
@@ -362,7 +362,7 @@ Before planning, query historical failures:
 ### Phase 1: Immediate (Today) - Address Novel Issues
 
 1. ✅ **Add Tool Capability Reference** to PM preamble (30 min)
-   - Document `list_dir`, `run_terminal_cmd`, `graph_search_nodes`, etc.
+   - Document `list_dir`, `run_terminal_cmd`, `memory_search_nodes`, etc.
    - Include capabilities, limitations, use cases
 
 2. ✅ **Add Anti-Pattern 12** - Contradictory Tool Requirements (5 min)

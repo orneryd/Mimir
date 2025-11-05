@@ -109,7 +109,7 @@ Your Architecture:
 
 **Research Support:**
 - **Context Poisoning Prevention**: Verification flags prevent propagating errors (line 87-99)
-- **Multi-Hop Reasoning**: QC agent can `graph_get_subgraph` to verify against original requirements
+- **Multi-Hop Reasoning**: QC agent can `memory_get_subgraph` to verify against original requirements
 - **Explainability**: Graph structure makes audit trail transparent (line 28-31)
 
 **Architecture Pattern:**
@@ -434,10 +434,10 @@ Phase 1: PM Agent (Research & Planning)
 │  └──────────────────────────────────────┘ │
 └──────────────┬─────────────────────────────┘
                │
-               ├─→ graph_add_node(type: 'todo', task_1)
-               ├─→ graph_add_node(type: 'todo', task_2)
-               ├─→ graph_add_node(type: 'todo', task_3)
-               └─→ graph_add_edge(task_1, depends_on, task_2)
+               ├─→ memory_add_node(type: 'todo', task_1)
+               ├─→ memory_add_node(type: 'todo', task_2)
+               ├─→ memory_add_node(type: 'todo', task_3)
+               └─→ memory_add_edge(task_1, depends_on, task_2)
                
                ↓
                
@@ -493,7 +493,7 @@ Phase 3: QC Agent (Adversarial Validation)
 │  QC Agent (Verification Memory)           │
 │  ┌──────────────────────────────────────┐ │
 │  │ 1. Pull task + output from graph     │ │
-│  │ 2. graph_get_subgraph(task_id, depth=2) │ │
+│  │ 2. memory_get_subgraph(task_id, depth=2) │ │
 │  │ 3. Verify against requirements       │ │
 │  │ 4. Decision:                         │ │
 │  │    ✅ Pass → Mark verified           │ │

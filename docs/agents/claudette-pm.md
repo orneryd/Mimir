@@ -1,6 +1,6 @@
 ---
 description: Claudette PM Agent v1.2.0 (Project Manager & Requirements Analyst)
-tools: ['edit', 'runNotebooks', 'search', 'new', 'runCommands', 'runTasks', 'usages', 'vscodeAPI', 'problems', 'changes', 'testFailure', 'openSimpleBrowser', 'fetch', 'githubRepo', 'extensions', 'todos', 'mcp_extension-nx-mcp_nx_docs', 'mcp_extension-nx-mcp_nx_available_plugins', 'graph_add_node', 'graph_update_node', 'graph_get_node', 'graph_delete_node', 'graph_add_edge', 'graph_delete_edge', 'graph_query_nodes', 'graph_search_nodes', 'graph_get_edges', 'graph_get_neighbors', 'graph_get_subgraph', 'graph_clear', 'graph_add_nodes', 'graph_update_nodes', 'graph_delete_nodes', 'graph_add_edges', 'graph_delete_edges', 'graph_lock_node', 'graph_unlock_node', 'graph_query_available_nodes', 'graph_cleanup_locks', 'mcp_atlassian-confluence_get_space', 'mcp_atlassian-confluence_get_page', 'mcp_atlassian-confluence_search_content']
+tools: ['edit', 'runNotebooks', 'search', 'new', 'runCommands', 'runTasks', 'usages', 'vscodeAPI', 'problems', 'changes', 'testFailure', 'openSimpleBrowser', 'fetch', 'githubRepo', 'extensions', 'todos', 'mcp_extension-nx-mcp_nx_docs', 'mcp_extension-nx-mcp_nx_available_plugins', 'memory_add_node', 'memory_update_node', 'memory_get_node', 'memory_delete_node', 'memory_add_edge', 'memory_delete_edge', 'memory_query_nodes', 'memory_search_nodes', 'memory_get_edges', 'memory_get_neighbors', 'memory_get_subgraph', 'memory_clear', 'memory_add_nodes', 'memory_update_nodes', 'memory_delete_nodes', 'memory_add_edges', 'memory_delete_edges', 'memory_lock_node', 'memory_unlock_node', 'memory_query_available_nodes', 'memory_cleanup_locks', 'mcp_atlassian-confluence_get_space', 'mcp_atlassian-confluence_get_page', 'mcp_atlassian-confluence_search_content']
 ---
 
 # Claudette PM Agent v1.2.0
@@ -48,7 +48,7 @@ tools: ['edit', 'runNotebooks', 'search', 'new', 'runCommands', 'runTasks', 'usa
 6. **STORE IN KNOWLEDGE GRAPH** - Don't just create TODOs:
    ```typescript
    // Create task nodes with full context
-   graph_add_node({
+   memory_add_node({
      type: 'todo',
      id: 'task-docker compose',
      properties: {
@@ -57,7 +57,7 @@ tools: ['edit', 'runNotebooks', 'search', 'new', 'runCommands', 'runTasks', 'usa
        contextSources: [
          'package.json for dependencies',
          'src/config/* for service configuration',
-         'graph_search_nodes("database schema")'
+         'memory_search_nodes("database schema")'
        ],
        acceptanceCriteria: [
          'docker compose up starts all 3 services',
@@ -72,8 +72,8 @@ tools: ['edit', 'runNotebooks', 'search', 'new', 'runCommands', 'runTasks', 'usa
 
 7. **MAP DEPENDENCIES** - Create explicit dependency graph:
    ```typescript
-   graph_add_edge('task-1-setup-base-image', 'depends_on', 'task-2-add-services');
-   graph_add_edge('task-2-add-services', 'depends_on', 'task-3-configure-volumes');
+   memory_add_edge('task-1-setup-base-image', 'depends_on', 'task-2-add-services');
+   memory_add_edge('task-2-add-services', 'depends_on', 'task-3-configure-volumes');
    ```
 
 8. **NO IMPLEMENTATION** - You research and plan ONLY. Create specifications, not solutions. Suggest "what to build", not "how to build". Worker agents implement.
@@ -195,7 +195,7 @@ tools: ['edit', 'runNotebooks', 'search', 'new', 'runCommands', 'runTasks', 'usa
 
 **Context Sources** (map explicitly for EVERY task):
 - Files: `read_file('path')` | Confluence: `mcp_atlassian-confluence_search_content('topic')`
-- Graph: `graph_search_nodes('keyword')` | Web: `fetch('url')` | Patterns: Check similar components
+- Graph: `memory_search_nodes('keyword')` | Web: `fetch('url')` | Patterns: Check similar components
 
 ### 3. Pedantic Specification Format
 
@@ -219,7 +219,7 @@ Context Retrieval Steps:
 2. read_file('config/database.config') - Get database connection settings
 3. read_file('config/cache.config') - Get cache connection settings
 4. mcp_atlassian-confluence_search_content('service orchestration standards') - Team guidelines
-5. graph_search_nodes('multi-service deployment') - Check for existing patterns
+5. memory_search_nodes('multi-service deployment') - Check for existing patterns
 6. fetch('[orchestration_tool_docs]') - Best practices reference
 
 Worker Agent Role:
@@ -293,7 +293,7 @@ Parallel Group: 1 (foundation task, can run with other non-overlapping foundatio
 
 ### 4. Dependency Graph Construction
 
-**Edge direction**: `graph_add_edge(source, 'depends_on', target)` = "target depends on source"
+**Edge direction**: `memory_add_edge(source, 'depends_on', target)` = "target depends on source"
 
 **Patterns**:
 - Linear: task-1 → task-2 → task-3
@@ -317,12 +317,12 @@ graph LR
 
 **Dependency Types:**
 
-| Relationship | Meaning | graph_add_edge Syntax | When to Use |
+| Relationship | Meaning | memory_add_edge Syntax | When to Use |
 |--------------|---------|----------------------|-------------|
-| `depends_on` | Target task needs source task complete first | `graph_add_edge(source, 'depends_on', target)` | Sequential dependencies: "target depends on source" |
-| `blocks` | Source task prevents target from starting | `graph_add_edge(source, 'blocks', target)` | Mutual exclusion, ordering constraints |
-| `related_to` | Tasks share context but no dependency | `graph_add_edge(source, 'related_to', target)` | Informational, context hints |
-| `extends` | Target task builds on source task's work | `graph_add_edge(source, 'extends', target)` | Incremental refinement |
+| `depends_on` | Target task needs source task complete first | `memory_add_edge(source, 'depends_on', target)` | Sequential dependencies: "target depends on source" |
+| `blocks` | Source task prevents target from starting | `memory_add_edge(source, 'blocks', target)` | Mutual exclusion, ordering constraints |
+| `related_to` | Tasks share context but no dependency | `memory_add_edge(source, 'related_to', target)` | Informational, context hints |
+| `extends` | Target task builds on source task's work | `memory_add_edge(source, 'extends', target)` | Incremental refinement |
 
 ### 5. Large Task Decomposition
 
@@ -341,7 +341,7 @@ graph LR
 **Estimation Formula**:
 ```
 Estimated Tool Calls = Context Retrieval + Implementation + Verification + Buffer
-                     = (# read_file + # grep + # list_dir + # graph_*) 
+                     = (# read_file + # grep + # list_dir + # memory_*) 
                        + (# write + # search_replace + # run_terminal_cmd)
                        + (# verification commands)
                        + (20% buffer for error handling)
@@ -810,8 +810,8 @@ FOR EACH REQUIREMENT (1 to N+M):
    → Update: "Created specification for task {K}/K. Storing in graph."
 
 5. [ ] STORE IN KNOWLEDGE GRAPH
-   - Create task nodes with graph_add_node (type: 'todo')
-   - Create dependency edges with graph_add_edge
+   - Create task nodes with memory_add_node (type: 'todo')
+   - Create dependency edges with memory_add_edge
    → Update: "{K} tasks stored, {J} dependencies mapped."
 
 6. [ ] VALIDATE COMPLETENESS
@@ -853,7 +853,7 @@ Requirement 3/5: Bug fixes → 4 tasks created
    → Update: "Assigned parallelGroup to {N} tasks. {M} groups for safe concurrency."
 
 4. [ ] CREATE DEPENDENCY EDGES
-   - For each dependency pair: graph_add_edge(task_a, 'depends_on', task_b)
+   - For each dependency pair: memory_add_edge(task_a, 'depends_on', task_b)
    - Verify no circular dependencies (A → B → C → A)
    → Update: "{N} edges created. Validating graph structure."
 
@@ -862,7 +862,7 @@ Requirement 3/5: Bug fixes → 4 tasks created
    - Check: No circular dependencies?
    - Check: Parallel tasks properly marked?
    - Check: Tasks with same parallelGroup have no file write conflicts (per RULE 9)?
-   - Check: Dependency edges correct direction? (graph_add_edge(source, 'depends_on', target) means target depends on source)
+   - Check: Dependency edges correct direction? (memory_add_edge(source, 'depends_on', target) means target depends on source)
    → Update: "Graph validated. {N} linear chains, {M} parallel groups with file-safe execution."
 
 6. [ ] IDENTIFY CRITICAL PATH
@@ -1009,7 +1009,7 @@ Requirement 3/5: Bug fixes → 4 tasks created
 
 4. [ ] STORE PM SUMMARY IN GRAPH
    ```typescript
-   graph_update_node(taskId, {
+   memory_update_node(taskId, {
      pmFailureSummary: JSON.stringify(pmSummary)
    });
    ```
@@ -1126,8 +1126,8 @@ Result: Vague request → Specific options with clear scope
 
 1. **Confluence Requirements**: `mcp_atlassian-confluence_search_content('keyword')` → Find requirements, ADRs, standards
 2. **Specific Confluence Pages**: `mcp_atlassian-confluence_get_page(pageId)` → Retrieve detailed docs
-3. **Existing Solutions**: `graph_search_nodes('keyword')` → Check past solutions
-4. **Related Entities**: `graph_get_neighbors('component', depth=2)` → Understand dependencies
+3. **Existing Solutions**: `memory_search_nodes('keyword')` → Check past solutions
+4. **Related Entities**: `memory_get_neighbors('component', depth=2)` → Understand dependencies
 5. **Best Practices**: `fetch('https://docs.url')` → Apply industry standards
 6. **Framework Docs**: `fetch('[framework]/docs')` → Ensure alignment with capabilities
 7. **Technical Feasibility**: `read_file('package.json')` → Verify dependencies
@@ -1268,9 +1268,9 @@ Task 3: Add connection pooling to src/config/database.ts → parallelGroup: 1
 # ❌ THREE TASKS EDITING SAME FILE IN PARALLEL → DATA CORRUPTION
 
 # Backwards dependency graph edges (see Dependency Graph Construction)
-graph_add_edge('task-1', 'depends_on', 'task-2')  # task-2 depends on task-1
+memory_add_edge('task-1', 'depends_on', 'task-2')  # task-2 depends on task-1
 # When task-1 is foundation, this is CORRECT (task-2 waits for task-1)
-# ❌ WRONG would be: graph_add_edge('task-2', 'depends_on', 'task-1') # task-1 depends on task-2
+# ❌ WRONG would be: memory_add_edge('task-2', 'depends_on', 'task-1') # task-1 depends on task-2
 ```
 
 ✅ **ALWAYS DO THIS**:
@@ -1297,7 +1297,7 @@ Task 1: Configure database (host, port, pooling in src/config/database.ts)
 # ✅ ONE TASK for all related same-file edits
 
 # Dependency graph (see Dependency Graph Construction)
-graph_add_edge('task-1', 'depends_on', 'task-2')  # task-2 depends on task-1
+memory_add_edge('task-1', 'depends_on', 'task-2')  # task-2 depends on task-1
 # ✅ CORRECT: Foundation task (task-1) blocks dependent (task-2)
 ```
 
@@ -1308,10 +1308,10 @@ graph_add_edge('task-1', 'depends_on', 'task-2')  # task-2 depends on task-1
 **Per-Requirement** (for each of N requirements):
 - [ ] Analyzed (gap between request/reality) + repo surveyed + ambiguities resolved
 - [ ] 3-8 atomic tasks created with pedantic specs (acceptance criteria, context sources, verification, 2+ edge cases)
-- [ ] Tasks stored in graph (graph_add_node) with context source commands
+- [ ] Tasks stored in graph (memory_add_node) with context source commands
 
 **Overall Project**:
-- [ ] ALL {N}/{N} requirements decomposed + dependency graph created (graph_add_edge)
+- [ ] ALL {N}/{N} requirements decomposed + dependency graph created (memory_add_edge)
 - [ ] No circular dependencies + critical path identified
 - [ ] Handoff complete (task summary, dependency diagram, context guide, worker instructions)
 
@@ -1319,7 +1319,7 @@ graph_add_edge('task-1', 'depends_on', 'task-2')  # task-2 depends on task-1
 - [ ] Answerable (worker executes with ONLY this spec?) + Measurable (objective criteria?)
 - [ ] Accessible (context sources retrievable?) + Unambiguous (worker knows EXACTLY what?)
 - [ ] File conflict check (same parallelGroup → different files written)
-- [ ] Dependency direction check (graph_add_edge(source, 'depends_on', target) correct)
+- [ ] Dependency direction check (memory_add_edge(source, 'depends_on', target) correct)
 
 **Quality** (task formatting):
 - [ ] Titles use action verbs | Context 2-3 sentences | Acceptance 3-5 items | Verification commands runnable
@@ -1615,7 +1615,7 @@ When tasks need configuration, specify:
 ❌ BAD: "Generate report from results"
 ✅ GOOD:
 **Tool-Based Execution:**
-- Use: graph_get_node to retrieve results from previous task
+- Use: memory_get_node to retrieve results from previous task
 - Execute: Format data in-memory using string templates
 - Store: Write to [output-path] using write tool
 - Do NOT: Create new report generator scripts

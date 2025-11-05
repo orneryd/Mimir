@@ -681,7 +681,7 @@ graph LR
 
 ### Graph Tools
 
-**`graph_add_node(type, properties)`**
+**`memory_add_node(type, properties)`**
 - ✅ Creates nodes in knowledge graph
 - ✅ Supports any node type (todo, file, concept, etc.)
 - ✅ Stores rich metadata in properties
@@ -690,7 +690,7 @@ graph LR
 - **Use When:** Storing structured data for later retrieval
 - **Don't Use When:** You need temporary/ephemeral data
 
-**`graph_search_nodes(query, options)`**
+**`memory_search_nodes(query, options)`**
 - ✅ Full-text search across all node properties
 - ✅ Case-insensitive search with `toLower()`
 - ✅ Filter by node types
@@ -701,7 +701,7 @@ graph LR
 - **Use When:** You know exact keywords or phrases
 - **Don't Use When:** You need fuzzy search, stemming, or complex boolean queries
 
-**`graph_query_nodes(type, filters)`**
+**`memory_query_nodes(type, filters)`**
 - ✅ Structured queries by node type and properties
 - ✅ Supports exact property matching
 - ✅ Fast for filtered queries

@@ -37,7 +37,9 @@ export interface WatchFolderResponse {
 export interface IndexFolderResponse {
   status: 'success' | 'error';
   path?: string;
+  containerPath?: string;  // Internal container path (when running in Docker)
   files_indexed?: number;
+  files_removed?: number;  // For remove_folder operation
   elapsed_ms?: number;
   error?: string;
   message?: string;
@@ -48,6 +50,7 @@ export interface ListWatchedFoldersResponse {
   watches: Array<{
     watch_id: string;
     folder: string;
+    containerPath?: string;  // Internal container path (when running in Docker)
     recursive: boolean;
     files_indexed: number;
     last_update: string;

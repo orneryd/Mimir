@@ -270,5 +270,17 @@
       "model": "gpt-4.1",
       "rationale": "QC agent uses same model for validation"
     }
+  },
+  "embeddings": {
+    "enabled": true,
+    "provider": "ollama",
+    "model": "mxbai-embed-large",
+    "dimensions": 1024,
+    "chunkSize": 1024,
+    "chunkOverlap": 100
+  },
+  "features": {
+    "pmModelSuggestions": false,
+    "vectorEmbeddings": true
   }
 }

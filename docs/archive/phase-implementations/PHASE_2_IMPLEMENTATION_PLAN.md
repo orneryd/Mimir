@@ -161,7 +161,7 @@ export class ContextManager {
 Verify worker output against requirements before storing in graph, catching errors early and preventing error propagation.
 
 ### Current State
-✅ Subgraph extraction exists (`graph_get_subgraph`)  
+✅ Subgraph extraction exists (`memory_get_subgraph`)  
 ✅ Task storage in graph  
 ❌ No verification mechanism  
 ❌ No requirement extraction from subgraph  

@@ -1,329 +1,184 @@
 // ============================================================================
-// Unified Graph Tools - Simple and Clean
-// 22 tools: 12 single operations + 5 batch operations + 4 locking operations + 1 context isolation
+// Unified Graph Tools - Consolidated for Better UX
+// 6 tools: memory_node, memory_edge, memory_batch, memory_lock, get_task_context, memory_clear
+// Reduced from 22 tools while maintaining all functionality
 // ============================================================================
 
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 
 export const GRAPH_TOOLS: Tool[] = [
   // ============================================================================
-  // SINGLE OPERATIONS (12 tools)
+  // TOOL 1: memory_node - All node operations
   // ============================================================================
-  
   {
-    name: "graph_add_node",
-    description: "Create a node to offload conversation details into external memory. Store file paths, errors, code snippets, decisions in properties. Returns an ID—use this ID to reference the node later instead of repeating details. Think of this as saving to your persistent memory. For TODOs: include description, status, priority. For files: path, language. After creation, use graph_get_node with the returned ID to retrieve full details.",
+    name: "memory_node",
+    description: `Manage memory nodes (knowledge entries). Operations: add, get, update, delete, query, search.
+    
+Nodes store conversation details, decisions, file references, concepts. All nodes automatically get semantic embeddings for later retrieval via vector_search_nodes. Use IDs to reference nodes instead of repeating details.
+
+Examples:
+- Add: memory_node(operation='add', type='memory', properties={title: 'X', content: 'Y'})
+- Get: memory_node(operation='get', id='memory-123')
+- Query: memory_node(operation='query', type='todo', filters={status: 'pending'})
+- Search: memory_node(operation='search', query='authentication code') [exact text match]`,
     inputSchema: {
       type: "object",
       properties: {
+        operation: {
+          type: "string",
+          enum: ["add", "get", "update", "delete", "query", "search"],
+          description: "Operation to perform on nodes"
+        },
+        id: {
+          type: "string",
+          description: "Node ID (required for get, update, delete)"
+        },
         type: {
           type: "string",
-          enum: ["todo", "file", "function", "class", "module", "concept", "person", "project", "custom"],
-          description: "Type of node to create"
+          enum: ["todo", "todoList", "memory", "file", "function", "class", "module", "concept", "person", "project", "custom"],
+          description: "Node type (required for add, optional for query)"
         },
         properties: {
           type: "object",
-          description: "Node properties (e.g., {description: 'Fix bug', status: 'pending', priority: 'high', context: {...}}).",
+          description: "Node properties for add/update operations",
           additionalProperties: true
-        }
-      },
-      required: ["type", "properties"]
-    }
-  },
-  
-  {
-    name: "graph_get_node",
-    description: "Retrieve full node details by ID. Use this to restore context when resuming work instead of keeping details in conversation. This is how you recall stored memories. Returns all properties, timestamps, and metadata. Use the ID from graph_add_node responses.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        id: {
-          type: "string",
-          description: "Node ID to retrieve (e.g., 'todo-1-xxxxx', 'file-2-xxxxx')"
-        }
-      },
-      required: ["id"]
-    }
-  },
-  
-  {
-    name: "graph_update_node",
-    description: "Update node properties (merges with existing). Use to incrementally add context, change status, append findings without restating everything. Properties merge deeply—new fields added, existing fields updated. Perfect for tracking TODO progress (pending→in_progress→completed) or adding research findings over time.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        id: {
-          type: "string",
-          description: "Node ID to update"
         },
-        properties: {
+        filters: {
           type: "object",
-          description: "Properties to update or add (e.g., {status: 'completed', results: {...}}). Merges with existing properties.",
+          description: "Property filters for query (e.g., {status: 'pending', priority: 'high'})",
+          additionalProperties: true
+        },
+        query: {
+          type: "string",
+          description: "Search query text for search operation (full-text search)"
+        },
+        options: {
+          type: "object",
+          description: "Search options: {limit: 100, offset: 0, types: ['todo', 'memory']}",
           additionalProperties: true
         }
       },
-      required: ["id", "properties"]
+      required: ["operation"]
     }
   },
-  
+
+  // ============================================================================
+  // TOOL 2: memory_edge - All edge/relationship operations
+  // ============================================================================
   {
-    name: "graph_delete_node",
-    description: "Delete a node and all its relationships. Use for cleanup after task completion or removing obsolete context. All edges connected to this node are automatically deleted. Returns success status.",
+    name: "memory_edge",
+    description: `Manage relationships between nodes. Operations: add, delete, get, neighbors, subgraph.
+    
+Build knowledge graphs by linking nodes (e.g., 'file depends_on module', 'todo part_of project').
+
+Examples:
+- Add: memory_edge(operation='add', source='todo-1', target='project-2', type='part_of')
+- Get edges: memory_edge(operation='get', node_id='todo-1', direction='both')
+- Neighbors: memory_edge(operation='neighbors', node_id='todo-1', edge_type='depends_on')
+- Subgraph: memory_edge(operation='subgraph', node_id='project-1', depth=2)`,
     inputSchema: {
       type: "object",
       properties: {
-        id: {
+        operation: {
           type: "string",
-          description: "Node ID to delete"
-        }
-      },
-      required: ["id"]
-    }
-  },
-  
-  {
-    name: "graph_add_edge",
-    description: "Link two nodes with a relationship to model dependencies, hierarchies, or associations. Use to build your context graph showing how entities relate (e.g., 'file depends_on module', 'TODO assigned_to person', 'project contains file'). Store relationship details in properties. Later use graph_get_neighbors or graph_get_subgraph to traverse these connections.",
-    inputSchema: {
-      type: "object",
-      properties: {
+          enum: ["add", "delete", "get", "neighbors", "subgraph"],
+          description: "Operation to perform on edges/relationships"
+        },
         source: {
           type: "string",
-          description: "Source node ID (the 'from' node)"
+          description: "Source node ID (required for add)"
         },
         target: {
           type: "string",
-          description: "Target node ID (the 'to' node)"
+          description: "Target node ID (required for add)"
+        },
+        edge_id: {
+          type: "string",
+          description: "Edge ID (required for delete)"
+        },
+        node_id: {
+          type: "string",
+          description: "Node ID (required for get, neighbors, subgraph)"
         },
         type: {
           type: "string",
           enum: ["contains", "depends_on", "relates_to", "implements", "calls", "imports", "assigned_to", "parent_of", "blocks", "references"],
-          description: "Type of relationship (e.g., 'depends_on' for dependencies, 'contains' for hierarchy)"
+          description: "Edge type (required for add)"
         },
-        properties: {
-          type: "object",
-          description: "Optional edge properties (e.g., {weight: 1, reason: 'shared interface'})",
-          additionalProperties: true
-        }
-      },
-      required: ["source", "target", "type"]
-    }
-  },
-  
-  {
-    name: "graph_delete_edge",
-    description: "Delete a single edge by ID",
-    inputSchema: {
-      type: "object",
-      properties: {
-        edgeId: {
+        edge_type: {
           type: "string",
-          description: "Edge ID to delete"
-        }
-      },
-      required: ["edgeId"]
-    }
-  },
-  
-  {
-    name: "graph_query_nodes",
-    description: "Query nodes by type and properties. Use to find nodes when you don't have IDs (e.g., 'find all pending TODOs', 'find files with path containing auth'). Returns array of matching nodes. Combine with graph_get_subgraph to explore connections. Use this at conversation start to see what's in memory: graph_query_nodes({type: 'todo', filters: {status: 'in_progress'}}).",
-    inputSchema: {
-      type: "object",
-      properties: {
-        type: {
-          type: "string",
-          enum: ["todo", "file", "function", "class", "module", "concept", "person", "project", "custom"],
-          description: "Filter by node type (optional, omit to query all types)"
-        },
-        filters: {
-          type: "object",
-          description: "Property filters for exact matches (e.g., {status: 'pending', priority: 'high'})",
-          additionalProperties: true
-        }
-      }
-    }
-  },
-  
-  {
-    name: "graph_search_nodes",
-    description: "Full-text search across all nodes. Use when you've lost track of details and need to find nodes containing keywords (e.g., search 'authentication' to find all auth-related nodes). This is how you search your stored memories. Searches all properties, case-insensitive. Returns nodes ranked by relevance. Use after long conversations to recover context.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        query: {
-          type: "string",
-          description: "Search query text (e.g., 'bug fix', 'API endpoint', 'authentication')"
-        },
-        options: {
-          type: "object",
-          properties: {
-            limit: { type: "number", description: "Max results (default: 100)" },
-            offset: { type: "number", description: "Skip N results for pagination (default: 0)" },
-            types: {
-              type: "array",
-              items: { type: "string" },
-              description: "Filter by node types (e.g., ['todo', 'file'])"
-            }
-          }
-        }
-      },
-      required: ["query"]
-    }
-  },
-  
-  {
-    name: "graph_get_edges",
-    description: "Get all edges connected to a node",
-    inputSchema: {
-      type: "object",
-      properties: {
-        nodeId: {
-          type: "string",
-          description: "Node ID"
+          description: "Filter by edge type (optional for neighbors)"
         },
         direction: {
           type: "string",
           enum: ["in", "out", "both"],
-          description: "Edge direction (default: both)"
-        }
-      },
-      required: ["nodeId"]
-    }
-  },
-  
-  {
-    name: "graph_get_neighbors",
-    description: "Find all nodes connected to a given node. Use to discover related entities (e.g., 'what files are related to this TODO?', 'what depends on this module?'). Returns array of connected nodes with relationship info. Specify depth for multi-hop traversal. Use after creating relationships to verify connections.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        nodeId: {
-          type: "string",
-          description: "Starting node ID to find neighbors for"
-        },
-        edgeType: {
-          type: "string",
-          description: "Filter by edge type (e.g., 'depends_on', 'contains')"
+          description: "Edge direction for get operation (default: both)"
         },
         depth: {
           type: "number",
-          description: "Traversal depth: 1=direct neighbors, 2=neighbors of neighbors, etc. (default: 1)"
-        }
-      },
-      required: ["nodeId"]
-    }
-  },
-  
-  {
-    name: "graph_get_subgraph",
-    description: "Extract a connected subgraph for multi-hop reasoning. Returns all nodes and edges within N hops of start node. Perfect for understanding complex relationships like 'what files depend on this TODO?' or 'show me full context around this concept'. Use depth=1 for immediate connections, depth=2 for deeper context. Essential for Graph-RAG workflows to gather comprehensive context.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        nodeId: {
-          type: "string",
-          description: "Center node ID to start extraction from"
+          description: "Traversal depth for neighbors/subgraph (default: 1 for neighbors, 2 for subgraph)"
         },
-        depth: {
-          type: "number",
-          description: "Traversal depth: how many hops to explore (1=immediate, 2=neighborhood, 3+=extended context, default: 2)"
+        properties: {
+          type: "object",
+          description: "Edge properties for add operation",
+          additionalProperties: true
         }
       },
-      required: ["nodeId"]
+      required: ["operation"]
     }
   },
-  
+
+  // ============================================================================
+  // TOOL 3: memory_batch - Bulk operations
+  // ============================================================================
   {
-    name: "graph_clear",
-    description: "Clear data from the graph. SAFETY: To clear all data, you MUST explicitly pass type='ALL'. To clear specific node types, pass the node type. Returns counts of deleted nodes and edges.",
+    name: "memory_batch",
+    description: `Perform bulk operations on multiple nodes/edges efficiently. Operations: add_nodes, update_nodes, delete_nodes, add_edges, delete_edges.
+    
+Use for batch processing (e.g., creating multiple todos, bulk updates).
+
+Examples:
+- Add nodes: memory_batch(operation='add_nodes', nodes=[{type: 'todo', properties: {...}}, ...])
+- Update nodes: memory_batch(operation='update_nodes', updates=[{id: 'todo-1', properties: {status: 'completed'}}, ...])
+- Delete nodes: memory_batch(operation='delete_nodes', ids=['todo-1', 'todo-2'])`,
     inputSchema: {
       type: "object",
       properties: {
-        type: {
+        operation: {
           type: "string",
-          enum: ["ALL", "todo", "file", "function", "class", "module", "concept", "person", "project", "custom"],
-          description: "Node type to clear, or 'ALL' to clear entire graph (use with extreme caution!). Required parameter."
-        }
-      },
-      required: ["type"]
-    }
-  },
-  
-  // ============================================================================
-  // BATCH OPERATIONS (5 tools)
-  // ============================================================================
-  
-  {
-    name: "graph_add_nodes",
-    description: "Bulk create multiple nodes in one efficient transaction. Use for importing file structures, creating multiple TODOs, or initializing project hierarchies. Much faster than multiple graph_add_node calls. Returns array of created nodes with IDs. Perfect for file indexing workflows.",
-    inputSchema: {
-      type: "object",
-      properties: {
+          enum: ["add_nodes", "update_nodes", "delete_nodes", "add_edges", "delete_edges"],
+          description: "Batch operation to perform"
+        },
         nodes: {
           type: "array",
+          description: "Array of nodes for add_nodes: [{type: 'todo', properties: {...}}, ...]",
           items: {
             type: "object",
             properties: {
               type: { type: "string" },
               properties: { type: "object", additionalProperties: true }
-            },
-            required: ["type", "properties"]
-          },
-          description: "Array of nodes to create (e.g., [{type: 'file', properties: {path: 'a.ts'}}, {type: 'file', properties: {path: 'b.ts'}}])"
-        }
-      },
-      required: ["nodes"]
-    }
-  },
-  
-  {
-    name: "graph_update_nodes",
-    description: "Bulk update multiple nodes in one efficient transaction. Use for batch status changes, adding common properties, or updating multiple TODOs. Properties merge with existing data. Returns array of updated nodes.",
-    inputSchema: {
-      type: "object",
-      properties: {
+            }
+          }
+        },
         updates: {
           type: "array",
+          description: "Array of updates for update_nodes: [{id: 'todo-1', properties: {...}}, ...]",
           items: {
             type: "object",
             properties: {
               id: { type: "string" },
               properties: { type: "object", additionalProperties: true }
-            },
-            required: ["id", "properties"]
-          },
-          description: "Array of node updates (e.g., [{id: 'todo-1-xxx', properties: {status: 'completed'}}, {...}])"
-        }
-      },
-      required: ["updates"]
-    }
-  },
-  
-  {
-    name: "graph_delete_nodes",
-    description: "Bulk delete multiple nodes and their relationships in one transaction. Use for cleanup after project completion. All edges connected to these nodes are automatically deleted. Returns count of deleted nodes.",
-    inputSchema: {
-      type: "object",
-      properties: {
+            }
+          }
+        },
         ids: {
           type: "array",
-          items: { type: "string" },
-          description: "Array of node IDs to delete (e.g., ['todo-1-xxx', 'file-2-yyy'])"
-        }
-      },
-      required: ["ids"]
-    }
-  },
-  
-  {
-    name: "graph_add_edges",
-    description: "Bulk create multiple relationships in one efficient transaction. Use to connect files to modules, TODOs to people, or build dependency graphs. Much faster than multiple graph_add_edge calls. Returns array of created edges with IDs.",
-    inputSchema: {
-      type: "object",
-      properties: {
+          description: "Array of IDs for delete_nodes/delete_edges",
+          items: { type: "string" }
+        },
         edges: {
           type: "array",
+          description: "Array of edges for add_edges: [{source: 'a', target: 'b', type: 'depends_on'}, ...]",
           items: {
             type: "object",
             properties: {
@@ -331,117 +186,65 @@ export const GRAPH_TOOLS: Tool[] = [
               target: { type: "string" },
               type: { type: "string" },
               properties: { type: "object", additionalProperties: true }
-            },
-            required: ["source", "target", "type"]
-          },
-          description: "Array of edges to create (e.g., [{source: 'file-1', target: 'module-2', type: 'imports'}, {...}])"
+            }
+          }
         }
       },
-      required: ["edges"]
-    }
-  },
-  
-  {
-    name: "graph_delete_edges",
-    description: "Bulk delete multiple relationships in one transaction. Use for cleanup or restructuring. Returns count of deleted edges.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        edgeIds: {
-          type: "array",
-          items: { type: "string" },
-          description: "Array of edge IDs to delete (get IDs from graph_get_edges)"
-        }
-      },
-      required: ["edgeIds"]
+      required: ["operation"]
     }
   },
 
   // ============================================================================
-  // MULTI-AGENT LOCKING (4 tools)
+  // TOOL 4: memory_lock - Multi-agent locking
   // ============================================================================
-
   {
-    name: "graph_lock_node",
-    description: "Acquire exclusive lock on a node (typically a TODO) for multi-agent coordination. Prevents race conditions when multiple workers claim tasks. Lock automatically expires after timeout. Returns true if lock acquired, false if already locked by another agent.",
+    name: "memory_lock",
+    description: `Manage locks for multi-agent coordination. Operations: acquire, release, query_available, cleanup.
+    
+Prevent race conditions when multiple agents work on same tasks.
+
+Examples:
+- Acquire: memory_lock(operation='acquire', node_id='todo-1', agent_id='worker-1')
+- Release: memory_lock(operation='release', node_id='todo-1', agent_id='worker-1')
+- Query: memory_lock(operation='query_available', type='todo', filters={status: 'pending'})
+- Cleanup: memory_lock(operation='cleanup')`,
     inputSchema: {
       type: "object",
       properties: {
-        nodeId: {
+        operation: {
           type: "string",
-          description: "Node ID to lock"
+          enum: ["acquire", "release", "query_available", "cleanup"],
+          description: "Lock operation to perform"
         },
-        agentId: {
+        node_id: {
           type: "string",
-          description: "Agent claiming the lock (e.g., 'worker-1', 'pm-agent')"
+          description: "Node ID (required for acquire, release)"
         },
-        timeoutMs: {
+        agent_id: {
+          type: "string",
+          description: "Agent ID (required for acquire, release)"
+        },
+        timeout_ms: {
           type: "number",
-          description: "Lock expiry in milliseconds (default: 300000 = 5 minutes)",
-          default: 300000
-        }
-      },
-      required: ["nodeId", "agentId"]
-    }
-  },
-
-  {
-    name: "graph_unlock_node",
-    description: "Release lock on a node. Only the agent that acquired the lock can release it. Use after completing work on a locked task.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        nodeId: {
-          type: "string",
-          description: "Node ID to unlock"
+          description: "Lock timeout in milliseconds (default: 300000 = 5 min)"
         },
-        agentId: {
-          type: "string",
-          description: "Agent releasing the lock (must match lock owner)"
-        }
-      },
-      required: ["nodeId", "agentId"]
-    }
-  },
-
-  {
-    name: "graph_query_available_nodes",
-    description: "Query nodes filtered by lock status. Use to find available (unlocked) tasks for workers to claim. Returns only nodes that are not locked or have expired locks.",
-    inputSchema: {
-      type: "object",
-      properties: {
         type: {
           type: "string",
-          enum: ["todo", "file", "function", "class", "module", "concept", "person", "project", "custom"],
-          description: "Filter by node type (optional)"
+          description: "Node type filter for query_available"
         },
         filters: {
           type: "object",
-          description: "Additional property filters (e.g., {status: 'pending', priority: 'high'})",
+          description: "Property filters for query_available",
           additionalProperties: true
-        },
-        availableOnly: {
-          type: "boolean",
-          description: "If true, only return unlocked or expired-lock nodes (default: true)",
-          default: true
         }
-      }
-    }
-  },
-
-  {
-    name: "graph_cleanup_locks",
-    description: "Clean up expired locks across all nodes. Should be called periodically by PM agent or system. Returns number of locks cleaned up.",
-    inputSchema: {
-      type: "object",
-      properties: {}
+      },
+      required: ["operation"]
     }
   },
 
   // ============================================================================
-  // CONTEXT ISOLATION (1 tool)
+  // TOOL 5: get_task_context - Context isolation (specialized)
   // ============================================================================
-
   {
     name: "get_task_context",
     description: "Get filtered task context based on agent type (PM/worker/QC). Server-side context isolation for multi-agent workflows. PM agents get full context (100%), workers get minimal context (<10% - only files, dependencies, requirements), QC agents get requirements + worker output for verification. Implements 90%+ context reduction for worker agents.",
@@ -459,6 +262,25 @@ export const GRAPH_TOOLS: Tool[] = [
         }
       },
       required: ["taskId", "agentType"]
+    }
+  },
+
+  // ============================================================================
+  // TOOL 6: memory_clear - Dangerous operation (deserves own tool)
+  // ============================================================================
+  {
+    name: "memory_clear",
+    description: "Clear data from the graph. SAFETY: To clear all data, you MUST explicitly pass type='ALL'. To clear specific node types, pass the node type. Returns counts of deleted nodes and edges.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        type: {
+          type: "string",
+          enum: ["ALL", "todo", "todoList", "memory", "file", "function", "class", "module", "concept", "person", "project", "custom"],
+          description: "Node type to clear, or 'ALL' to clear entire graph (use with extreme caution!). Required parameter."
+        }
+      },
+      required: ["type"]
     }
   }
 ];

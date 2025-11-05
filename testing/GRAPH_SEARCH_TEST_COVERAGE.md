@@ -2,7 +2,7 @@
 
 **Test File**: `testing/graph-search-nodes.test.ts`
 
-This comprehensive test suite validates all permutations of the `graph_search_nodes` MCP tool.
+This comprehensive test suite validates all permutations of the `memory_search_nodes` MCP tool.
 
 ---
 

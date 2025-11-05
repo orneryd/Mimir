@@ -127,7 +127,7 @@ PM agent generated OLD-style prompts without Tool-Based Execution template:
 **Tool-Based Execution:**
 - Use: run_terminal_cmd to execute Node.js script that queries Prisma
 - Execute: One-liner Prisma query to get distinct pages
-- Store: graph_add_node with properties: { pagesInDB: [urls], totalPagesInDB: N }
+- Store: memory_add_node with properties: { pagesInDB: [urls], totalPagesInDB: N }
 - Do NOT: Create new query scripts
 ```
 
@@ -160,7 +160,7 @@ PM agent generated OLD-style prompts without Tool-Based Execution template:
 - Workers created CSV files instead of graph nodes
 
 **Root Cause:**
-- PM agent didn't specify `graph_add_node` in ANY task prompt
+- PM agent didn't specify `memory_add_node` in ANY task prompt
 - PM agent specified "Output: CSV file" instead of "Store: graph node"
 - Workers defaulted to file creation
 - No enforcement mechanism for graph storage
@@ -172,7 +172,7 @@ PM agent generated OLD-style prompts without Tool-Based Execution template:
 - Complete loss of observability
 
 **Fix Required:**
-1. PM agent MUST specify `graph_add_node` in every task
+1. PM agent MUST specify `memory_add_node` in every task
 2. Add "Do NOT create new files" to every task
 3. Add graph storage verification to QC agent
 4. Add automatic graph node creation at task start
@@ -284,7 +284,7 @@ Task 3.1.x Prompt:
 **CRITICAL**: EVERY task MUST include a Tool-Based Execution section. No exceptions.
 
 **Validation Checklist:**
-- [ ] "Use:" line specifies exact tool (run_terminal_cmd, graph_add_node, etc.)
+- [ ] "Use:" line specifies exact tool (run_terminal_cmd, memory_add_node, etc.)
 - [ ] "Execute:" line specifies execution mode (in-memory, existing script, etc.)
 - [ ] "Store:" line specifies output location (graph node, stdout, file path)
 - [ ] "Do NOT:" line explicitly states what NOT to create
@@ -319,10 +319,10 @@ const executor = new AgentExecutor({
 ```typescript
 **CRITICAL: Graph Storage Requirements**
 
-EVERY task MUST store its output in the graph using graph_add_node. No exceptions.
+EVERY task MUST store its output in the graph using memory_add_node. No exceptions.
 
 **Required in every task prompt:**
-- Store: graph_add_node with properties: { [task-specific data] }
+- Store: memory_add_node with properties: { [task-specific data] }
 - Do NOT: Create new files, write to filesystem (except final reports)
 
 **Validation:**
@@ -350,7 +350,7 @@ Before breaking down user requirements, create Task 0:
 **Tool-Based Execution:**
 - Use: run_terminal_cmd to check available tools
 - Execute: which node && which npm && which docker
-- Store: graph_add_node with properties: { availableTools: [...], missingTools: [...] }
+- Store: memory_add_node with properties: { availableTools: [...], missingTools: [...] }
 - Do NOT: Create new validation scripts
 
 **Verification Criteria:**
@@ -441,7 +441,7 @@ Add to QC prompt generation:
 ```markdown
 **Graph Storage Verification (CRITICAL):**
 
-1. Verify task created graph node using graph_get_node
+1. Verify task created graph node using memory_get_node
 2. Verify node contains expected properties
 3. Verify node status is 'completed' or 'awaiting_qc'
 4. If no graph node found: FAIL with score 0
@@ -470,8 +470,8 @@ Add to QC prompt generation:
 Before finalizing task breakdown, verify EVERY task includes:
 
 - [ ] Tool-Based Execution section (Use/Execute/Store/Do NOT)
-- [ ] Explicit tool names (run_terminal_cmd, graph_add_node, etc.)
-- [ ] Graph storage instruction (graph_add_node with properties)
+- [ ] Explicit tool names (run_terminal_cmd, memory_add_node, etc.)
+- [ ] Graph storage instruction (memory_add_node with properties)
 - [ ] "Do NOT" statement (create new files, write code, etc.)
 - [ ] Verification criteria (measurable, testable)
 - [ ] Time estimate with multipliers
@@ -491,7 +491,7 @@ If ANY task is missing ANY item, revise before proceeding.
 If a task requires >30 tool calls (estimated), split into subtasks:
 - Subtask size: 15-20 tool calls each
 - Each subtask stores intermediate results in graph
-- Next subtask retrieves from graph using graph_get_node
+- Next subtask retrieves from graph using memory_get_node
 
 **Complexity Indicators:**
 - Multiple data sources (>2)
@@ -608,8 +608,8 @@ For tasks with external dependencies, specify fallback:
   - **Files:** `src/orchestrator/task-executor.ts`, `docs/agents/claudette-pm.md`, `docs/agents/WORKER_TOOL_EXECUTION.md`
   - **Changes:**
     - Phase 2 automatic diagnostic capture stores worker output (line 1405)
-    - Removed `graph_add_node`/`graph_update_node` from worker tool list
-    - Updated PM examples to use "Store: Return { ... }" instead of "Store: graph_add_node"
+    - Removed `memory_add_node`/`memory_update_node` from worker tool list
+    - Updated PM examples to use "Store: Return { ... }" instead of "Store: memory_add_node"
     - Updated worker guidance: "Return your task output. The system will store it automatically."
     - Updated PM validation checklist to verify "Return" pattern
   - **Impact:**

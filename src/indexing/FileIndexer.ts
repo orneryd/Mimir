@@ -48,9 +48,32 @@ export class FileIndexer {
       const extension = path.extname(filePath);
       const language = this.detectLanguage(filePath);
       
-      // Generate embeddings if enabled
-      let embeddingData: any = null;
+      // Check if file already has embeddings
+      let hasExistingEmbedding = false;
       if (generateEmbeddings) {
+        const checkResult = await session.run(
+          'MATCH (f:File {path: $path}) RETURN f.has_embedding AS has_embedding, f.last_modified AS last_modified',
+          { path: relativePath }
+        );
+        
+        if (checkResult.records.length > 0) {
+          hasExistingEmbedding = checkResult.records[0].get('has_embedding') === true;
+          const existingModified = checkResult.records[0].get('last_modified');
+          
+          // Re-generate if file was modified
+          if (hasExistingEmbedding && existingModified) {
+            const existingModifiedDate = new Date(existingModified);
+            if (stats.mtime > existingModifiedDate) {
+              console.log(`📝 File modified, regenerating embedding: ${relativePath}`);
+              hasExistingEmbedding = false;
+            }
+          }
+        }
+      }
+      
+      // Generate embeddings if enabled and not already present
+      let embeddingData: any = null;
+      if (generateEmbeddings && !hasExistingEmbedding) {
         await this.initEmbeddings();
         if (this.embeddingsService.isEnabled()) {
           try {
@@ -65,12 +88,14 @@ export class FileIndexer {
             console.warn(`⚠️  Failed to generate embedding for ${relativePath}: ${error.message}`);
           }
         }
+      } else if (generateEmbeddings && hasExistingEmbedding) {
+        console.log(`⏭️  Skipping embedding (already exists): ${relativePath}`);
       }
 
       // Create File node in Neo4j with optional embedding
       const cypher = embeddingData 
         ? `
-          MERGE (f:File {path: $path})
+          MERGE (f:File:Node {path: $path})
           SET 
             f.absolute_path = $absolute_path,
             f.name = $name,
@@ -81,14 +106,16 @@ export class FileIndexer {
             f.line_count = $line_count,
             f.last_modified = $last_modified,
             f.indexed_date = datetime(),
+            f.type = 'file',
             f.embedding = $embedding,
             f.embedding_dimensions = $embedding_dimensions,
             f.embedding_model = $embedding_model,
             f.has_embedding = true
           RETURN f.path AS path, f.size_bytes AS size_bytes, id(f) AS node_id
         `
-        : `
-          MERGE (f:File {path: $path})
+        : hasExistingEmbedding
+        ? `
+          MERGE (f:File:Node {path: $path})
           SET 
             f.absolute_path = $absolute_path,
             f.name = $name,
@@ -99,6 +126,22 @@ export class FileIndexer {
             f.line_count = $line_count,
             f.last_modified = $last_modified,
             f.indexed_date = datetime(),
+            f.type = 'file'
+          RETURN f.path AS path, f.size_bytes AS size_bytes, id(f) AS node_id
+        `
+        : `
+          MERGE (f:File:Node {path: $path})
+          SET 
+            f.absolute_path = $absolute_path,
+            f.name = $name,
+            f.extension = $extension,
+            f.content = $content,
+            f.language = $language,
+            f.size_bytes = $size_bytes,
+            f.line_count = $line_count,
+            f.last_modified = $last_modified,
+            f.indexed_date = datetime(),
+            f.type = 'file',
             f.has_embedding = false
           RETURN f.path AS path, f.size_bytes AS size_bytes, id(f) AS node_id
         `;

@@ -81,7 +81,7 @@ For each translation, respond with JSON:
 **Tool-Based Execution:**
 - Use: read_file to read testing/translation-validation-tool/KEYSTONE-TEAM-OWNERSHIP.csv
 - Execute: Parse CSV in-memory using Node.js (csv-parse library if available, or manual parsing)
-- Store: graph_add_node with properties: { pages: [{ urlPath, businessArea, team, productOwner }], totalPages: N }
+- Store: memory_add_node with properties: { pages: [{ urlPath, businessArea, team, productOwner }], totalPages: N }
 - Do NOT: Create new CSV parser files
 
 **Data Extraction:**
@@ -101,7 +101,7 @@ For each translation, respond with JSON:
 **Tool-Based Execution:**
 - Use: run_terminal_cmd to execute Node.js script that queries Prisma
 - Execute: One-liner Prisma query to get distinct pages
-- Store: graph_add_node with properties: { pagesInDB: [urls], totalPagesInDB: N }
+- Store: memory_add_node with properties: { pagesInDB: [urls], totalPagesInDB: N }
 - Do NOT: Create new query scripts
 
 **Configuration:**
@@ -134,7 +134,7 @@ prisma.translation.findMany({
 **Tool-Based Execution:**
 - Use: run_terminal_cmd to execute Prisma query for each page
 - Execute: Fetch 100 translations per page (paginated if needed)
-- Store: graph_add_node for each page with properties: { pageUrl, translations: [...], totalCount: N }
+- Store: memory_add_node for each page with properties: { pageUrl, translations: [...], totalCount: N }
 - Do NOT: Create new fetching utilities
 
 **Command Example:**
@@ -163,7 +163,7 @@ prisma.translation.findMany({
 **Tool-Based Execution:**
 - Use: Worker's built-in LLM access (NOT run_terminal_cmd)
 - Execute: Batch validate 10 translations at a time using worker's LLM tool
-- Store: graph_add_node for each batch with properties: { pageUrl, batchNum, validations: [...] }
+- Store: memory_add_node for each batch with properties: { pageUrl, batchNum, validations: [...] }
 - Do NOT: Execute validate-translations.js script (causes double-hop)
 
 **Function Usage:**
@@ -226,7 +226,7 @@ Respond with JSON array (one object per translation):
 ### Task 3.1: Generate CSV Report
 
 **Tool-Based Execution:**
-- Use: graph_get_node to retrieve all validation results from previous tasks
+- Use: memory_get_node to retrieve all validation results from previous tasks
 - Execute: Format data in-memory using string templates
 - Store: Write CSV to reports/translation-validation-{date}.csv using write tool
 - Do NOT: Create new report generator scripts
@@ -251,7 +251,7 @@ AI Audit Score, AI Validation, Issues Found, AI Audited Recommendation, AI Audit
 ### Task 4.1: Generate Executive Summary
 
 **Tool-Based Execution:**
-- Use: graph_get_node to retrieve all validation results
+- Use: memory_get_node to retrieve all validation results
 - Execute: Aggregate data in-memory by business area
 - Store: Write JSON to reports/translation-summary-{date}.json using write tool
 - Do NOT: Create new summary generator scripts

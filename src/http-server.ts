@@ -115,7 +115,7 @@ async function startHttpServer() {
       }
       
       // Auto-initialize: Convert first non-initialize request to initialize
-      // This returns the init response, and next request will work normally
+      // Let the transport handle it, THEN mark as initialized
       if (!isSessionInitialized && method !== 'initialize') {
         console.warn(`[HTTP] Auto-initializing: First request converted to initialize`);
         req.body.method = 'initialize';
@@ -124,25 +124,21 @@ async function startHttpServer() {
           capabilities: {},
           clientInfo: { name: 'http-auto-init', version: '1.0' }
         };
-        isSessionInitialized = true;
+        // Don't mark as initialized yet - let the transport handle it first
       }
       
-      // Mark session as initialized if this is an explicit initialize request
-      if (method === 'initialize') {
-        isSessionInitialized = true;
-      }
-
-      // Always inject the shared session ID into request headers
-      if (!req.headers['mcp-session-id']) {
-        req.headers['mcp-session-id'] = SHARED_SESSION_ID;
-      }
-
-      // Always set the shared session header in response
-      res.setHeader('Mcp-Session-Id', SHARED_SESSION_ID);
-
-      // For initialize requests (explicit or auto), intercept response to add sessionId
-      if (method === 'initialize' || req.body.method === 'initialize') {
-        // Wrap response to capture and modify initialize response
+      // Mark session as initialized AFTER transport handles the initialize request
+      if (method === 'initialize' || (!isSessionInitialized && req.body.method === 'initialize')) {
+        // Let transport handle the request first, then mark as initialized
+        const wasAutoInit = !isSessionInitialized && req.body.method === 'initialize';
+        
+        // Always inject the shared session ID into request headers
+        if (!req.headers['mcp-session-id']) {
+          req.headers['mcp-session-id'] = SHARED_SESSION_ID;
+        }
+        res.setHeader('Mcp-Session-Id', SHARED_SESSION_ID);
+        
+        // Intercept response to add sessionId and mark as initialized
         const originalWrite = res.write.bind(res);
         const originalEnd = res.end.bind(res);
         let responseData = '';
@@ -156,23 +152,37 @@ async function startHttpServer() {
           if (chunk) responseData += chunk.toString();
           
           try {
-            // Parse and modify the response
             const parsed = JSON.parse(responseData);
             if (parsed.result && parsed.result.serverInfo) {
-              // Add sessionId to serverInfo
               parsed.result.serverInfo.sessionId = SHARED_SESSION_ID;
               parsed.result.serverInfo.sessionMode = 'shared-global';
             }
             responseData = JSON.stringify(parsed);
+            
+            // Mark as initialized after successful init response
+            isSessionInitialized = true;
+            if (wasAutoInit) {
+              console.warn(`[HTTP] Auto-initialization complete - session ready`);
+            }
           } catch (e: any) {
-            // If parsing fails, leave response as-is
             console.error('❌ Failed to modify initialize response:', e.message);
-            console.error('   Response data preview:', responseData.substring(0, 200));
           }
           
           originalEnd(responseData);
         }) as any;
+        
+        // Handle the initialize request
+        await sharedTransport.handleRequest(req, res, req.body);
+        return;
       }
+
+      // Always inject the shared session ID into request headers
+      if (!req.headers['mcp-session-id']) {
+        req.headers['mcp-session-id'] = SHARED_SESSION_ID;
+      }
+
+      // Always set the shared session header in response
+      res.setHeader('Mcp-Session-Id', SHARED_SESSION_ID);
 
       // Handle the request
       await sharedTransport.handleRequest(req, res, req.body);

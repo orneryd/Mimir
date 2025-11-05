@@ -193,7 +193,7 @@ Result: 87.5% context reduction (5K/40K)
 
 **Our approach:**
 - **QC Agent** verifies worker output against requirements
-- Uses `graph_get_subgraph(task_id, depth=2)` to retrieve ground truth
+- Uses `memory_get_subgraph(task_id, depth=2)` to retrieve ground truth
 - Pass/fail decision based on objective criteria + Ecko's assumptions
 
 **Verdict:** ✅ Both use verification, but different purposes:
@@ -210,7 +210,7 @@ Result: 87.5% context reduction (5K/40K)
 - Restricted set for cross-platform compatibility
 
 **Our design:**
-- MCP tool set: `graph_add_node`, `graph_get_subgraph`, `create_todo`, `list_todos`
+- MCP tool set: `memory_add_node`, `memory_get_subgraph`, `create_todo`, `list_todos`
 - Graph operations (fast, deterministic)
 - Restricted per agent role
 
@@ -617,7 +617,7 @@ function measureContextPollution(
 ```typescript
 // mcp-tools.ts: Batch operations
 export async function batchGetNodes(ids: string[]): Promise<Node[]> {
-  return Promise.all(ids.map(id => graph_get_node({ id })));
+  return Promise.all(ids.map(id => memory_get_node({ id })));
 }
 
 // Worker usage:
@@ -657,9 +657,9 @@ class FastGraphQuery {
   ): Promise<Subgraph> {
     // Parallel subgraph queries
     const queries = [
-      graph_get_subgraph({ id: taskId, depth: maxDepth }),
-      graph_get_neighbors({ id: taskId, depth: 1 }),
-      graph_query_nodes({ type: 'todo', status: 'completed' })
+      memory_get_subgraph({ id: taskId, depth: maxDepth }),
+      memory_get_neighbors({ id: taskId, depth: 1 }),
+      memory_query_nodes({ type: 'todo', status: 'completed' })
     ];
     
     const results = await Promise.all(queries);

@@ -21,7 +21,7 @@ mimir-chain "Validate all Caremark page Spanish translations from MongoDB (mongo
    - `read_file` for CSV
    - `run_terminal_cmd` for Prisma queries
    - **Built-in LLM tool for validation** (direct, no subprocess)
-   - `graph_add_node` for intermediate results
+   - `memory_add_node` for intermediate results
    - `write` for final reports
 
 3. **QC Agents** verify each task output against requirements

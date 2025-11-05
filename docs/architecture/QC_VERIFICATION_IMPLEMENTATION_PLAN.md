@@ -296,11 +296,11 @@ async function executeTask(task: TaskDefinition): Promise<ExecutionResult> {
    - Return structured report
 
 4. **`storeWorkerOutputInGraph(taskId, data)`**
-   - Call `graph_update_node` via MCP
+   - Call `memory_update_node` via MCP
    - Update task node with worker output and status
 
 5. **`updateGraphNode(taskId, properties)`**
-   - Call `graph_update_node` via MCP
+   - Call `memory_update_node` via MCP
    - Update task node properties
 
 ---
