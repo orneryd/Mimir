@@ -214,9 +214,12 @@ export async function handleGetEmbeddingStats(
   
   try {
     // Get total count and breakdown by type (including FileChunk)
+    // Match nodes with embeddings, but exclude system nodes like WatchConfig
     const result = await session.run(`
       MATCH (n)
-      WHERE n.embedding IS NOT NULL
+      WHERE n.embedding IS NOT NULL 
+        AND NOT n:WatchConfig
+        AND n.type IS NOT NULL
       RETURN n.type AS type, count(*) AS count
       ORDER BY count DESC
     `);

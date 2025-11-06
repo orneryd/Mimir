@@ -115,6 +115,11 @@ export class WatchConfigManager {
         ORDER BY w.added_date ASC
       `);
       
+      // Ensure records is an array before mapping
+      if (!result.records || !Array.isArray(result.records)) {
+        return [];
+      }
+      
       return result.records.map(record => {
         const node = record.get('w');
         return this.mapToWatchConfig(node.properties);

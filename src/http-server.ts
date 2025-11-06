@@ -16,6 +16,7 @@ import { server, initializeGraphManager, allTools } from './index.js';
 // Global shared transport for all agents - no session isolation
 let sharedTransport: any | null = null;
 let isSessionInitialized = false;
+
 const SHARED_SESSION_ID = 'shared-global-session';
 
 async function startHttpServer() {
@@ -70,7 +71,7 @@ async function startHttpServer() {
 
   app.post('/mcp', async (req, res) => {
     try {
-      const method = req.body?.method || 'unknown';
+      let method = req.body?.method || 'unknown';
       console.warn(`[HTTP] Request method: ${method} (shared session mode)`);
       
       // Log headers for debugging content negotiation issues
@@ -90,6 +91,19 @@ async function startHttpServer() {
         // Connect server to shared transport
         await server.connect(sharedTransport);
         console.warn(`[HTTP] Server connected to shared session`);
+      }
+      
+      // Auto-initialize: Convert first non-initialize request to initialize
+      // Only do this if we haven't initialized yet
+      if (!isSessionInitialized && method !== 'initialize') {
+        console.warn(`[HTTP] Auto-initializing: Converting '${method}' request to 'initialize'`);
+        req.body.method = 'initialize';
+        req.body.params = {
+          protocolVersion: '2024-11-05',
+          capabilities: {},
+          clientInfo: { name: 'http-auto-init', version: '1.0' }
+        };
+        method = 'initialize'; // Update the method variable too!
       }
       
       // Handle re-initialization gracefully - return cached init response
@@ -114,23 +128,9 @@ async function startHttpServer() {
         return;
       }
       
-      // Auto-initialize: Convert first non-initialize request to initialize
-      // Let the transport handle it, THEN mark as initialized
-      if (!isSessionInitialized && method !== 'initialize') {
-        console.warn(`[HTTP] Auto-initializing: First request converted to initialize`);
-        req.body.method = 'initialize';
-        req.body.params = {
-          protocolVersion: '2024-11-05',
-          capabilities: {},
-          clientInfo: { name: 'http-auto-init', version: '1.0' }
-        };
-        // Don't mark as initialized yet - let the transport handle it first
-      }
-      
       // Mark session as initialized AFTER transport handles the initialize request
-      if (method === 'initialize' || (!isSessionInitialized && req.body.method === 'initialize')) {
+      if (method === 'initialize') {
         // Let transport handle the request first, then mark as initialized
-        const wasAutoInit = !isSessionInitialized && req.body.method === 'initialize';
         
         // Always inject the shared session ID into request headers
         if (!req.headers['mcp-session-id']) {
@@ -158,12 +158,8 @@ async function startHttpServer() {
               parsed.result.serverInfo.sessionMode = 'shared-global';
             }
             responseData = JSON.stringify(parsed);
-            
-            // Mark as initialized after successful init response
-            isSessionInitialized = true;
-            if (wasAutoInit) {
-              console.warn(`[HTTP] Auto-initialization complete - session ready`);
-            }
+            console.warn(`[HTTP] Initialization complete - session ready`);
+            isSessionInitialized = true;  // Mark as initialized AFTER successful init
           } catch (e: any) {
             console.error('❌ Failed to modify initialize response:', e.message);
           }

@@ -20,15 +20,6 @@ import type {
 // ============================================================================
 
 /**
- * Detect if we're running in Docker container
- */
-function isRunningInDocker(): boolean {
-  const isDocker = process.env.WORKSPACE_ROOT === '/workspace';
-  console.log(`🐳 Docker detection: WORKSPACE_ROOT=${process.env.WORKSPACE_ROOT}, isDocker=${isDocker}`);
-  return isDocker;
-}
-
-/**
  * Get the host workspace root from environment
  * Default: ~/src (expanded to actual home directory)
  * When running in Docker, HOST_WORKSPACE_ROOT should be pre-expanded by docker-compose
@@ -39,18 +30,10 @@ function getHostWorkspaceRoot(): string {
   // If not set, use default
   if (!hostRoot) {
     const defaultRoot = '~/src';
-    // Only expand ~ if not in Docker (in Docker, this would be wrong)
-    if (!isRunningInDocker() && defaultRoot.startsWith('~/')) {
-      const homeDir = process.env.HOME || process.env.USERPROFILE || '';
-      const expanded = defaultRoot.replace('~', homeDir);
-      console.log(`🏠 Host workspace root (default): ${defaultRoot} → ${expanded}`);
-      return expanded;
-    }
     console.log(`🏠 Host workspace root (default): ${defaultRoot}`);
     return defaultRoot;
   }
   
-  // HOST_WORKSPACE_ROOT is set - use it as-is (should be pre-expanded)
   console.log(`🏠 Host workspace root (from env): ${hostRoot}`);
   return hostRoot;
 }
@@ -58,17 +41,14 @@ function getHostWorkspaceRoot(): string {
 /**
  * Translate host path to container path
  * Example: /Users/username/src/project -> /workspace/project
+ * Example: C:\Users\user\Documents\GitHub\project -> /workspace/project
  */
 function translateHostToContainer(hostPath: string): string {
-  if (!isRunningInDocker()) {
-    return hostPath; // Not in Docker, use path as-is
-  }
-
   const hostRoot = getHostWorkspaceRoot();
   
-  // Normalize paths (remove trailing slashes)
-  const normalizedHostRoot = hostRoot.replace(/\/$/, '');
-  const normalizedHostPath = hostPath.replace(/\/$/, '');
+  // Normalize both paths: convert backslashes to forward slashes, remove trailing slashes
+  const normalizedHostRoot = hostRoot.replace(/\\/g, '/').replace(/\/$/, '');
+  const normalizedHostPath = hostPath.replace(/\\/g, '/').replace(/\/$/, '');
   
   // Check if the path starts with the host root
   if (normalizedHostPath.startsWith(normalizedHostRoot)) {
@@ -78,7 +58,7 @@ function translateHostToContainer(hostPath: string): string {
   }
   
   // If path doesn't start with host root, assume it's already a container path
-  return hostPath;
+  return normalizedHostPath;
 }
 
 /**
@@ -86,9 +66,6 @@ function translateHostToContainer(hostPath: string): string {
  * Example: /workspace/project -> /Users/username/src/project
  */
 function translateContainerToHost(containerPath: string): string {
-  if (!isRunningInDocker()) {
-    return containerPath; // Not in Docker, use path as-is
-  }
 
   const hostRoot = getHostWorkspaceRoot();
   
@@ -181,7 +158,8 @@ export function createFileIndexingTools(
       description: 'List all folders currently being watched for file changes.',
       inputSchema: {
         type: 'object',
-        properties: {}
+        properties: {},
+        required: []
       }
     }
   ];
@@ -313,8 +291,9 @@ export async function handleRemoveFolder(
       WHERE f.path STARTS WITH $pathPrefix OR f.absolute_path STARTS WITH $pathPrefix
       OPTIONAL MATCH (f)-[:HAS_CHUNK]->(c:FileChunk)
       WITH f, collect(c) AS chunks, count(c) AS chunk_count
-      DETACH DELETE f
+      // Delete chunks FIRST, then file
       FOREACH (chunk IN chunks | DETACH DELETE chunk)
+      DETACH DELETE f
       RETURN count(f) AS files_deleted, sum(chunk_count) AS chunks_deleted
     `, { pathPrefix: containerPath });
     
@@ -345,8 +324,11 @@ export async function handleListWatchedFolders(
   
   const configs = await configManager.listActive();
 
+  // Ensure configs is an array
+  const configArray = Array.isArray(configs) ? configs : [];
+
   return {
-    watches: configs.map(config => ({
+    watches: configArray.map(config => ({
       watch_id: config.id,
       folder: translateContainerToHost(config.path),  // Translate back to host path for display
       containerPath: config.path,  // Also show container path
@@ -355,6 +337,6 @@ export async function handleListWatchedFolders(
       last_update: config.last_updated || config.added_date,
       active: config.status === 'active'
     })),
-    total: configs.length
+    total: configArray.length
   };
 }

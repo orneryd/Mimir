@@ -34,3 +34,4 @@ applyTo: '**'
 - **Global CLIs**: Use npm link for global command installation
 - **Factorial Implementation**: Recursive function with error handling for negative inputs
 - **Test Coverage**: Vitest tests for edge cases (n=0, n=1, n=5, negative input)
+- **MCP Tool Error "o.content is not iterable"**: This error has TWO root causes: (1) **JSON Schema Issue**: MCP tool input schemas with `default: undefined` - MCP SDK cannot serialize undefined values. Remove `default: undefined` from inputSchema properties. (2) **HTTP Server Issue**: Broken auto-initialization logic that converts ALL requests to 'initialize' and returns cached init response without calling transport. Fix: Add `isSessionInitialized` flag to track state and only auto-init on FIRST non-init request. Test with manual script (bypass IDE) to isolate server vs client issues. Check server logs for actual method received vs processed.
