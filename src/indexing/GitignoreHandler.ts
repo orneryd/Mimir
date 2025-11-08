@@ -18,7 +18,8 @@ export class GitignoreHandler {
       '.DS_Store',
       '*.log',
       'build/',
-      'dist/'
+      'dist/',
+      'package-lock.json'  // Always exclude lock files from indexing
     ]);
   }
 

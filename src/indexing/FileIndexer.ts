@@ -135,7 +135,10 @@ export class FileIndexer {
                   embedding_dimensions: $dimensions,
                   embedding_model: $model,
                   type: 'file_chunk',
-                  indexed_date: datetime()
+                  indexed_date: datetime(),
+                  filePath: f.path,
+                  fileName: f.name,
+                  parentFileId: id(f)
                 })
                 CREATE (f)-[:HAS_CHUNK {index: $chunkIndex}]->(c)
                 RETURN id(c) AS chunk_id

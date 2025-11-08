@@ -129,6 +129,41 @@ services:
     networks:
       - mcp_network
 
+  # Open-WebUI with Mimir Pipeline Integration
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: mimir-open-webui
+    ports:
+      - "3000:8080"
+    volumes:
+      - open-webui:/app/backend/data
+    environment:
+      # OpenAI-Compatible API Configuration (Copilot API)
+      - OPENAI_API_BASE_URL=http://host.docker.internal:4141/v1
+      - OPENAI_API_KEY=sk-copilot-dummy  # Dummy key for copilot-api
+      
+      # Disable Ollama (using Copilot API instead)
+      - ENABLE_OLLAMA_API=false
+      - OLLAMA_BASE_URL=
+      
+      # WebUI Configuration
+      - WEBUI_NAME=Mimir Multi-Agent Orchestrator
+      - WEBUI_URL=http://localhost:3000
+      - DEFAULT_MODELS=gpt-4.1  # Default selected model
+      
+      # Enable OpenAI API
+      - ENABLE_OPENAI_API=true
+    depends_on:
+      - mcp-server
+    networks:
+      - mcp_network
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # Allow access to host's localhost
+
+volumes:
+  open-webui:
+
 networks:
   mcp_network:
     driver: bridge
