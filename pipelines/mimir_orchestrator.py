@@ -12,10 +12,9 @@ import asyncio
 from typing import List, Dict, Any, Optional, AsyncGenerator
 from pydantic import BaseModel, Field
 
-# Module-level request cache (shared across all pipeline instances)
-# This prevents duplicate invocations when Open WebUI creates multiple instances
-_REQUEST_CACHE = {}
-_CACHE_TTL = 3  # seconds
+# Note: Module-level cache removed (doesn't work with lifecycle hook invocations)
+# With manifold type removed, duplicate execution bug is fixed at root cause
+# No cache needed - each request invokes pipe() method once only
 
 
 class Pipe:
@@ -98,15 +97,31 @@ class Pipe:
         )
 
     def __init__(self):
-        self.type = "manifold"
+        # self.type = "manifold"  # REMOVED: Causes 3x-4x execution bug (GitHub #17472)
+        # Manifold is for multi-model providers (OpenAI, Anthropic, etc.)
+        # Mimir uses single pipeline entry + Neo4j graph for orchestration
         self.id = "mimir_orchestrator_v2"  # Changed to avoid duplicates
         self.name = "Mimir"
         self.valves = self.Valves()
 
-        # Request deduplication cache (to prevent multiple runs of same request)
-        self._request_cache = {}
-        self._cache_ttl = 3  # seconds - cache requests for 3 seconds
-
+        # Request deduplication using unique request IDs
+        # Track processed requests to prevent multiple executions
+        self.processed_requests = set()
+        self._cleanup_interval = 100  # Clean up every 100 requests
+        self._request_counter = 0
+        
+        # Async lock for atomic cache operations (prevents race conditions)
+        import asyncio
+        self._cache_lock = asyncio.Lock()
+        
+        # Global tracking (class-level, survives across instances)
+        if not hasattr(self.__class__, '_global_execution_count'):
+            self.__class__._global_execution_count = 0
+        if not hasattr(self.__class__, '_global_instance_count'):
+            self.__class__._global_instance_count = 0
+        self.__class__._global_instance_count += 1
+        self._instance_id = self.__class__._global_instance_count
+        
         # Neo4j connection (lazy initialization)
         self._neo4j_driver = None
 
@@ -116,20 +131,6 @@ class Pipe:
 
     def _load_ecko_preamble(self) -> str:
         """Load Ecko agent preamble"""
-        # Try to load from file (if mounted)
-        preamble_paths = [
-            "/app/pipelines/../docs/agents/v2/00-ecko-preamble.md",
-            "./docs/agents/v2/00-ecko-preamble.md",
-        ]
-
-        for path in preamble_paths:
-            try:
-                with open(path, "r") as f:
-                    return f.read()
-            except FileNotFoundError:
-                continue
-
-        # Fallback: condensed Ecko preamble
         return """# Ecko (Prompt Architect) v2.0
 
 You are **Ecko**, a Prompt Architect who transforms vague user requests into structured, actionable prompts.
@@ -476,57 +477,122 @@ graph LR
 
         import time
         import hashlib
+        import json
 
-        # Extract user message and selected model
+        # ========== DEBUG OUTPUT TO UI ==========
+        # Track this execution globally
+        self.__class__._global_execution_count += 1
+        execution_number = self.__class__._global_execution_count
+        
+        yield "\n\n---\n## 🔍 DEBUG: Pipeline Invocation Details\n\n"
+        
+        # Show instance and execution tracking
+        yield f"**🔢 EXECUTION #{execution_number}** (Instance #{self._instance_id})\n\n"
+        yield f"**⚠️ Total Executions This Session:** {self.__class__._global_execution_count}\n\n"
+        yield f"**📦 Total Instances Created:** {self.__class__._global_instance_count}\n\n"
+        
+        # Extract ALL body details for debugging
+        model_id = body.get("model", "")
         messages = body.get("messages", [])
+        user_message = messages[-1].get("content", "") if messages else "NO_MESSAGE"
+        
+        # DETECT AUTO-GENERATED OPEN WEBUI REQUESTS (title, tags, follow-ups)
+        is_auto_generated = any([
+            "Generate a concise" in user_message and "title" in user_message,
+            "Generate 1-3 broad tags" in user_message,
+            "Suggest 3-5 relevant follow-up" in user_message,
+            user_message.startswith("### Task:"),
+        ])
+        
+        if is_auto_generated:
+            yield f"⏭️ **Skipping auto-generated Open WebUI request** (title/tags/follow-ups)\n\n"
+            print(f"⏭️  Skipping auto-generated request: {user_message[:50]}...")
+            return
+        
+        # Show invocation details
+        yield f"**Invocation Time:** {time.strftime('%H:%M:%S', time.localtime())}.{int(time.time() * 1000) % 1000:03d}\n\n"
+        yield f"**Model ID:** `{model_id}`\n\n"
+        yield f"**Message Preview:** `{user_message[:100]}...`\n\n"
+        yield f"**Full Message Length:** {len(user_message)} chars\n\n"
+        
+        # Show ALL body keys (to see what Open WebUI sends)
+        yield f"**Body Keys:** {list(body.keys())}\n\n"
+        
+        # Show FULL messages array structure
+        yield f"**Messages Array Length:** {len(messages)}\n\n"
+        yield f"**Messages Roles:** {[m.get('role', 'unknown') for m in messages]}\n\n"
+        
+        # DEDUPLICATION: Use ONLY message content (ignore model ID and time)
+        # This ensures all 4 duplicate calls have the SAME fingerprint
+        current_time = int(time.time())
+        
+        # Create fingerprint from ONLY the user message content
+        request_fingerprint = hashlib.md5(user_message.encode()).hexdigest()[:12]
+        
+        yield f"**🔐 Deduplication Strategy:**\n\n"
+        yield f"- Message hash: `{request_fingerprint}`\n"
+        yield f"- Strategy: Content-only (ignoring model ID and timestamp)\n\n"
+        yield f"**Request Fingerprint:** `{request_fingerprint}`\n\n"
+        
+        # ATOMIC CACHE CHECK (prevents race conditions with parallel calls)
+        async with self._cache_lock:
+            yield f"**🔒 Acquired cache lock...**\n\n"
+            
+            # Show current cache state
+            yield f"**Processed Requests in Cache:** {len(self.processed_requests)}\n\n"
+            yield f"**Cache Contents:** `{list(self.processed_requests)}`\n\n"
+            
+            # Check if we've already processed this request
+            if request_fingerprint in self.processed_requests:
+                yield f"### ⏭️ **DUPLICATE REQUEST DETECTED**\n\n"
+                yield f"This request fingerprint `{request_fingerprint}` was already processed.\n\n"
+                yield f"**Skipping execution to prevent duplicate work.**\n\n"
+                yield "---\n\n"
+                print(f"⏭️  DUPLICATE REQUEST DETECTED - Skipping: {request_fingerprint}")
+                return
+            
+            # Mark this request as processed IMMEDIATELY (while holding lock)
+            self.processed_requests.add(request_fingerprint)
+            yield f"### ✅ **NEW REQUEST - WILL EXECUTE**\n\n"
+            yield f"Added fingerprint `{request_fingerprint}` to cache.\n\n"
+            yield f"**Updated Cache Size:** {len(self.processed_requests)}\n\n"
+            yield f"**🔓 Released cache lock**\n\n"
+            yield "---\n\n"
+        
+        print(f"✅ Processing NEW request: {request_fingerprint} (model: {model_id})")
+        
+        # Periodic cleanup
+        self._request_counter += 1
+        if self._request_counter >= self._cleanup_interval:
+            self.processed_requests.clear()
+            self._request_counter = 0
+            yield f"🧹 **Cache Cleanup:** Cleared {self._cleanup_interval} processed requests\n\n"
+            print(f"🧹 Cleaned up processed requests cache")
+        
+        # ========== END DEBUG OUTPUT ==========
+        
+        # Validate messages
         if not messages:
             yield "Error: No messages provided"
             return
 
-        user_message = messages[-1].get("content", "")
-
-        # Create request fingerprint for deduplication
-        request_key = hashlib.md5(
-            f"{user_message}:{body.get('model', '')}".encode()
-        ).hexdigest()
-        current_time = time.time()
-
-        # Check if this is a duplicate request within cache TTL
-        if request_key in self._request_cache:
-            cached_time = self._request_cache[request_key]
-            if current_time - cached_time < self._cache_ttl:
-                print(
-                    f"⚠️ DUPLICATE REQUEST DETECTED - Ignoring (cached {current_time - cached_time:.1f}s ago)"
-                )
-                yield "\n\n**⚠️ Duplicate request detected - pipeline already running for this message**\n\n"
-                return
-
-        # Cache this request
-        self._request_cache[request_key] = current_time
-
-        # Clean up old cache entries (older than TTL)
-        self._request_cache = {
-            k: v
-            for k, v in self._request_cache.items()
-            if current_time - v < self._cache_ttl
-        }
-
-        print(
-            f"✅ Processing request: {request_key[:8]}... (cache size: {len(self._request_cache)})"
-        )
-
         # Get selected model from body (this is the model selected in Open WebUI dropdown)
         selected_model = body.get("model", self.valves.DEFAULT_MODEL)
+        
+        yield f"**🔍 Model Selection Debug:**\n\n"
+        yield f"- Raw model from body: `{selected_model}`\n\n"
 
         # Clean up model name - remove function prefix if present
         # Open WebUI may prefix with "test_function." or similar
         if "." in selected_model:
             selected_model = selected_model.split(".", 1)[1]
+            yield f"- After prefix removal: `{selected_model}`\n\n"
 
         # Determine pipeline mode and actual LLM model
         if selected_model.startswith("mimir:"):
             # User selected a Mimir pipeline mode
             pipeline_mode = selected_model.replace("mimir:", "")
+            yield f"- Pipeline mode detected: `{pipeline_mode}`\n\n"
 
             # The actual LLM model should be in the body under a different key
             # or we need to ask the user to select it separately
@@ -546,12 +612,14 @@ graph LR
                         break
 
             selected_model = actual_model
+            yield f"- Actual LLM model to use: `{actual_model}`\n\n"
         else:
             # User selected a regular model, use default pipeline mode
             pipeline_mode = "ecko-pm"
+            yield f"- Direct model selection (no pipeline mode)\n\n"
 
         # Debug info
-        yield f"\n\n**Debug Info:**\n"
+        yield f"\n\n**✅ Final Configuration:**\n"
         yield f"- Pipeline Mode: `{pipeline_mode}`\n"
         yield f"- Selected Model: `{selected_model}`\n"
         yield f"- Copilot API: `{self.valves.COPILOT_API_URL}`\n\n"
