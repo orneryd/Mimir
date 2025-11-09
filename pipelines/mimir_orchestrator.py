@@ -41,7 +41,7 @@ class Pipe:
 
         # Copilot API Configuration
         COPILOT_API_URL: str = Field(
-            default="http://host.docker.internal:4141/v1",
+            default="http://copilot-api:4141/v1",
             description="Copilot API base URL",
         )
 
@@ -64,8 +64,8 @@ class Pipe:
         PM_ENABLED: bool = Field(default=True, description="Enable PM (planning) stage")
         
         PM_MODEL: str = Field(
-            default="gpt-5-mini",
-            description="Model to use for PM agent (planning). Default: gpt-5-mini for faster planning."
+            default="gpt-4.1",
+            description="Model to use for PM agent (planning). Default: gpt-4.1 for faster planning."
         )
 
         WORKERS_ENABLED: bool = Field(
@@ -830,75 +830,108 @@ graph LR
                         print("📭 No relevant context found")
                         return ""
 
-                    print(f"✅ Found {len(records)} relevant items")
+                    print(f"✅ Found {len(records)} relevant items (before deduplication)")
 
-                    # Format context
-                    context_parts = []
-                    for i, record in enumerate(records, 1):
+                    # Aggregate chunks by parent file
+                    file_aggregates = {}
+                    
+                    for record in records:
                         node = record["n"]
                         similarity = record["similarity"]
-                        parent = record.get("parent")  # Parent file (if this is a chunk)
-
+                        parent = record.get("parent")
+                        
                         node_type = node.get("type", "unknown")
-                        title = node.get("title", node.get("name", "Untitled"))
-                        content = node.get("content", node.get("description", ""))
                         file_path = node.get("filePath", node.get("path", ""))
+                        content = node.get("content", node.get("description", node.get("text", "")))
                         
-                        # For file_chunk nodes without metadata, use text content
-                        if node_type == "file_chunk" and title == "Untitled":
-                            # file_chunk nodes may only have 'text' property, no parent metadata
-                            chunk_text = node.get("text", content)
-                            if chunk_text:
-                                # Use first meaningful line as title
-                                lines = [l.strip() for l in chunk_text.split('\n') if l.strip() and len(l.strip()) > 10]
-                                if lines:
-                                    title = f"{lines[0][:60]}..." if len(lines[0]) > 60 else lines[0]
-                                    node_type = "file_chunk (orphaned)"
-                        
-                        # If this is a file chunk, get parent file info
+                        # Determine the file key for aggregation
                         if parent:
+                            # This is a chunk - use parent file path as key
                             parent_path = parent.get("filePath", parent.get("path", ""))
                             parent_name = parent.get("name", parent.get("title", ""))
                             
-                            # Extract filename from parent path if name is missing
                             if not parent_name and parent_path:
                                 parent_name = parent_path.split("/")[-1]
                             
-                            # Use parent file name as the title
-                            if parent_name and parent_name != "Untitled":
-                                if parent_path:
-                                    title = f"{parent_name} (chunk from {parent_path})"
-                                else:
-                                    title = f"{parent_name} (chunk)"
-                                node_type = "file_chunk"
-                            elif not parent_name:
-                                # Debug parent properties
-                                print(f"⚠️ Parent has no name - Keys: {list(parent.keys())[:10]}")
+                            file_key = parent_path or parent_name or "unknown"
+                            display_name = parent_name or parent_path.split("/")[-1] if parent_path else "Unknown File"
+                        elif node_type == "file":
+                            # This is a file node itself
+                            file_key = file_path or node.get("name", "unknown")
+                            display_name = node.get("name", file_path.split("/")[-1] if file_path else "Unknown File")
+                        else:
+                            # Non-file node (memory, concept, etc) - treat individually
+                            file_key = f"node-{node.get('id', 'unknown')}"
+                            display_name = node.get("title", node.get("name", "Untitled"))
                         
-                        # If still untitled but has a file path, extract filename
-                        if title == "Untitled" and file_path:
-                            title = file_path.split("/")[-1]
+                        # Aggregate by file
+                        if file_key not in file_aggregates:
+                            file_aggregates[file_key] = {
+                                "display_name": display_name,
+                                "file_path": file_path or (parent.get("filePath") if parent else ""),
+                                "node_type": "file" if parent or node_type == "file" else node_type,
+                                "max_similarity": similarity,
+                                "chunk_count": 0,
+                                "total_similarity": 0,
+                                "content_chunks": []
+                            }
                         
-                        # Last resort: use node ID or first few chars of content
-                        if title == "Untitled":
-                            node_id = node.get("id", "")
-                            if node_id:
-                                title = f"Document {node_id[:8]}"
-                            elif content:
-                                # Use first line of content as title
-                                first_line = content.split('\n')[0][:50]
-                                title = f"{first_line}..." if len(first_line) == 50 else first_line
-
-                        # Truncate long content
-                        if len(content) > 500:
-                            content = content[:500] + "..."
-
+                        # Update aggregation metrics
+                        agg = file_aggregates[file_key]
+                        agg["chunk_count"] += 1
+                        agg["total_similarity"] += similarity
+                        agg["max_similarity"] = max(agg["max_similarity"], similarity)
+                        
+                        # Store top 2 content chunks per file
+                        if len(agg["content_chunks"]) < 2:
+                            agg["content_chunks"].append(content)
+                    
+                    # Calculate boosted relevance score and sort
+                    for file_key, agg in file_aggregates.items():
+                        # Boosted score = max_similarity + (chunk_count - 1) * 0.05
+                        # This rewards files with multiple matching chunks
+                        agg["boosted_similarity"] = agg["max_similarity"] + (agg["chunk_count"] - 1) * 0.05
+                        agg["avg_similarity"] = agg["total_similarity"] / agg["chunk_count"]
+                    
+                    # Sort by boosted similarity
+                    sorted_files = sorted(
+                        file_aggregates.items(),
+                        key=lambda x: x[1]["boosted_similarity"],
+                        reverse=True
+                    )[:10]  # Top 10 unique files
+                    
+                    print(f"📊 Aggregated into {len(sorted_files)} unique files/documents")
+                    
+                    # Format context
+                    context_parts = []
+                    for i, (file_key, agg) in enumerate(sorted_files, 1):
+                        display_name = agg["display_name"]
+                        file_path = agg["file_path"]
+                        node_type = agg["node_type"]
+                        chunk_count = agg["chunk_count"]
+                        boosted_sim = agg["boosted_similarity"]
+                        max_sim = agg["max_similarity"]
+                        
+                        # Combine content from top chunks
+                        combined_content = "\n\n---\n\n".join(agg["content_chunks"])
+                        
+                        # Truncate if too long
+                        if len(combined_content) > 1000:
+                            combined_content = combined_content[:1000] + "..."
+                        
+                        # Build relevance indicator
+                        relevance_note = f"max: {max_sim:.2f}"
+                        if chunk_count > 1:
+                            relevance_note = f"boosted: {boosted_sim:.2f} ({chunk_count} chunks matched, {relevance_note})"
+                        
                         context_parts.append(
-                            f"""### Context {i} (similarity: {similarity:.2f})
+                            f"""### Context {i} (similarity: {relevance_note})
 **Type:** {node_type}
-**Title:** {title}
+**Title:** {display_name}
+**Path:** {file_path if file_path else "N/A"}
+**Matched Chunks:** {chunk_count}
 **Content:**
-{content}
+{combined_content}
 """
                         )
 
@@ -1570,7 +1603,13 @@ Use the model: {model}
                         yield f"\n\n❌ Error calling {model}: {error_text}\n\n"
                         return
 
-                    async for line in response.content:
+                    # Use readline() for proper SSE line-by-line parsing
+                    # Fixes TransferEncodingError by ensuring complete lines before parsing
+                    while True:
+                        line = await response.content.readline()
+                        if not line:  # EOF
+                            break
+                        
                         line = line.decode("utf-8").strip()
                         if line.startswith("data: "):
                             data = line[6:]  # Remove 'data: ' prefix
