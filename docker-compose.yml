@@ -47,7 +47,15 @@ services:
       - mcp_network
 
   ollama:
-    image: ollama/ollama:latest
+    build:
+      context: ./docker/ollama
+      dockerfile: Dockerfile
+      args:
+        - EMBEDDING_MODEL=${MIMIR_EMBEDDINGS_MODEL:-mxbai-embed-large}
+      tags:
+        - mimir-ollama:${VERSION:-1.0.0}
+        - mimir-ollama:latest
+    image: mimir-ollama:${VERSION:-1.0.0}
     container_name: ollama_server
     ports:
       - "11434:11434"  # Ollama API
@@ -158,7 +166,13 @@ services:
 
   # Open-WebUI with Mimir Pipeline Integration
   open-webui:
-    image: ghcr.io/open-webui/open-webui:main
+    build:
+      context: ./docker/open-webui
+      dockerfile: Dockerfile
+      tags:
+        - mimir-open-webui:${VERSION:-1.0.0}
+        - mimir-open-webui:latest
+    image: mimir-open-webui:${VERSION:-1.0.0}
     container_name: mimir-open-webui
     ports:
       - "3000:8080"
