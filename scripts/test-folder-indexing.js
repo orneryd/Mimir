@@ -285,7 +285,7 @@ async function listWatchedFolders() {
 /**
  * Add folder to indexing
  */
-async function addFolder(folderPath, withEmbeddings = false) {
+async function addFolder(folderPath, withEmbeddings = true) {
   logSection('Adding Folder to Indexing');
   log(`Folder: ${folderPath}`, 'yellow');
   log(`Embeddings: ${withEmbeddings ? 'Enabled' : 'Disabled'}`, 'yellow');
@@ -294,7 +294,7 @@ async function addFolder(folderPath, withEmbeddings = false) {
     path: folderPath,
     recursive: true,
     debounce_ms: 500,
-    generate_embeddings: withEmbeddings
+    generate_embeddings: true
   };
 
   const result = await callTool('index_folder', params);

@@ -19,6 +19,7 @@ Mimir is a Model Context Protocol (MCP) server that provides AI assistants (Clau
 - [Quick Start](#-quick-start-3-steps) - Get running in 5 minutes
 - [Configuration](#%EF%B8%8F-configuration) - Environment setup
 - [Usage](#-usage) - How to use with AI agents
+- [File Indexing](#file-indexing) - Index your codebase for RAG
 - [Architecture](#%EF%B8%8F-architecture) - How it works
 - [Features](#-key-features) - What can it do?
 - [Troubleshooting](#-troubleshooting) - Common issues
@@ -196,6 +197,203 @@ Mimir provides **13 MCP tools** for AI agents:
 **Todo Management** (2 tools):
 - `todo` - Manage individual tasks
 - `todo_list` - Manage task lists
+
+### File Indexing
+
+Mimir can automatically index your codebase for semantic search and RAG (Retrieval-Augmented Generation). Files are watched for changes and re-indexed automatically.
+
+#### Quick Start
+
+**Add a folder to index:**
+```bash
+# Using local path (recommended)
+npm run index:add /path/to/your/project
+
+# Or using workspace mount path (if local path fails)
+npm run index:add /workspace/my-project
+
+# With embeddings (slower but enables semantic search)
+npm run index:add /path/to/your/project --embeddings
+```
+
+**List indexed folders:**
+```bash
+npm run index:list
+```
+
+**Remove a folder:**
+```bash
+npm run index:remove /path/to/your/project
+```
+
+> ⚠️ **Note**: Large folders may take several minutes to index. Don't kill the process! Watch the logs to see chunking progress. The script will show "✨ Done!" when complete.
+
+#### Supported File Types
+
+**✅ Fully Supported (with syntax highlighting):**
+- **Languages**: TypeScript (.ts, .tsx), JavaScript (.js, .jsx), Python (.py), Java (.java), Go (.go), Rust (.rs), C/C++ (.c, .cpp), C# (.cs), Ruby (.rb), PHP (.php)
+- **Markup**: Markdown (.md), HTML (.html), XML (.xml)
+- **Data**: JSON (.json), YAML (.yaml, .yml), SQL (.sql)
+- **Styles**: CSS (.css), SCSS (.scss)
+- **Documents**: PDF (.pdf), DOCX (.docx) - text extraction
+
+**✅ Generic Support (plain text indexing):**
+- Any text file not in the skip list below
+
+**❌ Automatically Skipped:**
+- **Images**: .png, .jpg, .jpeg, .gif, .bmp, .ico, .svg, .webp, .tiff
+- **Videos**: .mp4, .avi, .mov, .wmv, .flv, .webm, .mkv
+- **Audio**: .mp3, .wav, .ogg, .m4a, .flac, .aac
+- **Archives**: .zip, .tar, .gz, .rar, .7z, .bz2
+- **Binaries**: .exe, .dll, .so, .dylib, .bin, .wasm
+- **Compiled**: .pyc, .pyo, .class, .o, .obj
+- **Databases**: .db, .sqlite, .sqlite3
+- **Lock files**: package-lock.json, yarn.lock, pnpm-lock.yaml
+
+#### .gitignore Respect
+
+Mimir **automatically respects your `.gitignore` file**:
+
+```bash
+# Your .gitignore
+node_modules/
+dist/
+.env
+*.log
+
+# These will NOT be indexed ✅
+```
+
+**Additional patterns:**
+- Hidden files (`.git/`, `.DS_Store`)
+- Build artifacts (`build/`, `dist/`, `out/`)
+- Dependencies (`node_modules/`, `venv/`, `vendor/`)
+
+#### Indexing Examples
+
+**Index a single project:**
+```bash
+npm run index:add ~/projects/my-app
+```
+
+**Index multiple projects:**
+```bash
+# Bash/Zsh
+for dir in ~/projects/*/; do
+  npm run index:add "$dir"
+done
+
+# PowerShell
+Get-ChildItem ~/projects -Directory | ForEach-Object {
+  npm run index:add $_.FullName
+}
+```
+
+**Check what's indexed:**
+```bash
+# List all indexed folders
+npm run index:list
+
+# Or query Neo4j directly for file count
+curl -u neo4j:password -X POST http://localhost:7474/db/neo4j/tx/commit \
+  -H "Content-Type: application/json" \
+  -d '{"statements":[{"statement":"MATCH (f:File) RETURN count(f) as file_count"}]}'
+```
+
+#### How It Works
+
+1. **Scan**: Walks directory tree, respecting `.gitignore`
+2. **Parse**: Extracts text content (or from PDF/DOCX)
+3. **Chunk**: Splits large files into 1000-char chunks
+4. **Embed**: Generates vector embeddings for semantic search (optional)
+5. **Store**: Creates File nodes and FileChunk nodes in Neo4j
+6. **Watch**: Monitors for changes and re-indexes automatically
+
+#### Storage Details
+
+**File Node Properties:**
+- `path`: Relative path from workspace root
+- `absolute_path`: Full filesystem path
+- `name`: Filename
+- `extension`: File extension
+- `language`: Detected language (typescript, python, etc.)
+- `content`: Full file content
+- `size_bytes`: File size
+- `line_count`: Number of lines
+- `last_modified`: Last modification timestamp
+
+**FileChunk Node Properties:**
+- `text`: Chunk content (max 1000 chars)
+- `chunk_index`: Position in file (0, 1, 2...)
+- `embedding`: Vector embedding (1024 dimensions)
+
+**Relationships:**
+- `File -[:HAS_CHUNK]-> FileChunk`
+
+#### Performance
+
+- **Small projects** (<100 files): ~5-10 seconds
+- **Medium projects** (100-1000 files): ~30-60 seconds
+- **Large projects** (1000+ files): ~2-5 minutes
+
+**With embeddings enabled**: Add ~50% more time for vector generation.
+
+#### Troubleshooting
+
+**Problem: Local path fails to index**
+```bash
+# If local machine path fails, use workspace mount path instead
+npm run index:add /workspace/my-project/subfolder
+
+# The workspace mount path matches the internal Docker mount
+# Check your docker-compose.yml for the workspace mount location
+```
+
+**Problem: Files not being indexed**
+```bash
+# Check .gitignore patterns
+cat .gitignore
+
+# Verify file is not in skip list (see "Automatically Skipped" section above)
+
+# Check file is readable
+ls -la /path/to/file
+```
+
+**Problem: Process seems stuck**
+```bash
+# Don't kill it! Large folders take time to index.
+# Watch the logs to see progress:
+docker compose logs -f mcp-server
+
+# You should see:
+# - "📄 Indexing file: ..." (scanning)
+# - "📝 Created chunk X for file Y" (chunking)
+# - "✨ Done!" (complete)
+```
+
+**Problem: Too many files indexed**
+```bash
+# Add patterns to .gitignore
+echo "node_modules/" >> .gitignore
+echo "dist/" >> .gitignore
+
+# Re-index (will respect new .gitignore)
+npm run index:remove /path/to/project
+npm run index:add /path/to/project
+```
+
+**Problem: Embeddings not working**
+```bash
+# Check Ollama is running
+curl http://localhost:11434/api/tags
+
+# Pull embedding model
+docker exec -it ollama_server ollama pull mxbai-embed-large
+
+# Verify model is available
+docker exec -it ollama_server ollama list | grep mxbai
+```
 
 ### HTTP API
 
