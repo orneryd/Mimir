@@ -312,6 +312,88 @@ Transform structured prompts into atomic tasks with clear success criteria, role
 - [ ] (20 pts) Build succeeds: `run_terminal_cmd('npm run build')`
 ```
 
+## ⚠️ CRITICAL: FILE DELIVERABLE REQUIREMENTS
+
+**When tasks require creating output files, documents, or data artifacts, you MUST be EXPLICIT:**
+
+### 1. Specify Exact File Paths
+```markdown
+**REQUIRED DELIVERABLE:** `output/competitive_analysis.md`
+**REQUIRED DELIVERABLE:** `data/benchmark_results.json`
+**REQUIRED DELIVERABLE:** `reports/summary_report.txt`
+```
+
+### 2. Make File Creation a Success Criterion
+```markdown
+**Success Criteria:**
+- [ ] **FILE CREATED:** `output/competitive_analysis.md` exists
+- [ ] File contains required sections (Overview, Products, Comparison)
+- [ ] File verified with: `read_file('output/competitive_analysis.md')`
+- [ ] File size > 1KB (not empty)
+```
+
+### 3. Include File Creation in Task Instructions
+```markdown
+**Prompt:**
+Research 5 competing products and create a comparison matrix.
+
+**CRITICAL - FILE CREATION REQUIRED:**
+1. Research products using available tools
+2. **CREATE OUTPUT FILE** using `write_file()` tool at: `output/competitive_matrix.md`
+3. **VERIFY FILE EXISTS** using: `read_file('output/competitive_matrix.md')`
+4. Ensure file contains all 5 products with feature comparison
+
+**DO NOT mark task complete until file is created and verified.**
+```
+
+### 4. QC Verification Must Check File Existence
+```markdown
+**Verification Criteria:**
+- [ ] (40 pts) **DELIVERABLE FILE EXISTS:** Verify `output/competitive_matrix.md` was created
+- [ ] (30 pts) File content quality: Contains 5+ products with complete data
+- [ ] (20 pts) File format: Valid markdown with proper structure
+- [ ] (10 pts) Research depth: Citations and sources included
+```
+
+### 5. Example Task with File Deliverable
+```markdown
+**Task ID:** task-1.1
+
+**Title:** Create Competitive Product Analysis Matrix
+
+**Prompt:**
+Research and analyze 5 competing products in the memory/knowledge management space.
+
+**FILE DELIVERABLE (REQUIRED):**
+- **Path:** `output/competitive_product_matrix.md`
+- **Format:** Markdown table with columns: Product, Company, Key Features, Pricing, Market Position
+- **Minimum Size:** 2KB (must contain substantial analysis)
+
+**Execution Steps:**
+1. Research products using web search or knowledge base
+2. Extract key information for each product
+3. **CREATE FILE** using `write_file('output/competitive_product_matrix.md', content)`
+4. **VERIFY CREATION** using `read_file('output/competitive_product_matrix.md')`
+5. Confirm file size and content quality
+
+**Success Criteria:**
+- [ ] **DELIVERABLE CREATED:** File `output/competitive_product_matrix.md` exists
+- [ ] File contains 5+ products with all required columns
+- [ ] File verified readable with `read_file()` tool
+- [ ] Research includes citations/sources
+
+**QC Verification:**
+- [ ] (50 pts) **FILE EXISTS AND READABLE:** QC must verify file was created
+- [ ] (30 pts) Content completeness: All 5 products analyzed
+- [ ] (20 pts) Quality: Citations, formatting, depth of analysis
+```
+
+**KEY RULE:** If a task involves "creating", "generating", "producing", or "synthesizing" information, it MUST explicitly state:
+1. Exact output file path
+2. File creation as a success criterion
+3. Verification command using `read_file()`
+4. QC must verify file existence (50% of score minimum)
+
 ## Output Format (REQUIRED):
 
 ```markdown
@@ -461,9 +543,9 @@ graph LR
     async def pipes(self) -> List[Dict[str, str]]:
         """Return available pipeline models"""
         return [
-            {"id": "mimir:ecko-only", "name": "Ecko Only (Prompt Architect)"},
-            {"id": "mimir:ecko-pm", "name": "Ecko → PM (Planning)"},
-            {"id": "mimir:full", "name": "Full Orchestration (Experimental)"},
+            {"id": "mimir:ecko-only", "name": " Ecko Only (Prompt Architect)"},
+            {"id": "mimir:ecko-pm", "name": " Ecko → PM (Planning)"},
+            {"id": "mimir:full", "name": " Full Orchestration (Experimental)"},
         ]
 
     async def pipe(
@@ -479,19 +561,11 @@ graph LR
         import hashlib
         import json
 
-        # ========== DEBUG OUTPUT TO UI ==========
-        # Track this execution globally
+        # Track this execution globally (internal logging only)
         self.__class__._global_execution_count += 1
         execution_number = self.__class__._global_execution_count
         
-        yield "\n\n---\n## 🔍 DEBUG: Pipeline Invocation Details\n\n"
-        
-        # Show instance and execution tracking
-        yield f"**🔢 EXECUTION #{execution_number}** (Instance #{self._instance_id})\n\n"
-        yield f"**⚠️ Total Executions This Session:** {self.__class__._global_execution_count}\n\n"
-        yield f"**📦 Total Instances Created:** {self.__class__._global_instance_count}\n\n"
-        
-        # Extract ALL body details for debugging
+        # Extract request details
         model_id = body.get("model", "")
         messages = body.get("messages", [])
         user_message = messages[-1].get("content", "") if messages else "NO_MESSAGE"
@@ -505,59 +579,23 @@ graph LR
         ])
         
         if is_auto_generated:
-            yield f"⏭️ **Skipping auto-generated Open WebUI request** (title/tags/follow-ups)\n\n"
             print(f"⏭️  Skipping auto-generated request: {user_message[:50]}...")
             return
         
-        # Show invocation details
-        yield f"**Invocation Time:** {time.strftime('%H:%M:%S', time.localtime())}.{int(time.time() * 1000) % 1000:03d}\n\n"
-        yield f"**Model ID:** `{model_id}`\n\n"
-        yield f"**Message Preview:** `{user_message[:100]}...`\n\n"
-        yield f"**Full Message Length:** {len(user_message)} chars\n\n"
-        
-        # Show ALL body keys (to see what Open WebUI sends)
-        yield f"**Body Keys:** {list(body.keys())}\n\n"
-        
-        # Show FULL messages array structure
-        yield f"**Messages Array Length:** {len(messages)}\n\n"
-        yield f"**Messages Roles:** {[m.get('role', 'unknown') for m in messages]}\n\n"
-        
-        # DEDUPLICATION: Use ONLY message content (ignore model ID and time)
-        # This ensures all 4 duplicate calls have the SAME fingerprint
-        current_time = int(time.time())
-        
-        # Create fingerprint from ONLY the user message content
-        request_fingerprint = hashlib.md5(user_message.encode()).hexdigest()[:12]
-        
-        yield f"**🔐 Deduplication Strategy:**\n\n"
-        yield f"- Message hash: `{request_fingerprint}`\n"
-        yield f"- Strategy: Content-only (ignoring model ID and timestamp)\n\n"
-        yield f"**Request Fingerprint:** `{request_fingerprint}`\n\n"
+        # DEDUPLICATION: Use message content + chat context
+        chat_id = body.get("chat_id", body.get("id", "default"))
+        fingerprint_input = f"{user_message}:{chat_id}"
+        request_fingerprint = hashlib.md5(fingerprint_input.encode()).hexdigest()[:12]
         
         # ATOMIC CACHE CHECK (prevents race conditions with parallel calls)
         async with self._cache_lock:
-            yield f"**🔒 Acquired cache lock...**\n\n"
-            
-            # Show current cache state
-            yield f"**Processed Requests in Cache:** {len(self.processed_requests)}\n\n"
-            yield f"**Cache Contents:** `{list(self.processed_requests)}`\n\n"
-            
             # Check if we've already processed this request
             if request_fingerprint in self.processed_requests:
-                yield f"### ⏭️ **DUPLICATE REQUEST DETECTED**\n\n"
-                yield f"This request fingerprint `{request_fingerprint}` was already processed.\n\n"
-                yield f"**Skipping execution to prevent duplicate work.**\n\n"
-                yield "---\n\n"
                 print(f"⏭️  DUPLICATE REQUEST DETECTED - Skipping: {request_fingerprint}")
                 return
             
             # Mark this request as processed IMMEDIATELY (while holding lock)
             self.processed_requests.add(request_fingerprint)
-            yield f"### ✅ **NEW REQUEST - WILL EXECUTE**\n\n"
-            yield f"Added fingerprint `{request_fingerprint}` to cache.\n\n"
-            yield f"**Updated Cache Size:** {len(self.processed_requests)}\n\n"
-            yield f"**🔓 Released cache lock**\n\n"
-            yield "---\n\n"
         
         print(f"✅ Processing NEW request: {request_fingerprint} (model: {model_id})")
         
@@ -566,10 +604,7 @@ graph LR
         if self._request_counter >= self._cleanup_interval:
             self.processed_requests.clear()
             self._request_counter = 0
-            yield f"🧹 **Cache Cleanup:** Cleared {self._cleanup_interval} processed requests\n\n"
             print(f"🧹 Cleaned up processed requests cache")
-        
-        # ========== END DEBUG OUTPUT ==========
         
         # Validate messages
         if not messages:
@@ -578,25 +613,17 @@ graph LR
 
         # Get selected model from body (this is the model selected in Open WebUI dropdown)
         selected_model = body.get("model", self.valves.DEFAULT_MODEL)
-        
-        yield f"**🔍 Model Selection Debug:**\n\n"
-        yield f"- Raw model from body: `{selected_model}`\n\n"
 
         # Clean up model name - remove function prefix if present
-        # Open WebUI may prefix with "test_function." or similar
         if "." in selected_model:
             selected_model = selected_model.split(".", 1)[1]
-            yield f"- After prefix removal: `{selected_model}`\n\n"
 
         # Determine pipeline mode and actual LLM model
         if selected_model.startswith("mimir:"):
             # User selected a Mimir pipeline mode
             pipeline_mode = selected_model.replace("mimir:", "")
-            yield f"- Pipeline mode detected: `{pipeline_mode}`\n\n"
 
             # The actual LLM model should be in the body under a different key
-            # or we need to ask the user to select it separately
-            # For now, use the default model from valves
             actual_model = self.valves.DEFAULT_MODEL
 
             # Try to get from user's last model selection (if available in messages)
@@ -612,17 +639,25 @@ graph LR
                         break
 
             selected_model = actual_model
-            yield f"- Actual LLM model to use: `{actual_model}`\n\n"
         else:
             # User selected a regular model, use default pipeline mode
             pipeline_mode = "ecko-pm"
-            yield f"- Direct model selection (no pipeline mode)\n\n"
-
-        # Debug info
-        yield f"\n\n**✅ Final Configuration:**\n"
-        yield f"- Pipeline Mode: `{pipeline_mode}`\n"
-        yield f"- Selected Model: `{selected_model}`\n"
-        yield f"- Copilot API: `{self.valves.COPILOT_API_URL}`\n\n"
+        
+        # Generate orchestration ID once
+        orchestration_id = f"orchestration-{int(time.time())}"
+        
+        # Display orchestration information at start
+        yield f"\n# 🎯 Mimir Multi-Agent Orchestration\n\n"
+        yield f"**Orchestration ID:** `{orchestration_id}`  \n"
+        yield f"**Pipeline Mode:** {pipeline_mode}  \n"
+        yield f"**Model:** {selected_model}  \n"
+        yield f"**Started:** {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}\n\n"
+        
+        yield f"---\n\n"
+        yield f"## 📊 Query This Run Later\n\n"
+        yield f"To retrieve task results, QC scores, and deliverables after completion:\n\n"
+        yield f"```\n/orchestration {orchestration_id}\n```\n\n"
+        yield f"---\n\n"
 
         # Emit status
         if __event_emitter__:
@@ -1311,9 +1346,10 @@ graph LR
                     
                     // Extract key success factors from QC feedback
                     WITH t, s
-                    UNWIND $success_factors as factor
+                    UNWIND range(0, size($success_factors) - 1) as idx
+                    WITH t, s, idx, $success_factors[idx] as factor
                     CREATE (f:memory {
-                        id: $task_id + '-factor-' + toString(id(f)),
+                        id: $task_id + '-factor-' + toString(idx),
                         type: 'memory',
                         title: 'Success Factor',
                         content: factor,
@@ -1453,9 +1489,10 @@ This task demonstrates effective execution patterns that can be applied to simil
                     
                     // Create suggested fixes as separate memory nodes
                     WITH t, f
-                    UNWIND $suggested_fixes as fix
+                    UNWIND range(0, size($suggested_fixes) - 1) as idx
+                    WITH t, f, idx, $suggested_fixes[idx] as fix
                     CREATE (s:memory {
-                        id: $task_id + '-fix-' + toString(id(s)),
+                        id: $task_id + '-fix-' + toString(idx),
                         type: 'memory',
                         title: 'Suggested Fix',
                         content: fix,
@@ -1566,15 +1603,15 @@ Output the complete structured prompt as markdown.
 Use the model: {model}
 """
 
-        # Yield the output as a code-fenced markdown block
-        yield "\n\n## 🎨 Ecko Structured Prompt\n\n"
-        yield "```markdown\n"
+        # Yield the output in a collapsible details block (avoids nested code fence issues)
+        yield "\n\n<details open>\n"
+        yield "<summary>🎨 Ecko Structured Prompt</summary>\n\n"
 
         # Call copilot-api with selected model
         async for chunk in self._call_llm(ecko_prompt, model):
             yield chunk
 
-        yield "\n```\n\n"
+        yield "\n\n</details>\n\n"
         yield "✅ **Structured prompt ready for PM**\n"
 
     async def _call_pm(
@@ -1598,15 +1635,15 @@ Output the complete plan as markdown that can be reviewed and executed.
 Use the model: {model}
 """
 
-        # Yield the output as a code-fenced markdown block
-        yield "\n\n## 📋 PM Task Plan\n\n"
-        yield "```markdown\n"
+        # Yield the output in a collapsible details block (avoids nested code fence issues)
+        yield "\n\n<details open>\n"
+        yield "<summary>📋 PM Task Plan</summary>\n\n"
 
         # Call copilot-api with selected model
         async for chunk in self._call_llm(pm_prompt, model):
             yield chunk
 
-        yield "\n```\n\n"
+        yield "\n\n</details>\n\n"
         yield "✅ **Task plan ready for review**\n"
 
     def _get_max_tokens(self, model: str) -> int:
@@ -1826,18 +1863,41 @@ Use the model: {model}
                     task['result_status'] = result['status']
                     task['result_error'] = result.get('error', '')
                     
-                    if result['status'] == 'completed':
+                    if result['status'] == 'completed' or result['status'] == 'completed_with_warning':
                         output_length = len(result['output'])
                         output_lines = result['output'].count('\n')
                         qc_score = result.get('qc_score', 'N/A')
                         attempts = result.get('attempts', 1)
+                        qc_warning = result.get('qc_warning', None)
                         
-                        yield f"\n\n### ✅ {task['title']}\n\n"
+                        # Choose emoji based on whether there's a warning
+                        status_emoji = "⚠️" if result['status'] == 'completed_with_warning' else "✅"
+                        
+                        yield f"\n\n### {status_emoji} {task['title']}\n\n"
                         yield f"**Task ID:** `{task['id']}`\n\n"
-                        yield f"**Status:** {result['status']} ✅\n\n"
-                        yield f"**QC Score:** {qc_score}/100\n\n"
+                        yield f"**Status:** {result['status']} {status_emoji}\n\n"
+                        
+                        # Show QC score with warning indicator if score < 60
+                        if isinstance(qc_score, int) and qc_score < 60 and qc_score > 0:
+                            yield f"**QC Score:** {qc_score}/100 ⚠️ **WARNING: Below 60 threshold**\n\n"
+                        else:
+                            yield f"**QC Score:** {qc_score}/100\n\n"
+                        
                         yield f"**Attempts:** {attempts}\n\n"
                         yield f"**Output:** {output_length} characters, {output_lines} lines\n\n"
+                        
+                        # Show generated preamble roles (not full content)
+                        if task.get('_worker_role'):
+                            worker_role = task.get('_worker_role', 'Worker')
+                            yield f"**🤖 Agentinator Generated Worker:** {worker_role}\n\n"
+                        
+                        if task.get('_qc_role'):
+                            qc_role = task.get('_qc_role', 'QC')
+                            yield f"**🤖 Agentinator Generated QC:** {qc_role}\n\n"
+                        
+                        # Show warning message if present
+                        if qc_warning:
+                            yield f"⚠️ **QC Warning:** {qc_warning}\n\n"
                         
                         # Show first 200 chars as preview
                         preview = result['output'][:200].replace('\n', ' ')
@@ -1858,6 +1918,15 @@ Use the model: {model}
                         yield f"**QC Score:** {qc_score}/100 (Failed)\n\n"
                         yield f"**Attempts:** {attempts}\n\n"
                         yield f"**Error:** {result['error']}\n\n"
+                        
+                        # Show generated preamble roles for failed tasks (for debugging)
+                        if task.get('_worker_role'):
+                            worker_role = task.get('_worker_role', 'Worker')
+                            yield f"**🤖 Agentinator Generated Worker:** {worker_role}\n\n"
+                        
+                        if task.get('_qc_role'):
+                            qc_role = task.get('_qc_role', 'QC')
+                            yield f"**🤖 Agentinator Generated QC:** {qc_role}\n\n"
                         
                         # Show QC feedback for failed tasks
                         if result.get('qc_feedback'):
@@ -1942,15 +2011,63 @@ Use the model: {model}
                 'error': str(e)
             }
     
-    async def _generate_preamble(self, role_description: str, agent_type: str, task: dict, model: str) -> str:
-        """Generate specialized preamble using Agentinator"""
+    async def _generate_preamble(self, role_description: str, agent_type: str, task: dict, model: str, __event_emitter__=None) -> str:
+        """Generate specialized preamble using Agentinator with semantic caching"""
         import hashlib
         
-        # Create hash of role description for caching
+        # Create hash of role description for exact matching
         role_hash = hashlib.md5(role_description.encode()).hexdigest()[:8]
-        preamble_filename = f"{agent_type.lower()}-{role_hash}.md"
         
-        print(f"🤖 Generating {agent_type} preamble: {preamble_filename}")
+        # 1. Try exact match first (fastest - <100ms)
+        exact_match = await self._find_cached_preamble_exact(agent_type, role_hash)
+        if exact_match:
+            print(f"✅ Cache HIT (exact): {agent_type}-{role_hash} (saved ~30s generation time)")
+            await self._update_preamble_usage(exact_match['id'], task['id'])
+            
+            # Emit status for cache hit
+            if __event_emitter__:
+                await __event_emitter__({
+                    "type": "status",
+                    "data": {
+                        "description": f"✅ Agentinator: Using cached {agent_type} preamble (exact match)",
+                        "done": False
+                    }
+                })
+            
+            return exact_match['content']
+        
+        # 2. Try semantic search for similar roles (fast - <500ms)
+        semantic_match = await self._find_cached_preamble_semantic(agent_type, role_description)
+        if semantic_match and semantic_match['similarity'] >= 0.85:
+            print(f"🔍 Cache HIT (semantic): similarity={semantic_match['similarity']:.3f} (saved ~30s generation time)")
+            print(f"   Original: {semantic_match['role_description'][:80]}...")
+            print(f"   Current:  {role_description[:80]}...")
+            await self._update_preamble_usage(semantic_match['id'], task['id'])
+            
+            # Emit status for semantic match
+            if __event_emitter__:
+                await __event_emitter__({
+                    "type": "status",
+                    "data": {
+                        "description": f"🔍 Agentinator: Using similar cached {agent_type} preamble ({semantic_match['similarity']:.0%} match)",
+                        "done": False
+                    }
+                })
+            
+            return semantic_match['content']
+        
+        # 3. Cache MISS - generate new preamble (slow - ~30-60s)
+        print(f"🤖 Cache MISS: Generating new {agent_type} preamble: {agent_type}-{role_hash}")
+        
+        # Emit status for generation start
+        if __event_emitter__:
+            await __event_emitter__({
+                "type": "status",
+                "data": {
+                    "description": f"🤖 Agentinator: Generating new {agent_type} preamble for '{role_description[:50]}...'",
+                    "done": False
+                }
+            })
         
         # Load Agentinator preamble
         agentinator_preamble = self._load_agentinator_preamble()
@@ -2007,7 +2124,195 @@ Generate the complete {agent_type} preamble now. Output the preamble directly as
         
         print(f"✅ Generated preamble: {len(preamble)} characters")
         
+        # Emit status for generation complete
+        if __event_emitter__:
+            await __event_emitter__({
+                "type": "status",
+                "data": {
+                    "description": f"✅ Agentinator: Completed {agent_type} preamble generation ({len(preamble)} chars)",
+                    "done": False
+                }
+            })
+        
+        # 4. Store in cache for future reuse
+        await self._store_preamble_in_cache(
+            agent_type=agent_type,
+            role_description=role_description,
+            role_hash=role_hash,
+            content=preamble,
+            task_id=task['id']
+        )
+        
         return preamble
+    
+    async def _find_cached_preamble_exact(self, agent_type: str, role_hash: str):
+        """Find exact match by agent_type + role_hash"""
+        try:
+            from neo4j import AsyncGraphDatabase
+            
+            uri = "bolt://neo4j_db:7687"
+            username = "neo4j"
+            password = os.getenv("NEO4J_PASSWORD", "password")
+            
+            async with AsyncGraphDatabase.driver(uri, auth=(username, password)) as driver:
+                async with driver.session() as session:
+                    result = await session.run("""
+                        MATCH (p:preamble {agent_type: $agent_type, role_hash: $role_hash})
+                        RETURN p.id as id, p.content as content, p.role_description as role_description
+                        ORDER BY p.last_used DESC
+                        LIMIT 1
+                    """, agent_type=agent_type, role_hash=role_hash)
+                    
+                    record = await result.single()
+                    if record:
+                        return dict(record)
+            
+            return None
+        except Exception as e:
+            print(f"⚠️ Cache lookup error (exact): {str(e)}")
+            return None
+    
+    async def _find_cached_preamble_semantic(self, agent_type: str, role_description: str):
+        """Find similar preamble using vector similarity search"""
+        try:
+            from neo4j import AsyncGraphDatabase
+            
+            uri = "bolt://neo4j_db:7687"
+            username = "neo4j"
+            password = os.getenv("NEO4J_PASSWORD", "password")
+            
+            # Generate embedding for role description
+            embedding = await self._generate_embedding(role_description)
+            if not embedding:
+                return None
+            
+            async with AsyncGraphDatabase.driver(uri, auth=(username, password)) as driver:
+                async with driver.session() as session:
+                    result = await session.run("""
+                        MATCH (p:preamble {agent_type: $agent_type})
+                        WHERE p.embedding IS NOT NULL
+                        WITH p, 
+                             gds.similarity.cosine(p.embedding, $embedding) as similarity
+                        WHERE similarity >= $min_similarity
+                        RETURN p.id as id, 
+                               p.content as content, 
+                               p.role_description as role_description,
+                               similarity
+                        ORDER BY similarity DESC
+                        LIMIT 1
+                    """, agent_type=agent_type, embedding=embedding, min_similarity=0.85)
+                    
+                    record = await result.single()
+                    if record:
+                        return dict(record)
+            
+            return None
+        except Exception as e:
+            print(f"⚠️ Cache lookup error (semantic): {str(e)}")
+            return None
+    
+    async def _store_preamble_in_cache(self, agent_type: str, role_description: str, 
+                                       role_hash: str, content: str, task_id: str) -> bool:
+        """Store generated preamble in graph with embedding"""
+        try:
+            import time
+            from neo4j import AsyncGraphDatabase
+            
+            uri = "bolt://neo4j_db:7687"
+            username = "neo4j"
+            password = os.getenv("NEO4J_PASSWORD", "password")
+            
+            # Generate embedding for semantic search
+            embedding = await self._generate_embedding(role_description)
+            if not embedding:
+                print("⚠️ Failed to generate embedding, storing without semantic search capability")
+            
+            preamble_id = f"preamble-{agent_type}-{role_hash}-{int(time.time())}"
+            
+            async with AsyncGraphDatabase.driver(uri, auth=(username, password)) as driver:
+                async with driver.session() as session:
+                    await session.run("""
+                        CREATE (p:preamble {
+                            id: $id,
+                            type: 'preamble',
+                            agent_type: $agent_type,
+                            role_description: $role_description,
+                            role_hash: $role_hash,
+                            content: $content,
+                            embedding: $embedding,
+                            char_count: $char_count,
+                            created_at: datetime(),
+                            used_count: 1,
+                            last_used: datetime(),
+                            task_ids: [$task_id]
+                        })
+                        RETURN p.id as id
+                    """, 
+                    id=preamble_id,
+                    agent_type=agent_type,
+                    role_description=role_description,
+                    role_hash=role_hash,
+                    content=content,
+                    embedding=embedding if embedding else [],
+                    char_count=len(content),
+                    task_id=task_id)
+                    
+                    print(f"💾 Cached preamble: {preamble_id} ({len(content)} chars)")
+            
+            return True
+        except Exception as e:
+            print(f"⚠️ Failed to cache preamble: {str(e)}")
+            return False
+    
+    async def _update_preamble_usage(self, preamble_id: str, task_id: str) -> bool:
+        """Update usage statistics when cached preamble is reused"""
+        try:
+            from neo4j import AsyncGraphDatabase
+            
+            uri = "bolt://neo4j_db:7687"
+            username = "neo4j"
+            password = os.getenv("NEO4J_PASSWORD", "password")
+            
+            async with AsyncGraphDatabase.driver(uri, auth=(username, password)) as driver:
+                async with driver.session() as session:
+                    result = await session.run("""
+                        MATCH (p:preamble {id: $preamble_id})
+                        SET p.used_count = p.used_count + 1,
+                            p.last_used = datetime(),
+                            p.task_ids = p.task_ids + $task_id
+                        RETURN p.used_count as count
+                    """, preamble_id=preamble_id, task_id=task_id)
+                    
+                    record = await result.single()
+                    if record:
+                        print(f"📊 Preamble reused {record['count']} times total")
+            
+            return True
+        except Exception as e:
+            print(f"⚠️ Failed to update preamble usage: {str(e)}")
+            return False
+    
+    async def _generate_embedding(self, text: str) -> list:
+        """Generate embedding vector for text using Ollama"""
+        try:
+            import aiohttp
+            
+            ollama_url = "http://ollama:11434/api/embeddings"
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.post(ollama_url, json={
+                    "model": "mxbai-embed-large",
+                    "prompt": text
+                }) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        return data.get('embedding', [])
+                    else:
+                        print(f"⚠️ Embedding generation failed: HTTP {response.status}")
+                        return []
+        except Exception as e:
+            print(f"⚠️ Embedding error: {str(e)}")
+            return []
     
     def _load_agentinator_preamble(self) -> str:
         """Load Agentinator preamble"""
@@ -4593,8 +4898,17 @@ Before completing, verify:
         worker_role = task.get('worker_role', 'Worker agent')
         qc_role = task.get('qc_role', 'QC agent')
         
-        worker_preamble = await self._generate_preamble(worker_role, 'worker', task, worker_model)
-        qc_preamble = await self._generate_preamble(qc_role, 'qc', task, qc_model)
+        print(f"🤖 Agentinator: Generating Worker preamble for role: {worker_role}")
+        worker_preamble = await self._generate_preamble(worker_role, 'worker', task, worker_model, __event_emitter__)
+        
+        print(f"🤖 Agentinator: Generating QC preamble for role: {qc_role}")
+        qc_preamble = await self._generate_preamble(qc_role, 'qc', task, qc_model, __event_emitter__)
+        
+        # Store preambles in task for display later
+        task['_generated_worker_preamble'] = worker_preamble
+        task['_generated_qc_preamble'] = qc_preamble
+        task['_worker_role'] = worker_role
+        task['_qc_role'] = qc_role
         
         while attempt_number <= max_retries:
             attempt_number += 1
@@ -4648,13 +4962,23 @@ Before completing, verify:
             # Phase 6: QC Execution Complete - Store result in graph
             await self._store_qc_result(task['id'], qc_result, attempt_number)
             
-            # Check QC result
-            if qc_result['passed']:
+            # NEW QC Scoring Logic:
+            # 1. Score >= 80: Pass immediately ✅
+            # 2. Score < 80 AND attempts remain: Retry (push for improvement)
+            # 3. Score < 80 AND no attempts remain:
+            #    - Score 1-79: Accept with warning ⚠️
+            #    - Score 0: Fail ❌
+            # 4. On retry: If no score improvement, fail immediately
+            
+            current_score = qc_result['score']
+            
+            # Check if score is passing (80+)
+            if current_score >= 80:
                 # Task succeeded - mark as completed in graph (Phase 8: Task Success)
                 final_result = {
                     'status': 'completed',
                     'output': worker_result['output'],
-                    'qc_score': qc_result['score'],
+                    'qc_score': current_score,
                     'qc_feedback': qc_result['feedback'],
                     'attempts': attempt_number,
                     'error': None
@@ -4664,26 +4988,79 @@ Before completing, verify:
                 
                 return final_result
             
-            # QC failed - check if we should retry
-            if attempt_number > max_retries:
-                # Circuit breaker triggered - mark as failed in graph
-                final_result = {
-                    'status': 'failed',
-                    'output': worker_result['output'],
-                    'qc_score': qc_result['score'],
-                    'qc_feedback': qc_result['feedback'],
-                    'qc_history': qc_history,
-                    'attempts': attempt_number,
-                    'error': f"QC failed after {max_retries + 1} attempts. Score: {qc_result['score']}/100"
-                }
+            # Score < 80 - check if this is a retry with no improvement
+            if attempt_number > 1 and len(qc_history) >= 2:
+                previous_score = qc_history[-2]['score']
                 
-                # Store failure in graph (Phase 9: Task Failure)
-                await self._mark_task_failed(task['id'], final_result)
-                
-                return final_result
+                if current_score <= previous_score:
+                    # No improvement on retry - fail immediately
+                    print(f"❌ FAIL: No score improvement on retry (was {previous_score}, now {current_score})")
+                    
+                    final_result = {
+                        'status': 'failed',
+                        'output': worker_result['output'],
+                        'qc_score': current_score,
+                        'qc_feedback': qc_result['feedback'],
+                        'qc_history': qc_history,
+                        'attempts': attempt_number,
+                        'error': f"QC score did not improve on retry (was {previous_score}/100, now {current_score}/100). Worker is not making progress."
+                    }
+                    
+                    await self._mark_task_failed(task['id'], final_result)
+                    
+                    return final_result
+                else:
+                    print(f"📈 Score improved: {previous_score} → {current_score} (continuing)")
             
-            # Prepare for retry
-            print(f"🔁 Retry {attempt_number}/{max_retries}: QC score {qc_result['score']}/100")
+            # Score < 80 - check if we have retries remaining
+            if attempt_number > max_retries:
+                # No more retries - decide based on score
+                if current_score == 0:
+                    # Complete failure (0/100) - fail the task
+                    print(f"❌ FAIL: Score 0/100 after {max_retries + 1} attempts")
+                    
+                    final_result = {
+                        'status': 'failed',
+                        'output': worker_result['output'],
+                        'qc_score': current_score,
+                        'qc_feedback': qc_result['feedback'],
+                        'qc_history': qc_history,
+                        'attempts': attempt_number,
+                        'error': f"QC score 0/100 after {max_retries + 1} attempts - complete failure"
+                    }
+                    
+                    await self._mark_task_failed(task['id'], final_result)
+                    
+                    return final_result
+                else:
+                    # Score 1-79 after 3 attempts - accept with warning
+                    print(f"⚠️ WARNING: Task {task['id']} scored {current_score}/100 after {max_retries + 1} attempts - accepting with warning")
+                    
+                    if __event_emitter__:
+                        await __event_emitter__({
+                            "type": "status",
+                            "data": {
+                                "description": f"⚠️ Warning: {task['title']} scored {current_score}/100 after {max_retries + 1} attempts",
+                                "done": False
+                            }
+                        })
+                    
+                    final_result = {
+                        'status': 'completed_with_warning',
+                        'output': worker_result['output'],
+                        'qc_score': current_score,
+                        'qc_feedback': qc_result['feedback'],
+                        'qc_warning': f"Score {current_score}/100 after {max_retries + 1} attempts (below 80 target). Task has issues but will not block pipeline.",
+                        'attempts': attempt_number,
+                        'error': None
+                    }
+                    
+                    await self._mark_task_completed(task['id'], final_result)
+                    
+                    return final_result
+            
+            # Still have retries - prepare for retry
+            print(f"🔁 Retry {attempt_number}/{max_retries}: QC score {current_score}/100 (target: 80+)")
         
         # Should never reach here
         return {
@@ -4797,25 +5174,15 @@ Output as structured markdown.
             # Parse QC output
             import re
             
-            # Try multiple patterns for verdict and score
-            # Pattern 1: Inline format (verdict: PASS or Verdict: PASS)
-            verdict_match = re.search(r'(?:verdict|Verdict):\s*["\']?(PASS|FAIL)["\']?', qc_output, re.IGNORECASE)
+            # Verdict pattern - flexible regex to handle any variation
+            # Matches: "VERDICT" followed by any characters/whitespace, then PASS or FAIL
+            # Handles: "1. VERDICT\nPASS", "## VERDICT\nPASS", "VERDICT: PASS", etc.
+            verdict_match = re.search(r'VERDICT(?:.|[\s\n])*?(PASS|FAIL)', qc_output, re.IGNORECASE | re.MULTILINE)
             
-            # Pattern 2: Markdown heading format (### 1. Verdict\n**PASS**)
-            if not verdict_match:
-                verdict_match = re.search(r'###\s*\d+\.\s*Verdict\s*\n\s*\*\*(PASS|FAIL)\*\*', qc_output, re.IGNORECASE)
-            
-            # Pattern 3: Just **PASS** or **FAIL** after "Verdict"
-            if not verdict_match:
-                verdict_match = re.search(r'Verdict.*?\*\*(PASS|FAIL)\*\*', qc_output, re.IGNORECASE | re.DOTALL)
-            
-            # Score patterns
-            # Pattern 1: Inline format (score: 100 or Score: 100)
-            score_match = re.search(r'(?:score|Score):\s*[*\s]*(\d+)', qc_output, re.IGNORECASE)
-            
-            # Pattern 2: Markdown heading format (### 2. Score\n**100**)
-            if not score_match:
-                score_match = re.search(r'###\s*\d+\.\s*Score\s*\n\s*\*\*(\d+)\*\*', qc_output, re.IGNORECASE)
+            # Score patterns - flexible regex to handle any variation
+            # Matches: "SCORE" followed by any characters/whitespace, then number/number format
+            # Handles: "2. SCORE\n100/100", "## SCORE\n100/100", "SCORE 100/100", etc.
+            score_match = re.search(r'SCORE(?:.|[\s\n])*?(\d+)/\d+', qc_output, re.IGNORECASE | re.MULTILINE)
             
             verdict = verdict_match.group(1).upper() if verdict_match else "FAIL"
             score = int(score_match.group(1)) if score_match else 0
@@ -4826,8 +5193,12 @@ Output as structured markdown.
             # Extract issues and fixes
             issues = re.findall(r'[-*]\s*(.+)', qc_output)
             
+            # Note: Pass threshold is 80 (handled in _execute_with_qc)
+            # This method just returns the raw score for decision logic
+            passed = score >= 80
+            
             return {
-                'passed': verdict == "PASS" and score >= 80,
+                'passed': passed,
                 'score': score,
                 'feedback': qc_output[:500],  # First 500 chars
                 'issues': issues[:5],  # Top 5 issues
