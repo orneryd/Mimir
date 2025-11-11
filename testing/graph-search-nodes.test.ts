@@ -1,17 +1,14 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
-import { GraphManager } from '../src/managers/GraphManager.js';
+import { createMockGraphManager } from './helpers/mockGraphManager.js';
 import type { NodeType } from '../src/types/index.js';
+import type { MockGraphManager } from './helpers/mockGraphManager.js';
 
 describe('GraphManager - searchNodes', () => {
-  let manager: GraphManager;
+  let manager: MockGraphManager;
   
   beforeAll(async () => {
-    // Use test Neo4j instance
-    const uri = process.env.NEO4J_URI || 'bolt://localhost:7687';
-    const user = process.env.NEO4J_USER || 'neo4j';
-    const password = process.env.NEO4J_PASSWORD || 'password';
-    
-    manager = new GraphManager(uri, user, password);
+    // Use in-memory mock GraphManager for fast tests
+    manager = createMockGraphManager();
     await manager.initialize();
   });
 
@@ -430,14 +427,10 @@ describe('GraphManager - searchNodes', () => {
 });
 
 describe('Edge Creation with Properties', () => {
-  let manager: GraphManager;
+  let manager: MockGraphManager;
 
   beforeEach(async () => {
-    const uri = process.env.NEO4J_URI || 'bolt://localhost:7687';
-    const user = process.env.NEO4J_USER || 'neo4j';
-    const password = process.env.NEO4J_PASSWORD || 'password';
-    
-    manager = new GraphManager(uri, user, password);
+    manager = createMockGraphManager();
     await manager.initialize();
     await manager.clear('ALL');
   });

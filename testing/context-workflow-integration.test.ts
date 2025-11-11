@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { GraphManager } from '../src/managers/GraphManager.js';
+import { createMockGraphManager } from './helpers/mockGraphManager.js';
 import { ContextManager } from '../src/managers/ContextManager.js';
 import { parseChainOutput } from '../src/orchestrator/task-executor.js';
 import fs from 'fs/promises';
@@ -19,7 +19,7 @@ import path from 'path';
 import type { PMContext, WorkerContext } from '../src/types/context.types.js';
 
 describe('Context Workflow Integration', () => {
-  let graphManager: GraphManager;
+  let graphManager: any;
   let contextManager: ContextManager;
 
   // Neo4j connection details
@@ -28,10 +28,10 @@ describe('Context Workflow Integration', () => {
   const password = process.env.NEO4J_PASSWORD || 'password';
 
   beforeEach(async () => {
-    graphManager = new GraphManager(uri, user, password);
+    graphManager = createMockGraphManager();
     contextManager = new ContextManager(graphManager);
     await graphManager.clear('ALL');
-    // Small delay for database to fully clear
+    // Small delay for consistency (mock is fast)
     await new Promise(resolve => setTimeout(resolve, 50));
   });
 

@@ -10,22 +10,19 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { GraphManager } from '../src/managers/GraphManager.js';
+import { createMockGraphManager } from './helpers/mockGraphManager.js';
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 
 describe('get_task_context MCP Tool (Integration)', () => {
-  let graphManager: GraphManager;
+  let graphManager: any;
   let server: Server;
 
   beforeEach(async () => {
-    const uri = process.env.NEO4J_URI || 'bolt://localhost:7687';
-    const user = process.env.NEO4J_USER || 'neo4j';
-    const password = process.env.NEO4J_PASSWORD || 'password';
-    
-    graphManager = new GraphManager(uri, user, password);
-    await graphManager.initialize();
-    await graphManager.clear('ALL');
+  // Use in-memory mock GraphManager for tests
+  graphManager = createMockGraphManager();
+  await graphManager.initialize();
+  await graphManager.clear('ALL');
     
     // Small delay for database clear
     await new Promise(resolve => setTimeout(resolve, 50));

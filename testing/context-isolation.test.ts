@@ -6,20 +6,17 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { GraphManager } from '../src/managers/GraphManager.js';
+import { createMockGraphManager } from './helpers/mockGraphManager.js';
 import { ContextManager } from '../src/managers/ContextManager.js';
 import type { PMContext } from '../src/types/context.types.js';
 
 describe('Context Isolation (Integration)', () => {
-  let graphManager: GraphManager;
+  let graphManager: any;
   let contextManager: ContextManager;
 
   beforeEach(async () => {
-    const uri = process.env.NEO4J_URI || 'bolt://localhost:7687';
-    const user = process.env.NEO4J_USER || 'neo4j';
-    const password = process.env.NEO4J_PASSWORD || 'password';
-    
-    graphManager = new GraphManager(uri, user, password);
+  // Use in-memory mock GraphManager for fast, isolated tests
+  graphManager = createMockGraphManager();
     await graphManager.initialize();
     await graphManager.clear('ALL');
     

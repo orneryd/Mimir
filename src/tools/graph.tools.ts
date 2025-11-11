@@ -40,7 +40,7 @@ Examples:
         },
         properties: {
           type: "object",
-          description: "Node properties for add/update operations",
+          description: "Node properties for add/update operations. Nested objects are automatically flattened (e.g., {details: {files: ['a.ts']}} becomes {details_files: ['a.ts']}). For best performance, flatten complex structures client-side before calling.",
           additionalProperties: true
         },
         filters: {
@@ -56,6 +56,14 @@ Examples:
           type: "object",
           description: "Search options: {limit: 100, offset: 0, types: ['todo', 'memory']}",
           additionalProperties: true
+        },
+        confirm: {
+          type: "boolean",
+          description: "Set to true to confirm a destructive operation (used with confirmationId for delete operations)"
+        },
+        confirmationId: {
+          type: "string",
+          description: "Confirmation token from a previous preview request (required when confirm=true for delete)"
         }
       },
       required: ["operation"]
@@ -120,7 +128,7 @@ Examples:
         },
         properties: {
           type: "object",
-          description: "Edge properties for add operation",
+          description: "Edge properties for add operation. Nested objects are automatically flattened to conform to Neo4j constraints.",
           additionalProperties: true
         }
       },
@@ -135,7 +143,7 @@ Examples:
     name: "memory_batch",
     description: `Perform bulk operations on multiple nodes/edges efficiently. Operations: add_nodes, update_nodes, delete_nodes, add_edges, delete_edges.
     
-Use for batch processing (e.g., creating multiple todos, bulk updates).
+Use for batch processing (e.g., creating multiple todos, bulk updates). All properties are automatically flattened if nested.
 
 Examples:
 - Add nodes: memory_batch(operation='add_nodes', nodes=[{type: 'todo', properties: {...}}, ...])
@@ -151,7 +159,7 @@ Examples:
         },
         nodes: {
           type: "array",
-          description: "Array of nodes for add_nodes: [{type: 'todo', properties: {...}}, ...]",
+          description: "Array of nodes for add_nodes: [{type: 'todo', properties: {...}}, ...]. Properties are automatically flattened if nested.",
           items: {
             type: "object",
             properties: {
@@ -162,7 +170,7 @@ Examples:
         },
         updates: {
           type: "array",
-          description: "Array of updates for update_nodes: [{id: 'todo-1', properties: {...}}, ...]",
+          description: "Array of updates for update_nodes: [{id: 'todo-1', properties: {...}}, ...]. Properties are automatically flattened if nested.",
           items: {
             type: "object",
             properties: {
@@ -178,7 +186,7 @@ Examples:
         },
         edges: {
           type: "array",
-          description: "Array of edges for add_edges: [{source: 'a', target: 'b', type: 'depends_on'}, ...]",
+          description: "Array of edges for add_edges: [{source: 'a', target: 'b', type: 'depends_on', properties: {...}}, ...]. Properties are automatically flattened if nested.",
           items: {
             type: "object",
             properties: {
@@ -188,6 +196,14 @@ Examples:
               properties: { type: "object", additionalProperties: true }
             }
           }
+        },
+        confirm: {
+          type: "boolean",
+          description: "Set to true to confirm a destructive operation (used with confirmationId for delete_nodes/delete_edges)"
+        },
+        confirmationId: {
+          type: "string",
+          description: "Confirmation token from a previous preview request (required when confirm=true for batch deletes)"
         }
       },
       required: ["operation"]
@@ -270,7 +286,7 @@ Examples:
   // ============================================================================
   {
     name: "memory_clear",
-    description: "Clear data from the graph. SAFETY: To clear all data, you MUST explicitly pass type='ALL'. To clear specific node types, pass the node type. Returns counts of deleted nodes and edges.",
+    description: "Clear data from the graph. SAFETY: To clear all data, you MUST explicitly pass type='ALL'. To clear specific node types, pass the node type. Returns counts of deleted nodes and edges. REQUIRES CONFIRMATION: First call without 'confirm' to get preview and confirmationId, then call again with confirm=true and the confirmationId to execute.",
     inputSchema: {
       type: "object",
       properties: {
@@ -278,6 +294,14 @@ Examples:
           type: "string",
           enum: ["ALL", "todo", "todoList", "memory", "file", "function", "class", "module", "concept", "person", "project", "custom"],
           description: "Node type to clear, or 'ALL' to clear entire graph (use with extreme caution!). Required parameter."
+        },
+        confirm: {
+          type: "boolean",
+          description: "Set to true to confirm the clear operation (used with confirmationId)"
+        },
+        confirmationId: {
+          type: "string",
+          description: "Confirmation token from the preview request (required when confirm=true)"
         }
       },
       required: ["type"]

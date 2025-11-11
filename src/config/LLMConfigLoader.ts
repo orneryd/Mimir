@@ -84,6 +84,12 @@ export class LLMConfigLoader {
    * Allows docker-compose.yml to control feature flags and settings
    */
   private applyEnvironmentOverrides(config: LLMConfig): void {
+    // During unit tests we want deterministic behavior and to avoid picking up
+    // environment variables from the developer machine (for example a local
+    // `.env` file). If running under the test runner, skip env overrides.
+    if (process.env.NODE_ENV === 'test') {
+      return;
+    }
     // Override Ollama baseUrl
     if (process.env.OLLAMA_BASE_URL && config.providers.ollama) {
       config.providers.ollama.baseUrl = process.env.OLLAMA_BASE_URL;

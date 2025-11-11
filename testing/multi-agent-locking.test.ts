@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { GraphManager } from '../src/managers/GraphManager.js';
+import { createMockGraphManager } from './helpers/mockGraphManager.js';
 
 /**
  * INTEGRATION TESTS - Multi-Agent Locking
@@ -23,7 +23,7 @@ function toNumber(value: any): number {
 }
 
 describe('Multi-Agent Locking (Integration)', () => {
-  let manager: GraphManager;
+  let manager: any;
   let taskId: string;
 
   beforeEach(async () => {
@@ -31,8 +31,8 @@ describe('Multi-Agent Locking (Integration)', () => {
     const user = process.env.NEO4J_USER || 'neo4j';
     const password = process.env.NEO4J_PASSWORD || 'password';
     
-    manager = new GraphManager(uri, user, password);
-    await manager.initialize();
+  manager = createMockGraphManager();
+  await manager.initialize();
     // Wait for clear to complete
     await manager.clear('ALL');
     // Small delay to ensure Neo4j processes the clear

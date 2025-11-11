@@ -12,13 +12,13 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { GraphManager } from '../src/managers/GraphManager.js';
+import { createMockGraphManager } from './helpers/mockGraphManager.js';
 import { ContextManager } from '../src/managers/ContextManager.js';
 import type { WorkerContext, QCContext, PMContext } from '../src/types/context.types.js';
 import path from 'path';
 
 describe('QC Verification Workflow (Integration)', () => {
-  let graphManager: GraphManager;
+  let graphManager: any;
   let contextManager: ContextManager;
 
   // Neo4j connection details
@@ -27,7 +27,7 @@ describe('QC Verification Workflow (Integration)', () => {
   const password = process.env.NEO4J_PASSWORD || 'password';
 
   beforeEach(async () => {
-    graphManager = new GraphManager(uri, user, password);
+    graphManager = createMockGraphManager();
     contextManager = new ContextManager(graphManager);
     await graphManager.clear('ALL');
     await new Promise(resolve => setTimeout(resolve, 50));

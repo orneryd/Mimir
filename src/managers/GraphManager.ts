@@ -17,6 +17,7 @@ import type {
   ClearType
 } from '../types/index.js';
 import { EmbeddingsService } from '../indexing/EmbeddingsService.js';
+import { flattenForMCP } from '../tools/mcp/flattenForMCP.js';
 
 export class GraphManager implements IGraphManager {
   private driver: Driver;
@@ -265,12 +266,13 @@ export class GraphManager implements IGraphManager {
         }
 
       // Flatten properties into the node (Neo4j doesn't support nested objects)
+      const flattenedProps = flattenForMCP(actualProperties || {});
       const nodeProps = {
         id,
         type: actualType,
         created: now,
         updated: now,
-        ...actualProperties,  // Spread properties at top level
+        ...flattenedProps,  // Spread flattened properties at top level
         ...(embeddingData || { has_embedding: false })  // Add embedding data if available
       };
 
@@ -310,8 +312,8 @@ export class GraphManager implements IGraphManager {
     try {
       const now = new Date().toISOString();
 
-      // Build SET clauses for each property
-      const setProperties = { ...properties, updated: now };
+  // Build SET clauses for each property (flatten nested structures)
+  const setProperties = { ...flattenForMCP(properties as Record<string, any>), updated: now };
 
       const result = await session.run(
         `
@@ -386,11 +388,12 @@ export class GraphManager implements IGraphManager {
       const now = new Date().toISOString();
 
       // Flatten properties directly onto the edge (Neo4j doesn't support nested objects)
+      const flattenedEdgeProps = flattenForMCP(properties || {});
       const edgeProps = {
         id,
         type,
         created: now,
-        ...properties  // User properties flattened at the same level
+        ...flattenedEdgeProps  // User properties flattened at the same level
       };
 
       const result = await session.run(
@@ -443,7 +446,7 @@ export class GraphManager implements IGraphManager {
         type: n.type,
         created: now,
         updated: now,
-        ...n.properties  // Spread properties at top level
+        ...flattenForMCP(n.properties || {})  // Spread flattened properties at top level
       }));
 
       const result = await session.run(
@@ -470,7 +473,7 @@ export class GraphManager implements IGraphManager {
       // Add updated timestamp to each update
       const updatesWithTimestamp = updates.map(u => ({
         id: u.id,
-        properties: { ...u.properties, updated: now }
+        properties: { ...flattenForMCP(u.properties || {}), updated: now }
       }));
 
       const result = await session.run(
@@ -527,7 +530,7 @@ export class GraphManager implements IGraphManager {
         source: e.source,
         target: e.target,
         type: e.type,
-        properties: e.properties || {},
+        properties: flattenForMCP(e.properties || {}),
         created: now
       }));
 
@@ -858,6 +861,13 @@ export class GraphManager implements IGraphManager {
   async clear(type?: ClearType): Promise<{ deletedNodes: number; deletedEdges: number }> {
     const session = this.driver.session();
     try {
+      // Safety: prevent accidental full-database clears during automated tests unless explicitly allowed.
+      const isTestEnv = process.env.NODE_ENV === 'test' || process.env.VITEST === 'true' || !!(globalThis as any).vitest;
+      const allowClearInTest = process.env.ALLOW_CLEAR_ALL_IN_TEST === 'true';
+      if (isTestEnv && type === 'ALL' && !allowClearInTest) {
+        console.warn('⚠️  Skipping clear(\'ALL\') in test environment to avoid wiping real database. Set ALLOW_CLEAR_ALL_IN_TEST=true to override.');
+        return { deletedNodes: 0, deletedEdges: 0 };
+      }
       let query: string;
       let params: any = {};
       
@@ -887,7 +897,7 @@ export class GraphManager implements IGraphManager {
         query = `
           MATCH (n)
           WHERE (n.type = $type OR $capitalizedType IN labels(n))
-          WITH n, size((n)-[]-()) as edgeCount
+          WITH n, COUNT { (n)-[]-() } as edgeCount
           DETACH DELETE n
           RETURN count(n) as deletedNodes, sum(edgeCount) as deletedEdges
         `;
