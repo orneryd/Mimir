@@ -16,6 +16,7 @@ Mimir is a Model Context Protocol (MCP) server that provides AI assistants (Clau
 
 **📖 Table of Contents**
 - [Why Mimir?](#-why-mimir) - What problems does it solve?
+- [🧠 NEW: Brain-Inspired Architecture](#-new-brain-inspired-adversarial-architecture) - Project Loki research
 - [Quick Start](#-quick-start-3-steps) - Get running in 5 minutes
 - [Configuration](#%EF%B8%8F-configuration) - Environment setup
 - [Usage](#-usage) - How to use with AI agents
@@ -47,6 +48,79 @@ Mimir is a Model Context Protocol (MCP) server that provides AI assistants (Clau
 - Multi-agent AI workflows
 - Complex task orchestration
 - Knowledge graph building
+
+---
+
+## 🧠 NEW: Brain-Inspired Adversarial Architecture
+
+**Announcing: Oscillatory Adversarial Project Loki (OA-Loki)**
+
+Based on comprehensive research into brain oscillations and adversarial neural networks, we've designed a brain-inspired multi-sensory integration architecture that extends Mimir with cortical-like learning mechanisms.
+
+### Key Innovation
+Each sensory modality gets a **local discriminator** (cortical interneuron analog) that provides adversarial feedback, mimicking brain E-I (excitatory-inhibitory) feedback loops with phase-dependent plasticity (Hebbian during wake, anti-Hebbian during sleep).
+
+### Research Foundation
+- ✅ **15+ peer-reviewed sources** (Benjamin & Kording 2023, Wang 2010, Goodfellow 2014, etc.)
+- ✅ **5 biological parallels** mapped (bidirectional flow, competition, layers, plasticity, timescales)
+- ✅ **Experimental validation** (MNIST task, formal computational framework)
+- ✅ **HIGH CONSENSUS** across neuroscience, AI/ML, and BCI literature
+
+### Architecture Overview
+**12 concurrent agents:**
+- 5 Sensory Workers (vision, audio, tactile, olfactory, gustatory) - **Generators**
+- 5 Local Discriminators (one per modality) - **Interneuron analogs**
+- 1 Loki Integration Agent - **Cross-modal binding**
+- 1 Global Discriminator - **Coherence assessment**
+
+**Multi-timescale oscillatory training:**
+- Fast (gamma-like): Within-modality discrimination (~100ms analog)
+- Medium (beta-like): Cross-modal integration (~500ms analog)
+- Slow (theta-like): Wake/sleep phase switching (~2-5s analog)
+- Very slow (circadian-like): Offline consolidation (~hours analog)
+
+### Computational Requirements
+- **12 LLM calls per event** (~7,100 tokens, 6.5-10 sec latency)
+- **Hardware options:**
+  * Single RTX 4090: $3K, 12-15 events/min (dev)
+  * 4× RTX 4090: $12.5K, 10-11 events/min (production)
+  * Cloud API (Together.ai): $0.003/event (prototyping)
+  * Hybrid: $4K + $250/month (recommended - best quality/cost)
+
+### Complete Documentation
+📚 **All research saved to disk (47,000+ words, zero data loss):**
+
+1. **Research Report** (`docs/research/BRAIN_OSCILLATIONS_ADVERSARIAL_NETWORKS_RESEARCH.md`)
+   - All 5 research questions answered with citations
+   - 15+ sources (DOIs, URLs, confidence assessments)
+   - Key finding: YES, brain-inspired adversarial networks highly plausible
+
+2. **Architecture Spec** (`docs/architecture/PROJECT_LOKI_OSCILLATORY_ADVERSARIAL_IMPLEMENTATION.md`)
+   - Complete 12-agent system design
+   - 8-week implementation timeline (4 phases)
+   - Evaluation metrics and success criteria
+
+3. **Hardware Analysis** (`docs/architecture/OA_LOKI_COMPUTATIONAL_REQUIREMENTS.md`)
+   - 4 deployment configurations with full specs
+   - Cost estimates and break-even analysis
+   - Power consumption and environmental impact
+
+4. **Mimir Integration** (`docs/architecture/PROJECT_LOKI_MIMIR_INTEGRATION.md`)
+   - How Mimir's multi-agent orchestration enables this architecture
+   - Neo4j graph schema for adversarial training
+   - MCP tool mappings
+
+5. **Quick Reference** (`docs/research/RESEARCH_INDEX.md` & `RESEARCH_DELIVERABLES_SUMMARY.md`)
+   - Navigation guide, summary tables, cross-references
+
+### Status
+🎯 **Design Complete - Ready for Implementation**
+- Phase 1 (Weeks 1-2): Single modality + discriminator
+- Phase 2 (Weeks 3-4): All 5 modalities + Loki
+- Phase 3 (Weeks 5-6): Global coherence + conflict detection
+- Phase 4 (Weeks 7-8): Consolidation + optimization
+
+**Learn More:** See `docs/research/RESEARCH_DELIVERABLES_SUMMARY.md` for complete overview
 
 ## ⚡ Quick Start (3 Steps)
 
