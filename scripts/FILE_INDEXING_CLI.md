@@ -110,7 +110,7 @@ When `--embeddings` is enabled:
 - Files are chunked into manageable pieces
 - Each chunk gets a vector embedding (1024 dimensions)
 - Enables semantic search across all indexed content
-- Uses the `mxbai-embed-large` model from Ollama
+- Uses the `nomic-embed-text` model from Ollama
 
 ### Statistics
 
@@ -148,7 +148,7 @@ docker-compose ps ollama
 # Verify model is available
 docker exec -it ollama_server ollama list
 
-# Should see: mxbai-embed-large:latest
+# Should see: nomic-embed-text:latest
 ```
 
 ## Advanced Usage

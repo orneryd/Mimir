@@ -116,7 +116,7 @@ export class GraphManager implements IGraphManager {
         FOR (c:FileChunk) ON EACH [c.text]
       `);
 
-      // Vector index for semantic search (1024 dimensions for mxbai-embed-large)
+      // Vector index for semantic search (1024 dimensions for nomic-embed-text)
       await session.run(`
         CREATE VECTOR INDEX node_embedding_index IF NOT EXISTS
         FOR (n:Node) ON (n.embedding)

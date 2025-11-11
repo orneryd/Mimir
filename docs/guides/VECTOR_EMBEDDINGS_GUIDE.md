@@ -274,21 +274,21 @@ const stats = await mcp.call('get_embedding_stats', {});
 | Model | Dimensions | Size | Speed | Use Case |
 |-------|------------|------|-------|----------|
 | `nomic-embed-text` | 768 | 274MB | Fast | **Recommended** - General purpose |
-| `mxbai-embed-large` | 1024 | 670MB | Medium | Higher accuracy, slower |
+| `nomic-embed-text` | 1024 | 670MB | Medium | Higher accuracy, slower |
 | `all-minilm` | 384 | 120MB | Very Fast | Quick testing, less accurate |
 
 **Switching models:**
 
 Edit `.env`:
 ```bash
-MIMIR_EMBEDDINGS_MODEL=mxbai-embed-large
+MIMIR_EMBEDDINGS_MODEL=nomic-embed-text
 MIMIR_EMBEDDINGS_DIMENSIONS=1024
 ```
 
 Restart and re-index:
 ```bash
 docker compose restart mcp-server
-docker exec ollama_server ollama pull mxbai-embed-large
+docker exec ollama_server ollama pull nomic-embed-text
 docker exec mcp_server node setup-watch.js
 ```
 

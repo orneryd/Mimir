@@ -50,7 +50,7 @@ This repository contains **Mimir** - a production-ready MCP (Model Context Proto
 
 - Persistent storage for nodes (TODOs, files, concepts) and relationships
 - Full-text search with indexing
-- **Vector embeddings**: Automatic semantic embeddings for ALL node types (1024 dimensions, mxbai-embed-large model)
+- **Vector embeddings**: Automatic semantic embeddings for ALL node types (1024 dimensions, nomic-embed-text model)
 - Multi-hop graph traversal for associative memory
 - Atomic transactions with ACID compliance
 

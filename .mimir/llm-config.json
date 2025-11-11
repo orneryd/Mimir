@@ -274,7 +274,7 @@
   "embeddings": {
     "enabled": true,
     "provider": "ollama",
-    "model": "mxbai-embed-large",
+    "model": "nomic-embed-text",
     "dimensions": 1024,
     "chunkSize": 1024,
     "chunkOverlap": 100

@@ -12,7 +12,7 @@ The Mimir system uses vector embeddings for semantic search across all node type
 FROM ollama/ollama:latest
 
 # Set the embedding model to pull (can be overridden at build time)
-ARG EMBEDDING_MODEL=mxbai-embed-large
+ARG EMBEDDING_MODEL=nomic-embed-text
 
 # Start Ollama server in the background and pull the model
 RUN ollama serve & \
@@ -45,7 +45,7 @@ The image is tagged as:
 
 ## Configuration
 
-The embedding model is specified in `docker-compose.yml` via the `MIMIR_EMBEDDINGS_MODEL` environment variable (default: `mxbai-embed-large`). The build process uses this value to determine which model to pre-pull.
+The embedding model is specified in `docker-compose.yml` via the `MIMIR_EMBEDDINGS_MODEL` environment variable (default: `nomic-embed-text`). The build process uses this value to determine which model to pre-pull.
 
 To use a different embedding model:
 
@@ -67,24 +67,24 @@ After building and starting the container, verify the model is available:
 docker exec -it ollama_server ollama list
 ```
 
-You should see the embedding model listed (e.g., `mxbai-embed-large:latest`).
+You should see the embedding model listed (e.g., `nomic-embed-text:latest`).
 
 Test the embedding endpoint:
 
 ```powershell
 # PowerShell
-Invoke-RestMethod -Uri http://localhost:11434/api/embeddings -Method Post -Body (@{model='mxbai-embed-large';prompt='test'} | ConvertTo-Json) -ContentType 'application/json'
+Invoke-RestMethod -Uri http://localhost:11434/api/embeddings -Method Post -Body (@{model='nomic-embed-text';prompt='test'} | ConvertTo-Json) -ContentType 'application/json'
 ```
 
 ```bash
 # Linux/Mac
-curl http://localhost:11434/api/embeddings -d '{"model": "mxbai-embed-large", "prompt": "test"}'
+curl http://localhost:11434/api/embeddings -d '{"model": "nomic-embed-text", "prompt": "test"}'
 ```
 
 ## Supported Models
 
 Common embedding models that work with Ollama:
-- `mxbai-embed-large` (1024 dimensions) - Default, recommended
+- `nomic-embed-text` (1024 dimensions) - Default, recommended
 - `nomic-embed-text` (768 dimensions)
 - `all-minilm` (384 dimensions) - Smaller, faster
 

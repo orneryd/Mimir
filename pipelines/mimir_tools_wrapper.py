@@ -288,7 +288,7 @@ No folders are currently being watched.
             async with aiohttp.ClientSession() as session:
                 async with session.post(
                     f"{self.valves.OLLAMA_URL}/api/embeddings",
-                    json={"model": "mxbai-embed-large", "prompt": query}
+                    json={"model": "nomic-embed-text", "prompt": query}
                 ) as response:
                     if response.status != 200:
                         return f"❌ Error generating embedding: {await response.text()}"

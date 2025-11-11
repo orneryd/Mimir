@@ -34,7 +34,7 @@ export interface TextChunk {
 }
 
 // Chunking configuration based on model context limits
-// Model limits: all-minilm (512 tokens), nomic-embed-text (2048 tokens), mxbai-embed-large (512 tokens)
+// Model limits: all-minilm (512 tokens), nomic-embed-text (2048 tokens), nomic-embed-text (512 tokens)
 // Configurable via environment variables for flexibility
 const getChunkSize = () => parseInt(process.env.MIMIR_EMBEDDINGS_CHUNK_SIZE || '1024', 10);
 const getChunkOverlap = () => parseInt(process.env.MIMIR_EMBEDDINGS_CHUNK_OVERLAP || '100', 10);

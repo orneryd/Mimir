@@ -10,7 +10,7 @@ Mimir utilizes a **Graph-RAG architecture** built on Neo4j, combining the streng
 
 - **MCP Server Layer:** Model Context Protocol server providing tools for memory management, file indexing, and TODO tracking
 - **Neo4j Graph Database:** Persistent storage for nodes (TODOs, files, concepts, memories) and relationships (depends_on, relates_to, etc.)
-- **Vector Embeddings:** Automatic semantic embeddings for all node types using mxbai-embed-large (1024 dimensions)
+- **Vector Embeddings:** Automatic semantic embeddings for all node types using nomic-embed-text (1024 dimensions)
 - **File Indexing System:** Automatic file watching with .gitignore support, indexing files into graph nodes
 - **Multi-Agent Orchestration:** PM → Worker → QC workflow with context isolation and optimistic locking
 

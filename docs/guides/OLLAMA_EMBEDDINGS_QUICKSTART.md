@@ -166,10 +166,10 @@ docker exec ollama_server ollama pull nomic-embed-text
 - **Speed:** Fast
 - **Best for:** General purpose code/text
 
-### Alternative: mxbai-embed-large
+### Alternative: nomic-embed-text
 
 ```bash
-docker exec ollama_server ollama pull mxbai-embed-large
+docker exec ollama_server ollama pull nomic-embed-text
 ```
 
 - **Dimensions:** 1024

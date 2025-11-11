@@ -1023,7 +1023,7 @@ graph LR
 
             # Use host.docker.internal to access Ollama on host machine
             url = "http://host.docker.internal:11434/api/embeddings"
-            payload = {"model": "mxbai-embed-large", "prompt": text}
+            payload = {"model": "nomic-embed-text", "prompt": text}
 
             async with aiohttp.ClientSession() as session:
                 async with session.post(url, json=payload) as response:
@@ -2269,7 +2269,7 @@ Generate the complete {agent_type} preamble now. Output the preamble directly as
             
             async with aiohttp.ClientSession() as session:
                 async with session.post(ollama_url, json={
-                    "model": "mxbai-embed-large",
+                    "model": "nomic-embed-text",
                     "prompt": text
                 }) as response:
                     if response.status == 200:

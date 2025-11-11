@@ -65,7 +65,7 @@ class Pipe:
 
         # Embedding Configuration
         EMBEDDING_MODEL: str = Field(
-            default="mxbai-embed-large",
+            default="nomic-embed-text",
             description="Ollama embedding model to use for semantic search",
         )
 

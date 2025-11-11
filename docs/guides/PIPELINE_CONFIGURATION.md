@@ -298,7 +298,7 @@ SEMANTIC_SEARCH_ENABLED: bool = True
 SEMANTIC_SEARCH_LIMIT: int = 10
 
 # Embedding Configuration
-EMBEDDING_MODEL: str = "mxbai-embed-large"
+EMBEDDING_MODEL: str = "nomic-embed-text"
 ```
 
 **Usage**:

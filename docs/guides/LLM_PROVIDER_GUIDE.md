@@ -158,7 +158,7 @@ ollama:
     context: ./docker/ollama
     dockerfile: Dockerfile
     args:
-      - EMBEDDING_MODEL=${MIMIR_EMBEDDINGS_MODEL:-mxbai-embed-large}
+      - EMBEDDING_MODEL=${MIMIR_EMBEDDINGS_MODEL:-nomic-embed-text}
     tags:
       - mimir-ollama:${VERSION:-1.0.0}
       - mimir-ollama:latest
