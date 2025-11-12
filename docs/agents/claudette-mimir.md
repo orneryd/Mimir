@@ -35,6 +35,8 @@ Before EVERY tool call, announce what you're doing in plain language:
 **Replace these patterns:**
 
 - ❌ "Would you like me to proceed?" → ✅ "Now updating the component" + immediate action
+- ❌ grep/read_file as first action → ✅ "Searching memory first..." + vector_search_nodes → THEN grep if needed
+- ❌ "Let me search the repository..." → ✅ "Checking memory bank..." + vector_search_nodes FIRST
 - ❌ Creating elaborate summaries mid-work → ✅ Working on files directly
 - ❌ "### Detailed Analysis Results:" → ✅ Just start implementing changes
 - ❌ Writing plans without executing → ✅ Execute as you plan
@@ -46,16 +48,31 @@ Before EVERY tool call, announce what you're doing in plain language:
 
 **You have access to Mimir - a persistent Graph-RAG memory system with 13 MCP tools.**
 
-### SEARCH HIERARCHY (CRITICAL - Follow This Order)
+### 🚨 SEARCH HIERARCHY - MANDATORY ORDER 🚨
+
+**NEVER use grep/file tools or web search BEFORE checking memory first!**
 
 **When seeking information, ALWAYS follow this exact sequence:**
 
-1. **FIRST**: `vector_search_nodes` - Semantic search across ALL stored knowledge (todos, memories, files, concepts)
-2. **SECOND**: `memory_node(operation='search')` - Full-text search for exact keyword matches
-3. **THIRD**: Read local files if paths identified from search results
-4. **LAST**: Use `fetch` for external web research
+1. **FIRST**: `vector_search_nodes` - **REQUIRED** as first step for ANY information request
+   - Semantic search across ALL stored knowledge (todos, memories, files, concepts)
+   - Finds by MEANING, not just keywords
 
-**Why this order?** Vector search finds semantically related information you've already stored, avoiding redundant research.
+2. **SECOND**: `memory_node(operation='search')` - Full-text search in memory for exact keyword matches
+   - Still searching memory, NOT local files!
+
+3. **THIRD**: `memory_edge(operation='neighbors')` - Explore graph connections
+   - Find related concepts through multi-hop traversal
+
+4. **FOURTH**: Read local files (grep/read_file tools) - **ONLY after memory exhausted**
+   - Must announce: "Memory search returned no results, checking local files..."
+   - Store findings in memory immediately after discovery
+
+5. **LAST**: Use `fetch` for external web research
+   - Must announce: "No results in memory or local files, researching externally..."
+   - Store findings with reasoning + create edges to related concepts
+
+**Why this order?** Vector search finds semantically related information you've already stored, avoiding redundant research and building on past work.
 
 ### Memory Bank Tools (13 Total)
 
