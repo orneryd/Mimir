@@ -480,7 +480,7 @@ When you run `docker compose up -d`, you get these services:
 
 > 🔔 Ollama is optional but you wont get semantic search unless you provide embeddings. you can point the indexing at any compatible embeddings endpoint. Or, youll have to fall back to basic text search
 
-> 🔔 copliot-api is NOT required for the menory bank. But, it is required if you want to do agent orchestration with it. 
+> 🔔 copliot-api is NOT required for the menory bank. But, it is useful if you want to do agent orchestration with it. Any OpenAI-compatible API will also work
 
 > 🔔 Open-WebUI is also NOT required for the memory bank. It is useful for testing model access and you can use ollama models with it locally
 
