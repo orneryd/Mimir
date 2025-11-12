@@ -1,3 +1,5 @@
+<img width="283" height="380" alt="image" src="https://github.com/user-attachments/assets/f4e3be80-79fe-4e10-b010-9a39b5f70584" />
+
 # Mimir - AI-Powered Memory Bank + Task Management Orchestration with Knowledge Graphs
 
 [![Docker](https://img.shields.io/badge/docker-ready-blue?logo=docker)](https://www.docker.com/)
