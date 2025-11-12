@@ -6,12 +6,12 @@ Get Mimir running in 10 minutes with step-by-step instructions.
 
 Before starting, install these tools:
 
-- **Docker Desktop** (with 16GB RAM allocated) → https://www.docker.com/products/docker-desktop/
+- **Docker Desktop** (with > 2 GB RAM allocated) → https://www.docker.com/products/docker-desktop/
 - **Node.js 18+** → https://nodejs.org/
 - **Git** → https://git-scm.com/
 - **GitHub Copilot Subscription** (Individual, Business, or Enterprise)
 
-> 💡 **Docker Memory**: Mimir requires Docker Desktop with **at least 16GB RAM** allocated. Check: Docker Desktop → Settings → Resources → Memory
+> 💡 **Docker Memory**: Mimir requires Docker Desktop with ** > 2 GB RAM** allocated. Check: Docker Desktop → Settings → Resources → Memory
 
 ---
 
@@ -275,7 +275,7 @@ docker compose logs copilot-api | grep "Please enter"
 docker compose logs
 
 # Common fixes:
-# 1. Docker memory too low (need 16GB)
+# 1. Docker memory too low (need > 2GB)
 # 2. Ports already in use (7474, 4141, 9042, 3000)
 # 3. Neo4j taking too long to start (wait 60 seconds)
 
@@ -297,7 +297,7 @@ docker compose logs neo4j
 docker compose ps neo4j
 
 # If unhealthy, check memory allocation
-# Docker Desktop → Settings → Resources → Memory (need 16GB)
+# Docker Desktop → Settings → Resources → Memory (need > 2GB)
 ```
 
 ### Problem: Port conflicts
