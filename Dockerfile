@@ -34,6 +34,7 @@ COPY --from=builder /app/build ./build
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/.mimir ./.mimir
+COPY --from=builder /app/docs ./docs
 
 # Ensure non-root user owns the app directory and switch to it
 RUN chown -R node:node /app
