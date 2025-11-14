@@ -1,6 +1,28 @@
 import { create } from 'zustand';
-import { Task, ProjectPlan, ParallelGroup, AgentTemplate, CreateAgentRequest } from '../types/task';
+import { Task, ProjectPlan, ParallelGroup, AgentTemplate, CreateAgentRequest, TaskExecutionStatus } from '../types/task';
 import { apiClient, ApiError } from '../utils/api';
+
+// SessionStorage keys
+const STORAGE_KEYS = {
+  WORKFLOW_STATE: 'mimir-workflow-state',
+  EXECUTION_STATE: 'mimir-execution-state',
+};
+
+// Persistable workflow state
+interface PersistedWorkflowState {
+  projectPrompt: string;
+  projectPlan: ProjectPlan | null;
+  tasks: Task[];
+  parallelGroups: ParallelGroup[];
+  agentTemplates: AgentTemplate[];
+}
+
+// Persistable execution state
+interface PersistedExecutionState {
+  activeExecutionId: string | null;
+  isExecuting: boolean;
+  taskStatuses: Record<string, TaskExecutionStatus>; // Map of taskId -> status
+}
 
 interface PlanState {
   projectPrompt: string;
@@ -13,9 +35,15 @@ interface PlanState {
   agentOffset: number;
   hasMoreAgents: boolean;
   isLoadingAgents: boolean;
+  isCreatingAgent: boolean; // Track agent creation in progress (including refresh)
   selectedAgent: AgentTemplate | null;
   agentOperations: Record<string, boolean>; // Track loading states by agent ID
   globalError: ApiError | null; // Global error state
+  
+  // Execution tracking
+  activeExecutionId: string | null;
+  isExecuting: boolean;
+  executionResults: Record<string, any>; // Store results by executionId
   
   // Actions
   setProjectPrompt: (prompt: string) => void;
@@ -25,6 +53,7 @@ interface PlanState {
   updateTask: (taskId: string, updates: Partial<Task>) => void;
   deleteTask: (taskId: string) => void;
   reorderTask: (taskId: string, newOrder: number) => void;
+  reorderCanvasItem: (itemId: string, itemType: 'task' | 'group', newIndex: number) => void; // NEW: Unified reordering
   addParallelGroup: () => void;
   updateParallelGroup: (groupId: number, updates: Partial<ParallelGroup>) => void;
   deleteParallelGroup: (groupId: number) => void;
@@ -39,6 +68,17 @@ interface PlanState {
   deleteAgent: (agentId: string) => Promise<void>;
   setAgentSearch: (search: string) => void;
   setSelectedAgent: (agent: AgentTemplate | null) => void;
+  
+  // Execution tracking
+  updateTaskExecutionStatus: (taskId: string, status: TaskExecutionStatus) => void;
+  setActiveExecution: (executionId: string | null, isExecuting: boolean) => void;
+  setExecutionResults: (executionId: string, results: any) => void;
+  clearExecutionStatus: () => void;
+  
+  // Session persistence
+  saveToSessionStorage: () => void;
+  loadFromSessionStorage: () => void;
+  clearSessionStorage: () => void;
 }
 
 const groupColors = [
@@ -143,9 +183,15 @@ export const usePlanStore = create<PlanState>((set, get) => {
   agentOffset: 0,
   hasMoreAgents: true,
   isLoadingAgents: false,
+  isCreatingAgent: false,
   selectedAgent: null,
   agentOperations: {},
   globalError: null,
+  
+  // Execution tracking
+  activeExecutionId: null,
+  isExecuting: false,
+  executionResults: {},
   
   setProjectPrompt: (prompt) => set({ projectPrompt: prompt }),
   
@@ -209,6 +255,102 @@ export const usePlanStore = create<PlanState>((set, get) => {
       return index !== -1 ? { ...t, order: index } : t;
     });
     
+    return { tasks: updatedTasks };
+  }),
+
+  reorderCanvasItem: (itemId, itemType, newIndex) => set((state) => {
+    // Helper to extract task number from ID
+    const getTaskNumber = (taskId: string): number => {
+      const match = taskId.match(/task-(\d+)/);
+      return match ? parseInt(match[1], 10) : Infinity;
+    };
+
+    // Build unified canvas items (same logic as TaskCanvas)
+    type CanvasItem = 
+      | { type: 'task'; task: Task; order: number }
+      | { type: 'group'; group: ParallelGroup; order: number };
+
+    const canvasItems: CanvasItem[] = [];
+
+    // Add ungrouped tasks
+    state.tasks
+      .filter((t) => t.parallelGroup === null)
+      .forEach((task) => {
+        canvasItems.push({
+          type: 'task',
+          task,
+          order: task.order ?? getTaskNumber(task.id),
+        });
+      });
+
+    // Add parallel groups
+    state.parallelGroups.forEach((group) => {
+      const groupTasks = state.tasks.filter((t) => t.parallelGroup === group.id);
+      const minTaskNumber = Math.min(
+        ...groupTasks.map((t) => t.order ?? getTaskNumber(t.id)),
+        Infinity
+      );
+      canvasItems.push({
+        type: 'group',
+        group,
+        order: minTaskNumber,
+      });
+    });
+
+    // Sort by current order
+    canvasItems.sort((a, b) => a.order - b.order);
+
+    // Find the item being moved
+    const oldIndex = canvasItems.findIndex((item) => {
+      if (itemType === 'task' && item.type === 'task') {
+        return item.task.id === itemId;
+      } else if (itemType === 'group' && item.type === 'group') {
+        return String(item.group.id) === itemId;
+      }
+      return false;
+    });
+
+    if (oldIndex === -1) return state;
+
+    // Remove from old position
+    const [movedItem] = canvasItems.splice(oldIndex, 1);
+
+    // Insert at new position
+    const safeNewIndex = Math.min(Math.max(0, newIndex), canvasItems.length);
+    canvasItems.splice(safeNewIndex, 0, movedItem);
+
+    // Reassign order values based on new positions (but keep task IDs stable!)
+    const updatedTasks = state.tasks.map((task) => {
+      // Find this task's new position in canvasItems
+      let newOrder: number | undefined;
+
+      // Check if it's an ungrouped task
+      const taskItemIndex = canvasItems.findIndex(
+        (item) => item.type === 'task' && item.task.id === task.id
+      );
+      if (taskItemIndex !== -1) {
+        newOrder = taskItemIndex;
+      }
+
+      // Check if it's in a group
+      const groupItemIndex = canvasItems.findIndex(
+        (item) =>
+          item.type === 'group' &&
+          item.group.taskIds.includes(task.id)
+      );
+      if (groupItemIndex !== -1) {
+        // For grouped tasks, use the group's position plus task's index within group
+        const groupItem = canvasItems[groupItemIndex] as { type: 'group'; group: ParallelGroup; order: number };
+        const taskIndexInGroup = groupItem.group.taskIds.indexOf(task.id);
+        newOrder = groupItemIndex + (taskIndexInGroup * 0.001); // Use fractional order for tasks in group
+      }
+
+      return {
+        ...task,
+        order: newOrder !== undefined ? newOrder : task.order,
+      };
+    });
+
     return { tasks: updatedTasks };
   }),
   
@@ -416,16 +558,23 @@ export const usePlanStore = create<PlanState>((set, get) => {
     }
   },
    
-   createAgent: async (request) => {
-     const data = await apiClient.post<{ agent: AgentTemplate }>('/agents', request);
-     const newAgent = data.agent;
-     
-     set((state) => ({
-       agentTemplates: [newAgent, ...state.agentTemplates],
-     }));
-     
-     return newAgent;
-   },
+  createAgent: async (request) => {
+    set({ isCreatingAgent: true });
+    
+    try {
+      const data = await apiClient.post<{ agent: AgentTemplate }>('/agents', request);
+      const newAgent = data.agent;
+      
+      // Refresh the agent list from Neo4j to ensure synchronization
+      // This will fetch the newly created agent along with any others that might have been added
+      const state = get();
+      await state.fetchAgents(state.agentSearch, true); // Reset to page 1 with current search
+      
+      return newAgent;
+    } finally {
+      set({ isCreatingAgent: false });
+    }
+  },
   
   setAgentSearch: (search) => set({ agentSearch: search }),
   
@@ -460,5 +609,158 @@ export const usePlanStore = create<PlanState>((set, get) => {
   },
   
   setSelectedAgent: (agent) => set({ selectedAgent: agent }),
+  
+  // Execution tracking methods
+  updateTaskExecutionStatus: (taskId, status) => set((state) => {
+    const taskExists = state.tasks.find(t => t.id === taskId);
+    if (!taskExists) {
+      console.error(`❌ Task not found in store: ${taskId}`);
+      console.log('Available task IDs:', state.tasks.map(t => t.id));
+    } else {
+      console.log(`✅ Updating task ${taskId} to status: ${status}`);
+    }
+    
+    return {
+      tasks: state.tasks.map(t => 
+        t.id === taskId ? { ...t, executionStatus: status } : t
+      )
+    };
+  }),
+  
+  setActiveExecution: (executionId, isExecuting) => set({ 
+    activeExecutionId: executionId, 
+    isExecuting 
+  }),
+  
+  setExecutionResults: (executionId, results) => set((state) => ({
+    executionResults: {
+      ...state.executionResults,
+      [executionId]: results
+    }
+  })),
+  
+  clearExecutionStatus: () => set((state) => ({
+    tasks: state.tasks.map(t => ({ ...t, executionStatus: undefined })),
+    activeExecutionId: null,
+    isExecuting: false,
+    executionResults: {}
+  })),
+  
+  // Session persistence methods
+  saveToSessionStorage: () => {
+    // Only run in browser environment
+    if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') {
+      return;
+    }
+    
+    const state = get();
+    
+    // Save workflow state (tasks, plan, etc.)
+    const workflowState: PersistedWorkflowState = {
+      projectPrompt: state.projectPrompt,
+      projectPlan: state.projectPlan,
+      tasks: state.tasks,
+      parallelGroups: state.parallelGroups,
+      agentTemplates: state.agentTemplates,
+    };
+    sessionStorage.setItem(STORAGE_KEYS.WORKFLOW_STATE, JSON.stringify(workflowState));
+    
+    // Save execution state separately
+    const taskStatuses: Record<string, TaskExecutionStatus> = {};
+    state.tasks.forEach(task => {
+      if (task.executionStatus) {
+        taskStatuses[task.id] = task.executionStatus;
+      }
+    });
+    
+    const executionState: PersistedExecutionState = {
+      activeExecutionId: state.activeExecutionId,
+      isExecuting: state.isExecuting,
+      taskStatuses,
+    };
+    sessionStorage.setItem(STORAGE_KEYS.EXECUTION_STATE, JSON.stringify(executionState));
+    
+    console.log('💾 State saved to sessionStorage');
+  },
+  
+  loadFromSessionStorage: () => {
+    // Only run in browser environment
+    if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') {
+      return;
+    }
+    
+    try {
+      // Load workflow state
+      const workflowData = sessionStorage.getItem(STORAGE_KEYS.WORKFLOW_STATE);
+      if (workflowData) {
+        const workflowState: PersistedWorkflowState = JSON.parse(workflowData);
+        console.log('📂 Loading workflow state from sessionStorage');
+        
+        set({
+          projectPrompt: workflowState.projectPrompt,
+          projectPlan: workflowState.projectPlan,
+          tasks: workflowState.tasks,
+          parallelGroups: workflowState.parallelGroups,
+          agentTemplates: workflowState.agentTemplates.length > 0 
+            ? workflowState.agentTemplates 
+            : get().agentTemplates, // Keep defaults if empty
+        });
+      }
+      
+      // Load execution state
+      const executionData = sessionStorage.getItem(STORAGE_KEYS.EXECUTION_STATE);
+      if (executionData) {
+        const executionState: PersistedExecutionState = JSON.parse(executionData);
+        console.log('📂 Loading execution state from sessionStorage', executionState);
+        
+        // Restore execution state
+        set({
+          activeExecutionId: executionState.activeExecutionId,
+          isExecuting: executionState.isExecuting,
+        });
+        
+        // Restore task execution statuses
+        const currentState = get();
+        const updatedTasks = currentState.tasks.map(task => ({
+          ...task,
+          executionStatus: executionState.taskStatuses[task.id],
+        }));
+        
+        set({ tasks: updatedTasks });
+        
+        console.log('✅ State restored from sessionStorage');
+      }
+    } catch (error) {
+      console.error('❌ Failed to load from sessionStorage:', error);
+    }
+  },
+  
+  clearSessionStorage: () => {
+    // Only run in browser environment
+    if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') {
+      return;
+    }
+    
+    sessionStorage.removeItem(STORAGE_KEYS.WORKFLOW_STATE);
+    sessionStorage.removeItem(STORAGE_KEYS.EXECUTION_STATE);
+    console.log('🗑️ SessionStorage cleared');
+  },
 };
 });
+
+// Auto-save to sessionStorage on state changes (debounced)
+// Only run in browser environment
+if (typeof window !== 'undefined' && typeof sessionStorage !== 'undefined') {
+  let saveTimeout: NodeJS.Timeout | null = null;
+  usePlanStore.subscribe((state) => {
+    if (saveTimeout) clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(() => {
+      state.saveToSessionStorage();
+    }, 500); // Debounce saves by 500ms
+  });
+
+  // Load persisted state on initialization
+  setTimeout(() => {
+    usePlanStore.getState().loadFromSessionStorage();
+  }, 0);
+}

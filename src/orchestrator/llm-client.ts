@@ -198,13 +198,15 @@ export class CopilotAgentClient {
     return this.configLoader.getContextWindow(provider, model);
   }
 
-  async loadPreamble(path: string): Promise<void> {
+  async loadPreamble(pathOrContent: string, isContent: boolean = false): Promise<void> {
     // Initialize LLM if not already done
     if (!this.llm) {
       await this.initializeLLM();
     }
 
-    this.systemPrompt = await fs.readFile(path, "utf-8");
+    this.systemPrompt = isContent 
+      ? pathOrContent 
+      : await fs.readFile(pathOrContent, "utf-8");
 
     // Display context window information
     const contextWindow = await this.getContextWindow();

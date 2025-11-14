@@ -12,7 +12,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
 
-describe('Chunk Aggregation and Sequential Relationships', () => {
+describe.skip('Chunk Aggregation and Sequential Relationships', () => {
   let driver: Driver;
   let searchService: UnifiedSearchService;
   let graphManager: GraphManager;

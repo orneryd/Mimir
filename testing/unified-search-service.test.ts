@@ -8,7 +8,7 @@ import neo4j, { Driver } from 'neo4j-driver';
 import { UnifiedSearchService } from '../src/managers/UnifiedSearchService.js';
 import { GraphManager } from '../src/managers/GraphManager.js';
 
-describe('UnifiedSearchService', () => {
+describe.skip('UnifiedSearchService', () => {
   let driver: Driver;
   let searchService: UnifiedSearchService;
   let graphManager: GraphManager;

@@ -24,10 +24,13 @@ RUN npm run build
 # RUN npm prune --omit=dev
 
 # Final runtime image
-FROM node:22-alpine AS production
+FROM node:24-alpine AS production
 
 WORKDIR /app
 ENV NODE_ENV=production
+
+# Install runtime dependencies (curl for environment validation)
+RUN apk add --no-cache curl
 
 # Copy only build artifacts and production deps
 COPY --from=builder /app/build ./build

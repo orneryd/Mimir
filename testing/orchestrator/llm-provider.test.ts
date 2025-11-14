@@ -275,7 +275,11 @@ describe('LLM Provider Abstraction', () => {
       await fs.unlink('test-agent.md');
     });
 
-    test('should throw error if OpenAI API key not provided', async () => {
+    test('should use dummy key if OpenAI API key not provided', async () => {
+      // Clear any existing OPENAI_API_KEY env var
+      const originalKey = process.env.OPENAI_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+      
       const config: AgentConfig = {
         preamblePath: 'test-agent.md',
         provider: LLMProvider.OPENAI,
@@ -284,11 +288,23 @@ describe('LLM Provider Abstraction', () => {
       
       await fs.writeFile('test-agent.md', 'You are a test agent.');
       
+      // Should NOT throw - it should use dummy key for copilot-api proxy
       expect(() => {
         new CopilotAgentClient(config);
-      }).toThrow('OpenAI API key required');
+      }).not.toThrow();
+      
+      // Verify dummy key was set
+      expect(process.env.OPENAI_API_KEY).toBeDefined();
+      expect(process.env.OPENAI_API_KEY).toBe('dummy-key-for-proxy');
       
       await fs.unlink('test-agent.md');
+      
+      // Restore original key
+      if (originalKey) {
+        process.env.OPENAI_API_KEY = originalKey;
+      } else {
+        delete process.env.OPENAI_API_KEY;
+      }
     });
   });
 

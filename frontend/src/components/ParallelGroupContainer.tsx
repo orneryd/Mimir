@@ -7,9 +7,10 @@ import { useState } from 'react';
 
 interface ParallelGroupContainerProps {
   group: ParallelGroup;
+  isExecuting?: boolean;
 }
 
-export function ParallelGroupContainer({ group }: ParallelGroupContainerProps) {
+export function ParallelGroupContainer({ group, isExecuting = false }: ParallelGroupContainerProps) {
   const { tasks, assignTaskToGroup, deleteParallelGroup, updateParallelGroup, addTask } = usePlanStore();
   const [isEditing, setIsEditing] = useState(false);
   const [groupName, setGroupName] = useState(group.name);
@@ -127,7 +128,7 @@ export function ParallelGroupContainer({ group }: ParallelGroupContainerProps) {
       {groupTasks.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {groupTasks.map((task) => (
-            <TaskCard key={task.id} task={task} />
+            <TaskCard key={task.id} task={task} isExecuting={isExecuting} />
           ))}
         </div>
       ) : (

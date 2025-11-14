@@ -2,7 +2,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    // Exclude only the benchmark/exercise tests in testing/agentic
+    // Exclude benchmark tests and frontend tests (frontend has its own vitest config)
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
@@ -11,6 +11,7 @@ export default defineConfig({
       '**/.{idea,git,cache,output,temp}/**',
       '**/{karma,rollup,webpack,vite,vitest,jest,ava,babel,nyc,cypress,tsup,build}.config.*',
       '**/testing/agentic/**', // Exclude benchmark/exercise tests
+      '**/frontend/**', // Exclude frontend tests - they have their own vitest config with DOM environment
     ],
     // Pool configuration for test isolation
     pool: 'forks',

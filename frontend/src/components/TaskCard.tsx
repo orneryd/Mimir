@@ -1,4 +1,5 @@
 import { useDrag, useDrop } from 'react-dnd';
+import { useEffect } from 'react';
 import { usePlanStore } from '../store/planStore';
 import { Task, AgentTemplate } from '../types/task';
 import { GripVertical, Trash2, Clock, Zap, User, Shield } from 'lucide-react';
@@ -6,10 +7,18 @@ import { GripVertical, Trash2, Clock, Zap, User, Shield } from 'lucide-react';
 interface TaskCardProps {
   task: Task;
   disableDrag?: boolean; // Disable drag when used in ReorderableTaskCard
+  isExecuting?: boolean; // Disable editing during execution
 }
 
-export function TaskCard({ task, disableDrag = false }: TaskCardProps) {
-  const { setSelectedTask, deleteTask, updateTask, agentTemplates } = usePlanStore();
+export function TaskCard({ task, disableDrag = false, isExecuting = false }: TaskCardProps) {
+  const { setSelectedTask, deleteTask, updateTask, agentTemplates, tasks } = usePlanStore();
+  
+  // Debug: Log when execution status changes
+  useEffect(() => {
+    if (task.executionStatus) {
+      console.log(`🎨 TaskCard ${task.id} (${task.title}) - Status changed to: ${task.executionStatus}`);
+    }
+  }, [task.executionStatus, task.id, task.title]);
 
   const [{ isDragging }, drag] = useDrag(() => ({
     type: 'task',
@@ -23,6 +32,12 @@ export function TaskCard({ task, disableDrag = false }: TaskCardProps) {
   // Find assigned agents
   const workerAgent = agentTemplates.find(a => a.id === task.workerPreambleId);
   const qcAgent = agentTemplates.find(a => a.id === task.qcPreambleId);
+
+  // Helper to get task title from task ID
+  const getTaskTitle = (taskId: string): string => {
+    const dependentTask = tasks.find(t => t.id === taskId);
+    return dependentTask?.title || taskId;
+  };
 
   // Drop zone for worker agent
   const [{ isOverWorker }, dropWorker] = useDrop(() => ({
@@ -54,12 +69,29 @@ export function TaskCard({ task, disableDrag = false }: TaskCardProps) {
     }),
   }));
 
+  // Get execution status styling
+  const getExecutionStatusClass = () => {
+    if (!task.executionStatus) return 'border-norse-rune hover:border-valhalla-gold';
+    
+    switch (task.executionStatus) {
+      case 'executing':
+        return 'border-yellow-500 shadow-lg shadow-yellow-500/50 animate-pulse';
+      case 'completed':
+        return 'border-green-500 shadow-md shadow-green-500/30';
+      case 'failed':
+        return 'border-red-500 shadow-md shadow-red-500/30';
+      case 'pending':
+      default:
+        return 'border-gray-600';
+    }
+  };
+
   return (
     <div
       ref={disableDrag ? undefined : drag}
-      className={`bg-norse-stone border-2 border-norse-rune rounded-lg overflow-hidden hover:border-valhalla-gold transition-all ${
+      className={`bg-norse-stone border-2 rounded-lg overflow-hidden transition-all ${
         isDragging ? 'opacity-50' : ''
-      }`}
+      } ${getExecutionStatusClass()}`}
     >
       {/* Header */}
       <div className="p-4 bg-norse-shadow border-b border-norse-rune">
@@ -68,8 +100,9 @@ export function TaskCard({ task, disableDrag = false }: TaskCardProps) {
             {!disableDrag && <GripVertical className="w-4 h-4 text-gray-500 flex-shrink-0 cursor-move" />}
             <button
               type="button"
-              onClick={() => setSelectedTask(task)}
-              className="font-medium text-gray-100 text-sm truncate hover:text-valhalla-gold transition-colors text-left"
+              onClick={() => !isExecuting && setSelectedTask(task)}
+              disabled={isExecuting}
+              className="font-medium text-gray-100 text-sm truncate hover:text-valhalla-gold transition-colors text-left disabled:cursor-not-allowed disabled:opacity-50"
             >
               {task.title}
             </button>
@@ -78,9 +111,10 @@ export function TaskCard({ task, disableDrag = false }: TaskCardProps) {
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              deleteTask(task.id);
+              if (!isExecuting) deleteTask(task.id);
             }}
-            className="text-red-400 hover:text-red-600 flex-shrink-0 transition-colors"
+            disabled={isExecuting}
+            className="text-red-400 hover:text-red-600 flex-shrink-0 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Trash2 className="w-4 h-4" />
           </button>
@@ -216,7 +250,7 @@ export function TaskCard({ task, disableDrag = false }: TaskCardProps) {
       {task.dependencies.length > 0 && (
         <div className="px-3 py-2 bg-norse-shadow border-t border-norse-rune">
           <p className="text-xs text-gray-500">
-            Depends on: {task.dependencies.join(', ')}
+            Depends on: {task.dependencies.map(getTaskTitle).join(', ')}
           </p>
         </div>
       )}

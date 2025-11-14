@@ -92,7 +92,8 @@ export function AgentPalette() {
     agentTemplates, 
     agentSearch,
     hasMoreAgents, 
-    isLoadingAgents, 
+    isLoadingAgents,
+    isCreatingAgent,
     fetchAgents,
     setAgentSearch,
     deleteAgent,
@@ -182,10 +183,15 @@ export function AgentPalette() {
             <button
               type="button"
               onClick={() => setIsCreateModalOpen(true)}
-              className="p-2 bg-valhalla-gold text-norse-night rounded-lg hover:bg-valhalla-amber transition-colors shadow-lg"
-              title="Create new agent"
+              disabled={isCreatingAgent}
+              className="p-2 bg-valhalla-gold text-norse-night rounded-lg hover:bg-valhalla-amber transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed relative"
+              title={isCreatingAgent ? "Creating agent..." : "Create new agent"}
             >
-              <Plus className="w-5 h-5 font-bold" />
+              {isCreatingAgent ? (
+                <div className="animate-spin h-5 w-5 border-2 border-norse-night border-t-transparent rounded-full" />
+              ) : (
+                <Plus className="w-5 h-5 font-bold" />
+              )}
             </button>
           </div>
 

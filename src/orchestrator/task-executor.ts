@@ -431,6 +431,51 @@ export function parseChainOutput(markdown: string): TaskDefinition[] {
 }
 
 /**
+ * Save generated preamble to Neo4j for later retrieval and reuse
+ */
+async function savePreambleToDatabase(
+  roleDescription: string,
+  content: string,
+  roleHash: string,
+  isQC: boolean,
+  generatedBy: string | boolean
+): Promise<void> {
+  try {
+    const graphManager = await getGraphManager();
+    
+    // Extract name from role description (first 3-5 words)
+    const words = roleDescription.trim().split(/\s+/);
+    const name = words.slice(0, Math.min(5, words.length)).join(' ');
+    
+    const agentType = isQC ? 'qc' : 'worker';
+    const generatedByStr = typeof generatedBy === 'boolean' 
+      ? (generatedBy ? 'agentinator' : 'manual')
+      : generatedBy;
+    
+    // Store in Neo4j with full metadata
+    await graphManager.addNode('preamble', {
+      name,
+      role: roleDescription,
+      agentType,
+      content,
+      version: '1.0',
+      created: new Date().toISOString(),
+      generatedBy: generatedByStr,
+      roleDescription,
+      roleHash,
+      charCount: content.length,
+      usedCount: 1,
+      lastUsed: new Date().toISOString()
+    });
+    
+    console.log(`  💾 Saved preamble to database (roleHash: ${roleHash})`);
+  } catch (error: any) {
+    console.error(`  ⚠️  Failed to save preamble to database: ${error.message}`);
+    // Don't throw - this is not critical for execution to continue
+  }
+}
+
+/**
  * Generate preamble for agent role via agentinator (or create a simple one as fallback)
  */
 export async function generatePreamble(
@@ -439,42 +484,83 @@ export async function generatePreamble(
   taskExample?: TaskDefinition, // Optional: first task using this role for context
   isQC: boolean = false // Whether this is a QC agent
 ): Promise<string> {
-  // Create hash of role description for filename (same logic as createAgent)
+  // Create hash of role description for database lookup
   const roleHash = crypto.createHash('md5').update(roleDescription).digest('hex').substring(0, 8);
-  const prefix = isQC ? 'qc' : 'worker';
-  const preamblePath = path.join(outputDir, `${prefix}-${roleHash}.md`);
   
-  // Ensure output directory exists
-  await fs.mkdir(outputDir, { recursive: true });
-  
-  // Check if preamble already exists (reuse)
+  // CHECK DATABASE FIRST for existing preamble by roleHash (NO DISK I/O)
   try {
-    await fs.access(preamblePath);
-    console.log(`  ♻️  Reusing existing preamble: ${preamblePath}`);
-    return preamblePath;
-  } catch {
-    // Doesn't exist, generate it
+    const graphManager = await getGraphManager();
+    const driver = graphManager.getDriver();
+    const session = driver.session();
+    
+    try {
+      const result = await session.run(`
+        MATCH (n:Node {type: 'preamble'})
+        WHERE n.roleHash = $roleHash
+        RETURN n.content as content, n.id as id, n.usedCount as usedCount
+        LIMIT 1
+      `, { roleHash });
+      
+      if (result.records.length > 0) {
+        const content = result.records[0].get('content');
+        const nodeId = result.records[0].get('id');
+        const usedCount = result.records[0].get('usedCount') || 0;
+        
+        // Update usedCount and lastUsed
+        await graphManager.updateNode(nodeId, {
+          usedCount: usedCount + 1,
+          lastUsed: new Date().toISOString()
+        });
+        
+        console.log(`  ♻️  Reusing preamble from database (${content.length} chars, used ${usedCount + 1}x)`);
+        return content; // Return content directly - NO DISK I/O
+      }
+    } finally {
+      await session.close();
+    }
+  } catch (dbError: any) {
+    console.error(`  ⚠️  Database check failed: ${dbError.message}`);
+    // Continue to generation if database check fails
   }
   
   console.log(`  🔨 Generating preamble for role: ${roleDescription.substring(0, 60)}...`);
   
   // Try agentinator first, but fall back to simple preamble if it fails
+  let preambleContent = '';
+  let usedAgentinator = false;
+  
   try {
-    // Call createAgent directly (no subprocess needed)
-    // ALWAYS use GPT-4.1 for Agentinator (most reliable for structured output)
-    const model = CopilotModel.GPT_4_1;
-    console.log(`  🎯 Using model: ${model} for Agentinator`);
-    // createAgent now generates the hashed filename directly, so no copying needed
-    const generatedPath = await createAgent(roleDescription, outputDir, model, taskExample, isQC);
-    console.log(`  ✅ Generated: ${path.basename(generatedPath)}`);
-    return generatedPath;
+    // Call Agentinator API directly (NO DISK I/O)
+    const agentType = isQC ? 'qc' : 'worker';
+    const agentinatorPath = path.join(__dirname, '../../docs/agents/v2/02-agentinator-preamble.md');
+    const agentinatorPreamble = await fs.readFile(agentinatorPath, 'utf-8');
+    const templatePath = path.join(__dirname, '../../docs/agents/v2/templates', agentType === 'worker' ? 'worker-template.md' : 'qc-template.md');
+    const template = await fs.readFile(templatePath, 'utf-8');
+    
+    const agentinatorPrompt = `${agentinatorPreamble}\n\n---\n\n## INPUT\n\n<agent_type>\n${agentType}\n</agent_type>\n\n<role_description>\n${roleDescription}\n</role_description>\n\n<template_path>\n${agentType === 'worker' ? 'templates/worker-template.md' : 'templates/qc-template.md'}\n</template_path>\n\n---\n\n<template_content>\n${template}\n</template_content>\n\n---\n\nGenerate the complete ${agentType} preamble now. Output the preamble directly as markdown (no code fences, no explanations).`;
+    
+    const apiUrl = process.env.COPILOT_API_URL || 'http://copilot-api:4141/v1/chat/completions';
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer sk-copilot-dummy' },
+      body: JSON.stringify({ model: 'gpt-4.1', messages: [{ role: 'user', content: agentinatorPrompt }], temperature: 0.3, max_tokens: 16000 }),
+    });
+    
+    if (!response.ok) throw new Error(`Agentinator API error: ${response.status}`);
+    const data = await response.json();
+    preambleContent = data.choices[0]?.message?.content || '';
+    if (!preambleContent) throw new Error('Agentinator returned empty preamble');
+    
+    usedAgentinator = true;
+    console.log(`  ✅ Agentinator generated ${preambleContent.length} char preamble`);
+    await savePreambleToDatabase(roleDescription, preambleContent, roleHash, isQC, usedAgentinator);
+    return preambleContent; // Return content - NO DISK I/O
   } catch (error: any) {
     console.error(`  ❌ Agentinator failed: ${error.message}`);
-    console.error(`  📍 Stack trace: ${error.stack}`);
     console.warn(`  ⚠️  Falling back to simple preamble...`);
   }
   
-  // Fallback: Create a simple but effective preamble directly
+  // Fallback: Create a simple but effective preamble directly (NO DISK I/O)
   const simplePreamble = `# Agent Preamble
 
 ## Role Description
@@ -518,9 +604,9 @@ Your task is complete when:
 - Ask for clarification if requirements are ambiguous
 `;
 
-  await fs.writeFile(preamblePath, simplePreamble, 'utf-8');
-  console.log(`  ✅ Created simple preamble: ${path.basename(preamblePath)}`);
-    return preamblePath;
+  console.log(`  ✅ Created simple preamble (${simplePreamble.length} chars)`);
+  await savePreambleToDatabase(roleDescription, simplePreamble, roleHash, isQC, false);
+  return simplePreamble; // Return content - NO DISK I/O
 }
 
 /**
@@ -698,10 +784,11 @@ function parseQCResponse(response: string): QCResult {
 async function executeQCAgent(
   task: TaskDefinition,
   workerOutput: string,
-  attemptNumber: number
+  attemptNumber: number,
+  qcPreambleContent: string
 ): Promise<QCResult> {
-  if (!task.qcPreamblePath) {
-    throw new Error(`No QC preamble path for task ${task.id}`);
+  if (!qcPreambleContent) {
+    throw new Error(`No QC preamble content for task ${task.id}`);
   }
   
   console.log(`\n🔍 Running QC verification (attempt ${attemptNumber})...`);
@@ -724,14 +811,14 @@ async function executeQCAgent(
     
     // Initialize QC agent with strict output limits and circuit breaker
     const qcAgent = new CopilotAgentClient({
-      preamblePath: task.qcPreamblePath,
+      preamblePath: 'memory', // Dummy value - content passed directly
       ...modelSelection, // Spread provider/model or agentType
       temperature: 0.0, // Maximum consistency and strictness
       maxTokens: 1000, // STRICT LIMIT: Force concise responses (prevents verbose QC bloat)
       tools: allTools, // QC needs tools to verify worker output
     });
     
-    await qcAgent.loadPreamble(task.qcPreamblePath);
+    await qcAgent.loadPreamble(qcPreambleContent, true); // true = isContent
     
     // Execute QC verification with circuit breaker
     const result = await qcAgent.execute(qcPrompt, 0, circuitBreakerLimit);
@@ -1283,14 +1370,15 @@ async function autoGenerateVerificationCriteria(task: TaskDefinition): Promise<s
  */
 export async function executeTask(
   task: TaskDefinition,
-  preamblePath: string
+  preambleContent: string,
+  qcPreambleContent?: string
 ): Promise<ExecutionResult> {
   console.log(`\n${'='.repeat(80)}`);
   console.log(`📋 Executing Task: ${task.title}`);
   console.log(`🆔 Task ID: ${task.id}`);
-  console.log(`🤖 Worker Preamble: ${preamblePath}`);
-  if (task.qcPreamblePath) {
-    console.log(`🔍 QC Preamble: ${task.qcPreamblePath}`);
+  console.log(`🤖 Worker Preamble: ${preambleContent.length} chars`);
+  if (qcPreambleContent) {
+    console.log(`🔍 QC Preamble: ${qcPreambleContent.length} chars`);
     console.log(`🔁 Max Retries: ${task.maxRetries || 2}`);
   }
   console.log(`⏱️  Estimated Duration: ${task.estimatedDuration}`);
@@ -1306,7 +1394,7 @@ export async function executeTask(
   // 🚨 PHASE 4: QC IS NOW MANDATORY FOR ALL TASKS
   // QC roles and preambles should have been generated during task parsing
   // This is a safety check in case executeTask is called directly
-  if (!task.qcRole || !task.qcPreamblePath) {
+  if (!task.qcRole || !qcPreambleContent) {
     throw new Error(`Task ${task.id} missing QC configuration. QC is now mandatory for all tasks. Please regenerate chain-output.md with QC roles.`);
   }
   
@@ -1523,13 +1611,13 @@ ${task.prompt}`;
       const modelSelection = await resolveModelSelection(task, 'worker');
       
       const workerAgent = new CopilotAgentClient({
-      preamblePath,
+        preamblePath: 'memory', // Dummy value - content passed directly
         ...modelSelection, // Spread provider/model or agentType
         temperature: 0.0,
         tools: allTools, // Worker needs tools to execute tasks (filesystem + graph)
       });
       
-      await workerAgent.loadPreamble(preamblePath);
+      await workerAgent.loadPreamble(preambleContent, true); // true = isContent
       
       // Calculate circuit breaker limit from PM's estimate (apply 10x multiplier for generous buffer)
       // If no estimate, use undefined (defaults to 100 in LLM client)
@@ -1641,7 +1729,7 @@ ${task.prompt}`;
               duration,
               tokens: workerResult.tokens,
               toolCalls: toolCallCount,
-              preamblePath,
+              preamblePath: 'database',
               agentRoleDescription: task.agentRoleDescription,
               prompt: task.prompt,
               error: `Circuit breaker triggered: ${toolCallCount} tool calls exceeded limit`,
@@ -1685,7 +1773,7 @@ ${task.prompt}`;
       
       let qcResult: QCResult;
       try {
-        qcResult = await executeQCAgent(task, workerOutput, attemptNumber);
+        qcResult = await executeQCAgent(task, workerOutput, attemptNumber, qcPreambleContent || '');
       } catch (qcError: any) {
         // 🚨 QC agent circuit breaker triggered - fail the task immediately
         if (qcError.message.includes('circuit breaker triggered')) {
@@ -1706,7 +1794,7 @@ ${task.prompt}`;
             status: 'failure',
             output: workerOutput,
             duration,
-            preamblePath,
+            preamblePath: 'database',
             agentRoleDescription: task.agentRoleDescription,
             prompt: task.prompt,
             error: `QC agent circuit breaker triggered: ${qcError.message}`,
@@ -1793,7 +1881,7 @@ ${task.prompt}`;
       status: 'success',
           output: workerOutput,
       duration,
-      preamblePath,
+      preamblePath: 'database',
       agentRoleDescription: task.agentRoleDescription,
       prompt: task.prompt,
           tokens: workerResult.tokens,
@@ -1910,7 +1998,7 @@ ${task.prompt}`;
       status: 'failure',
     output: workerOutput,
       duration,
-      preamblePath,
+      preamblePath: 'database',
     agentRoleDescription: task.agentRoleDescription,
     prompt: task.prompt,
     error: `QC verification failed after ${maxRetries} attempts`,

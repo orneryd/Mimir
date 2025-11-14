@@ -4,11 +4,18 @@ import { usePlanStore } from '../planStore';
 // Mock fetch globally
 global.fetch = vi.fn();
 
+// Get initial default agents from store
+const getDefaultAgents = () => {
+  const initialState = usePlanStore.getState();
+  return initialState.agentTemplates.filter(a => a.id.startsWith('default-'));
+};
+
 describe('planStore - Agent Management', () => {
   beforeEach(() => {
-    // Reset store state before each test
+    // Reset store state before each test, but keep default agents
+    const defaultAgents = getDefaultAgents();
     usePlanStore.setState({
-      agentTemplates: [],
+      agentTemplates: defaultAgents,
       agentSearch: '',
       agentOffset: 0,
       hasMoreAgents: true,
@@ -183,9 +190,8 @@ describe('planStore - Agent Management', () => {
       setAgentSearch('kubernetes');
       await fetchAgents('kubernetes', true);
 
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('search=kubernetes')
-      );
+      // Check that the first argument (URL) contains the search parameter
+      expect((global.fetch as any).mock.calls[0][0]).toContain('search=kubernetes');
     });
   });
 

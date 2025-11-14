@@ -1,3 +1,5 @@
+export type TaskExecutionStatus = 'pending' | 'executing' | 'completed' | 'failed';
+
 export interface Task {
   id: string;
   title: string;
@@ -18,6 +20,7 @@ export interface Task {
   maxRetries: number;
   position?: { x: number; y: number };
   order?: number; // Execution order for ungrouped tasks (top-to-bottom)
+  executionStatus?: TaskExecutionStatus; // Runtime execution status
 }
 
 export interface ProjectPlan {
