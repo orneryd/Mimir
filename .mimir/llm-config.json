@@ -252,6 +252,11 @@
           }
         }
       }
+    },
+    "llama.cpp": {
+      "baseUrl": "http://llama-server:8080/v1",
+      "defaultModel": "nomic-embed-text",
+      "models": {}
     }
   },
   "agentDefaults": {

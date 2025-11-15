@@ -47,6 +47,8 @@
     "index:add": "node scripts/test-folder-indexing.js --add",
     "index:remove": "node scripts/test-folder-indexing.js --remove",
     "index:list": "node scripts/test-folder-indexing.js --list",
+    "models:find": "node scripts/find-ollama-models.js",
+    "llama:build": "./scripts/build-llama-cpp.sh",
     "llama:pull": "docker exec -it llama_server llama pull",
     "webui:setup": "docker exec -it mimir-open-webui pip install neo4j",
     "webui:build": "docker-compose build open-webui && docker-compose up -d --no-deps open-webui"

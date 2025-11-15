@@ -20,7 +20,10 @@ RUN rm -f package-lock.json && \
 
 # Copy source and build both backend and frontend
 COPY . .
-RUN npm run build && npm run build --workspace=mimir-orchestration-ui
+# Remove any local node_modules that might have been copied, then rebuild
+RUN rm -rf frontend/node_modules/esbuild && \
+    npm install esbuild@0.21.5 --workspace=frontend --legacy-peer-deps && \
+    npm run build && npm run build --workspace=frontend
 
 # Remove dev dependencies after build
 # RUN npm prune --omit=dev
