@@ -271,14 +271,6 @@
       "rationale": "QC agent uses same model for validation"
     }
   },
-  "embeddings": {
-    "enabled": true,
-    "provider": "ollama",
-    "model": "nomic-embed-text",
-    "dimensions": 768,
-    "chunkSize": 400,
-    "chunkOverlap": 100
-  },
   "features": {
     "pmModelSuggestions": false,
     "vectorEmbeddings": true

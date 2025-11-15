@@ -742,6 +742,55 @@ environment:
 
 ---
 
-**Status:** ✅ Plan Complete - Ready for Review  
-**Approval Required From:** Tech Lead, DevOps Team  
-**Target Start Date:** TBD
+## Windows Migration Results (November 15, 2025)
+
+### ✅ Successfully Tested on Windows
+
+**Environment:**
+- OS: Windows 11
+- Docker: Docker Desktop with WSL2
+- GPU: NVIDIA (CUDA support)
+
+**Steps Completed:**
+1. ✅ Model discovery script created and tested
+2. ✅ Found existing models in `./ollama_models/models/blobs/`
+   - `nomic-embed-text` (261.58 MB) - sha256-970aa74c0a90ef7482477cf803618e776e173c007bf957f635f1015bfcfef0e6
+   - `mxbai-embed-large` (638.58 MB) - sha256-819c2adf5ce6df2b6bd2ae4ca90d2a69f060afeb438d0c171db57daa02e39c3d
+3. ✅ Updated `docker-compose.win64.yml` with llama.cpp server
+4. ✅ Stopped Ollama container
+5. ✅ Started llama.cpp server with CUDA support
+6. ✅ Health check passed: `{"status":"ok"}`
+7. ✅ Embeddings API tested successfully (OpenAI-compatible format)
+8. ✅ Model loaded to GPU (13/13 layers offloaded)
+
+**Configuration Used:**
+```yaml
+llama-server:
+  image: ghcr.io/ggml-org/llama.cpp:server-cuda
+  ports:
+    - "11434:8080"  # Same external port as Ollama
+  volumes:
+    - ollama_models:/models:ro  # Reused existing models
+  environment:
+    - LLAMA_ARG_MODEL=/models/models/blobs/sha256-970aa74c0a90ef7482477cf803618e776e173c007bf957f635f1015bfcfef0e6
+    - LLAMA_ARG_ALIAS=nomic-embed-text
+    - LLAMA_ARG_EMBEDDINGS=true
+    - LLAMA_ARG_N_GPU_LAYERS=99  # Full GPU offload
+```
+
+**Performance Notes:**
+- Startup time: ~30 seconds (model loading)
+- GPU memory: ~216 MB VRAM for nomic-embed-text
+- API response: Successfully generating 768-dimensional embeddings
+- Port mapping: Transparent (external 11434 → internal 8080)
+
+**Next Steps:**
+- Update application code to use OpenAI-compatible API format
+- Run performance benchmarks vs Ollama
+- Update main docker-compose.yml files
+
+---
+
+**Status:** ✅ Migration Successful on Windows  
+**Tested By:** Development Team  
+**Date:** November 15, 2025

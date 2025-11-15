@@ -182,10 +182,10 @@ export function translateHostToContainer(hostPath: string): string {
     return normalizedPath;
   }
   
-  // Special exception: /app/docs is the built-in documentation folder
-  // This is always accessible inside the container and doesn't need translation
-  if (normalizedPath.startsWith('/app/docs/')) {
-    console.log(`📚 Using built-in docs path: ${normalizedPath}`);
+  // Special exception: /app paths are built-in container paths (docs, node_modules, etc.)
+  // These are always accessible inside the container and don't need translation
+  if (normalizedPath.startsWith('/app/docs')) {
+    console.log(`📦 Using built-in container path: ${normalizedPath}`);
     return normalizedPath;
   }
   

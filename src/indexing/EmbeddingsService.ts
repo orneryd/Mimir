@@ -68,11 +68,14 @@ export class EmbeddingsService {
     this.provider = config.provider;
     this.model = config.model;
     
-    // Get provider base URL
+    // Get provider base URL - priority: llmConfig provider entry > OLLAMA_BASE_URL env var
     const llmConfig = await this.configLoader.load();
     const providerConfig = llmConfig.providers[config.provider];
     if (providerConfig?.baseUrl) {
       this.baseUrl = providerConfig.baseUrl;
+    } else if (process.env.OLLAMA_BASE_URL) {
+      // Fall back to OLLAMA_BASE_URL for llama.cpp and other Ollama-compatible providers
+      this.baseUrl = process.env.OLLAMA_BASE_URL;
     }
     
     // For OpenAI/Copilot, use dummy key (copilot-api handles auth)
@@ -157,7 +160,7 @@ export class EmbeddingsService {
     
     // If only one chunk, process normally
     if (chunks.length === 1) {
-      if (this.provider === 'copilot' || this.provider === 'openai') {
+      if (this.provider === 'copilot' || this.provider === 'openai' || this.provider === 'llama.cpp') {
         return this.generateOpenAIEmbedding(text);
       } else {
         return this.generateOllamaEmbedding(text);
@@ -171,7 +174,7 @@ export class EmbeddingsService {
     for (let i = 0; i < chunks.length; i++) {
       try {
         let result: EmbeddingResult;
-        if (this.provider === 'copilot' || this.provider === 'openai') {
+        if (this.provider === 'copilot' || this.provider === 'openai' || this.provider === 'llama.cpp') {
           result = await this.generateOpenAIEmbedding(chunks[i]);
         } else {
           result = await this.generateOllamaEmbedding(chunks[i]);
@@ -264,7 +267,7 @@ export class EmbeddingsService {
         try {
           // Generate embedding for this chunk
           let result: EmbeddingResult;
-          if (this.provider === 'copilot' || this.provider === 'openai') {
+          if (this.provider === 'copilot' || this.provider === 'openai' || this.provider === 'llama.cpp') {
             result = await this.generateOpenAIEmbedding(chunkText);
           } else {
             result = await this.generateOllamaEmbedding(chunkText);
@@ -393,21 +396,35 @@ export class EmbeddingsService {
   }
 
   /**
-   * Generate embedding using OpenAI/Copilot API
+   * Generate embedding using OpenAI/Copilot/llama.cpp API (all use OpenAI-compatible format)
    */
   private async generateOpenAIEmbedding(text: string): Promise<EmbeddingResult> {
     try {
+      // Build headers - llama.cpp doesn't need Authorization header
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      
+      // Only add Authorization for OpenAI/Copilot, not llama.cpp
+      if (this.provider !== 'llama.cpp') {
+        headers['Authorization'] = `Bearer ${this.apiKey}`;
+      }
+      
+      const requestBody = JSON.stringify({
+        model: this.model,
+        input: text,
+      });
+      
+      // Debug logging for llama.cpp
+      if (this.provider === 'llama.cpp') {
+        console.log(`🔍 llama.cpp request: ${this.baseUrl}/embeddings`);
+        console.log(`📦 Body length: ${requestBody.length} bytes`);
+      }
+      
       const response = await fetch(`${this.baseUrl}/embeddings`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: this.model,
-          input: text,
-          // Note: encoding_format removed - copilot-api may not support it
-        }),
+        headers,
+        body: requestBody,
       });
 
       if (!response.ok) {
