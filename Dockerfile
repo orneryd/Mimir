@@ -5,10 +5,12 @@ WORKDIR /app
 # Install build dependencies
 RUN apk add --no-cache python3 make g++
 
-# Copy package files
+# Copy package files (both root and workspace)
 COPY package*.json ./
+COPY frontend/package*.json ./frontend/
 
 # Install ALL dependencies (including dev deps for building)
+# Single npm install handles both root and workspace (frontend)
 # Remove package-lock.json to avoid any auth issues
 # Use --legacy-peer-deps to handle peer dependency conflicts (zod v3 vs v4)
 RUN rm -f package-lock.json && \
@@ -16,17 +18,9 @@ RUN rm -f package-lock.json && \
     npm config delete //registry.npmjs.org/:_authToken || true && \
     npm install --legacy-peer-deps --no-audit --no-fund
 
-# Copy source and build backend
+# Copy source and build both backend and frontend
 COPY . .
-RUN npm run build
-
-# Build frontend
-WORKDIR /app/frontend
-RUN npm install --legacy-peer-deps --no-audit --no-fund && \
-    npm run build
-
-# Return to app root
-WORKDIR /app
+RUN npm run build && npm run build --workspace=mimir-orchestration-ui
 
 # Remove dev dependencies after build
 # RUN npm prune --omit=dev

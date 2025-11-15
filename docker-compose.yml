@@ -26,7 +26,7 @@ services:
       - mcp_network
 
   copilot-api:
-    image: timothyswt/copilot-api-arm64:latest
+    image: timothyswt/copilot-api:latest
     container_name: copilot_api_server
     ports:
       - "4141:4141"  # Fixed: copilot-api listens on 4141, not 3000
@@ -51,7 +51,7 @@ services:
       context: ./docker/ollama
       dockerfile: Dockerfile
       args:
-        - EMBEDDING_MODEL=${MIMIR_EMBEDDINGS_MODEL:-nomic-embed-text}
+        - EMBEDDING_MODEL=${MIMIR_EMBEDDINGS_MODEL:-mxbai-embed-large}
       tags:
         - mimir-ollama:${VERSION:-1.0.0}
         - mimir-ollama:latest
@@ -88,23 +88,23 @@ services:
     networks:
       - mcp_network
     # Uncomment if you have GPU support (NVIDIA)
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
 
-  mcp-server:
+  mimir-server:
     build:
       context: .
       dockerfile: Dockerfile
       tags:
-        - mcp-server:${VERSION:-1.0.0}
-        - mcp-server:latest
-    image: mcp-server:${VERSION:-1.0.0}
-    container_name: mcp_server
+        - mimir-server:${VERSION:-1.0.0}
+        - mimir-server:latest
+    image: mimir-server:${VERSION:-1.0.0}
+    container_name: mimir_server
     restart: unless-stopped
     environment:
       # Database Configuration
@@ -135,9 +135,9 @@ services:
       # Embeddings Configuration (only used if VECTOR_EMBEDDINGS=true)
       - MIMIR_EMBEDDINGS_ENABLED=${MIMIR_EMBEDDINGS_ENABLED:-true}
       - MIMIR_EMBEDDINGS_PROVIDER=${MIMIR_EMBEDDINGS_PROVIDER:-ollama}
-      - MIMIR_EMBEDDINGS_MODEL=${MIMIR_EMBEDDINGS_MODEL:-nomic-embed-text}
-      - MIMIR_EMBEDDINGS_DIMENSIONS=${MIMIR_EMBEDDINGS_DIMENSIONS:-768}
-      - MIMIR_EMBEDDINGS_CHUNK_SIZE=${MIMIR_EMBEDDINGS_CHUNK_SIZE:-400}
+      - MIMIR_EMBEDDINGS_MODEL=${MIMIR_EMBEDDINGS_MODEL:-mxbai-embed-large}
+      - MIMIR_EMBEDDINGS_DIMENSIONS=${MIMIR_EMBEDDINGS_DIMENSIONS:-1024}
+      - MIMIR_EMBEDDINGS_CHUNK_SIZE=${MIMIR_EMBEDDINGS_CHUNK_SIZE:-1024}
       - MIMIR_EMBEDDINGS_CHUNK_OVERLAP=${MIMIR_EMBEDDINGS_CHUNK_OVERLAP:-100}
       - MIMIR_EMBEDDINGS_DELAY_MS=${MIMIR_EMBEDDINGS_DELAY_MS:-0}
       - MIMIR_EMBEDDINGS_MAX_RETRIES=${MIMIR_EMBEDDINGS_MAX_RETRIES:-3}
@@ -164,45 +164,45 @@ services:
     networks:
       - mcp_network
 
-  # Open-WebUI with Mimir Pipeline Integration
-  open-webui:
-    build:
-      context: .
-      dockerfile: docker/open-webui/Dockerfile
-      tags:
-        - mimir-open-webui:${VERSION:-1.0.0}
-        - mimir-open-webui:latest
-    image: mimir-open-webui:${VERSION:-1.0.0}
-    container_name: mimir-open-webui
-    ports:
-      - "3000:8080"
-    volumes:
-      - open-webui:/app/backend/data
-    environment:
-      # OpenAI-Compatible API Configuration (Copilot API)
-      - OPENAI_API_BASE_URL=http://copilot-api:4141/v1
-      # - OPENAI_API_BASE_URL=http://host.docker.internal:4141/v1
-      - OPENAI_API_KEY=sk-copilot-dummy  # Dummy key for copilot-api
+  # # Open-WebUI with Mimir Pipeline Integration
+  # open-webui:
+  #   build:
+  #     context: .
+  #     dockerfile: docker/open-webui/Dockerfile
+  #     tags:
+  #       - mimir-open-webui:${VERSION:-1.0.0}
+  #       - mimir-open-webui:latest
+  #   image: mimir-open-webui:${VERSION:-1.0.0}
+  #   container_name: mimir-open-webui
+  #   ports:
+  #     - "3000:8080"
+  #   volumes:
+  #     - open-webui:/app/backend/data
+  #   environment:
+  #     # OpenAI-Compatible API Configuration (Copilot API)
+  #     - OPENAI_API_BASE_URL=http://copilot-api:4141/v1
+  #     # - OPENAI_API_BASE_URL=http://host.docker.internal:4141/v1
+  #     - OPENAI_API_KEY=sk-copilot-dummy  # Dummy key for copilot-api
       
-      # Disable Ollama (using Copilot API instead)
-      - ENABLE_OLLAMA_API=false
-      - OLLAMA_BASE_URL=
+  #     # Disable Ollama (using Copilot API instead)
+  #     - ENABLE_OLLAMA_API=false
+  #     - OLLAMA_BASE_URL=
       
-      # WebUI Configuration
-      - WEBUI_NAME=Mimir Multi-Agent Orchestrator
-      - WEBUI_URL=http://localhost:3000
-      - DEFAULT_MODELS=gpt-4.1  # Default selected model
+  #     # WebUI Configuration
+  #     - WEBUI_NAME=Mimir Multi-Agent Orchestrator
+  #     - WEBUI_URL=http://localhost:3000
+  #     - DEFAULT_MODELS=gpt-4.1  # Default selected model
       
-      # Enable OpenAI API
-      - ENABLE_OPENAI_API=true
-    depends_on:
-      - mcp-server
-      - copilot-api
-    networks:
-      - mcp_network
-    restart: unless-stopped
-    extra_hosts:
-      - "host.docker.internal:host-gateway"  # Allow access to host's localhost
+  #     # Enable OpenAI API
+  #     - ENABLE_OPENAI_API=true
+  #   depends_on:
+  #     - mcp-server
+  #     - copilot-api
+  #   networks:
+  #     - mcp_network
+  #   restart: unless-stopped
+  #   extra_hosts:
+  #     - "host.docker.internal:host-gateway"  # Allow access to host's localhost
 
 volumes:
   open-webui:

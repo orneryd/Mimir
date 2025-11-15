@@ -783,10 +783,7 @@ docker compose logs       # View logs
 
 **Local development:**
 ```bash
-npm install              # Install dependencies
-cd ./frontend            # new frontend
-npm install              # Install dependencies for frontend
-cd ../                  # go back to root
+npm install              # Installs dependencies for all workspaces including frontend
 npm run build           # Compile TypeScript
 npm test                # Run tests
 ```

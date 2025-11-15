@@ -11,7 +11,9 @@
   },
   "scripts": {
     "build": "tsc",
-    "build:docker": "npm run build && node ./scripts/build-docker.js",
+    "build:frontend": "npm run build --workspace=frontend",
+    "build:all": "npm run build && npm run build:frontend",
+    "build:docker": "npm run build:all && node ./scripts/build-docker.js",
     "docker:up": "VERSION=$(node -p \"require('./package.json').version\") HOST_WORKSPACE_ROOT=$(cd ~/src && pwd) docker-compose up -d",
     "docker:down": "docker-compose down",
     "docker:restart": "npm run docker:down && npm run docker:up",
@@ -53,7 +55,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@langchain/community": "^0.0.40",
+    "@langchain/community": "^1.0.3",
     "@langchain/core": "^1.0.1",
     "@langchain/langgraph": "^1.0.0",
     "@langchain/ollama": "^1.0.0",
@@ -93,5 +95,8 @@
   },
   "engines": {
     "node": ">=22"
-  }
+  },
+  "workspaces": [
+    "frontend"
+  ]
 }
