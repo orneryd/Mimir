@@ -20,6 +20,7 @@ import {
   type ExecutionState,
   type Deliverable 
 } from './orchestration/workflow-executor.js';
+import { handleVectorSearchNodes } from '../tools/vectorSearch.tools.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -342,6 +343,43 @@ export function createOrchestrationRouter(graphManager: IGraphManager): Router {
         return res.status(400).json({ error: 'Prompt is required' });
       }
 
+      console.log(`🔍 Performing semantic search on prompt: "${prompt.substring(0, 100)}..."`);
+      
+      // Perform vector search to get relevant context from Mimir
+      let relevantContext = '';
+      let contextCount = 0;
+      
+      try {
+        const searchResults = await handleVectorSearchNodes(
+          {
+            query: prompt,
+            types: ['memory', 'orchestration_plan', 'orchestration_execution', 'file', 'concept'], // PM-relevant types
+            limit: 8,
+            min_similarity: 0.55
+          },
+          graphManager.getDriver()
+        );
+        
+        if (searchResults && searchResults.length > 0) {
+          contextCount = searchResults.length;
+          console.log(`✅ Found ${contextCount} relevant context items from knowledge base`);
+          
+          relevantContext = searchResults.map((result: any, idx: number) => {
+            const type = result.type || 'unknown';
+            const title = result.title || result.id || 'Untitled';
+            const content = result.content || result.summary || '';
+            const truncated = content.substring(0, 1000);
+            
+            return `${idx + 1}. [${type.toUpperCase()}] ${title}\n   ${truncated}${content.length > 1000 ? '...' : ''}`;
+          }).join('\n\n');
+        } else {
+          console.log('ℹ️  No relevant context found in knowledge base');
+        }
+      } catch (searchError) {
+        console.warn('⚠️  Vector search failed:', searchError);
+        // Continue without context - don't fail the entire request
+      }
+
       // Load PM agent preamble (JSON version)
       const pmPreamblePath = path.join(__dirname, '../../docs/agents/v2/01-pm-preamble-json.md');
       const pmPreamble = await fs.readFile(pmPreamblePath, 'utf-8');
@@ -357,10 +395,22 @@ export function createOrchestrationRouter(graphManager: IGraphManager): Router {
       // Load preamble
       await pmAgent.loadPreamble(pmPreamblePath);
 
-      // Build user request with repository context
-      const userRequest = `${prompt}
+      // Build user request with semantic context + repository context
+      let userRequest = `${prompt}\n\n`;
+      
+      // Add relevant context from Mimir knowledge base
+      if (relevantContext) {
+        userRequest += `**RELEVANT CONTEXT FROM MIMIR KNOWLEDGE BASE:**
+(${contextCount} items retrieved via semantic search - use this to inform your task planning)
 
-**REPOSITORY CONTEXT:**
+${relevantContext}
+
+---
+
+`;
+      }
+      
+      userRequest += `**REPOSITORY CONTEXT:**
 
 Project: Mimir - Graph-RAG TODO tracking with multi-agent orchestration
 Location: ${process.cwd()}
@@ -376,6 +426,9 @@ Location: ${process.cwd()}
 **IMPORTANT:** Output ONLY valid JSON matching the ProjectPlan interface. No markdown, no explanations.`;
 
       console.log('🤖 Invoking PM Agent to generate task plan...');
+      if (contextCount > 0) {
+        console.log(`   📚 Enriched with ${contextCount} context items from knowledge base`);
+      }
       
       // Execute PM agent
       const result = await pmAgent.execute(userRequest);
