@@ -122,13 +122,17 @@ ${template}
 Generate the complete ${agentType} preamble now. Output the preamble directly as markdown (no code fences, no explanations).`;
 
     // Call LLM with Agentinator preamble
-    // Use Docker service name for inter-container communication
-    const apiUrl = process.env.COPILOT_API_URL || 'http://copilot-api:4141/v1/chat/completions';
+    // Simple concatenation: base URL + path
+    const baseUrl = process.env.MIMIR_LLM_API || 'http://copilot-api:4141';
+    const chatPath = process.env.MIMIR_LLM_API_PATH || '/v1/chat/completions';
+    const apiUrl = `${baseUrl}${chatPath}`;
+    const apiKey = process.env.MIMIR_LLM_API_KEY || 'dummy-key';
+    
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer sk-copilot-dummy',
+        'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         model: 'gpt-4.1',

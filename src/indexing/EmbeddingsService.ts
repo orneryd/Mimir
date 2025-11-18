@@ -68,14 +68,11 @@ export class EmbeddingsService {
     this.provider = config.provider;
     this.model = config.model;
     
-    // Get provider base URL - priority: llmConfig provider entry > OLLAMA_BASE_URL env var
+    // Get provider base URL from llmConfig (uses LLM_API_URL env var)
     const llmConfig = await this.configLoader.load();
     const providerConfig = llmConfig.providers[config.provider];
     if (providerConfig?.baseUrl) {
       this.baseUrl = providerConfig.baseUrl;
-    } else if (process.env.OLLAMA_BASE_URL) {
-      // Fall back to OLLAMA_BASE_URL for llama.cpp and other Ollama-compatible providers
-      this.baseUrl = process.env.OLLAMA_BASE_URL;
     }
     
     // For OpenAI/Copilot, use dummy key (copilot-api handles auth)
@@ -358,11 +355,22 @@ export class EmbeddingsService {
   private async generateOllamaEmbedding(text: string): Promise<EmbeddingResult> {
     return this.retryWithBackoff(async () => {
       try {
-        const response = await fetch(`${this.baseUrl}/api/embeddings`, {
+        // Simple concatenation: base URL + path
+        const baseUrl = process.env.MIMIR_EMBEDDINGS_API || this.baseUrl || 'http://localhost:11434';
+        const embeddingsPath = process.env.MIMIR_EMBEDDINGS_API_PATH || '/api/embeddings';
+        const embeddingsUrl = `${baseUrl}${embeddingsPath}`;
+        const apiKey = process.env.MIMIR_EMBEDDINGS_API_KEY;
+        
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        };
+        if (apiKey && apiKey !== 'dummy-key') {
+          headers['Authorization'] = `Bearer ${apiKey}`;
+        }
+        
+        const response = await fetch(embeddingsUrl, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers,
           body: JSON.stringify({
             model: this.model,
             prompt: text,
@@ -400,14 +408,20 @@ export class EmbeddingsService {
    */
   private async generateOpenAIEmbedding(text: string): Promise<EmbeddingResult> {
     try {
+      // Simple concatenation: base URL + path
+      const baseUrl = process.env.MIMIR_EMBEDDINGS_API || this.baseUrl || 'http://localhost:11434';
+      const embeddingsPath = process.env.MIMIR_EMBEDDINGS_API_PATH || '/v1/embeddings';
+      const embeddingsUrl = `${baseUrl}${embeddingsPath}`;
+      const apiKey = process.env.MIMIR_EMBEDDINGS_API_KEY || this.apiKey;
+      
       // Build headers - llama.cpp doesn't need Authorization header
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       };
       
-      // Only add Authorization for OpenAI/Copilot, not llama.cpp
-      if (this.provider !== 'llama.cpp') {
-        headers['Authorization'] = `Bearer ${this.apiKey}`;
+      // Only add Authorization if we have a key and not llama.cpp
+      if (this.provider !== 'llama.cpp' && apiKey && apiKey !== 'dummy-key') {
+        headers['Authorization'] = `Bearer ${apiKey}`;
       }
       
       const requestBody = JSON.stringify({
@@ -415,7 +429,7 @@ export class EmbeddingsService {
         input: text,
       });
       
-      const response = await fetch(`${this.baseUrl}/embeddings`, {
+      const response = await fetch(embeddingsUrl, {
         method: 'POST',
         headers,
         body: requestBody,

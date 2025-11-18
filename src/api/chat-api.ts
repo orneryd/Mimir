@@ -73,10 +73,11 @@ const DEFAULT_CONFIG: ChatConfig = {
   semanticSearchEnabled: true,
   semanticSearchLimit: 10,
   minSimilarityThreshold: 0.55,
-  llmProvider: normalizeProvider(process.env.LLM_PROVIDER).toString(),
-  llmApiUrl: process.env.LLM_API_URL || 'http://copilot-api:4141/v1',
-  defaultModel: process.env.DEFAULT_MODEL || 'gpt-4.1',
-  embeddingModel: process.env.EMBEDDING_MODEL || 'nomic-embed-text',
+  llmProvider: normalizeProvider(process.env.LLM_PROVIDER || process.env.MIMIR_DEFAULT_PROVIDER || 'ollama').toString(),
+  // Base URL only - LangChain clients add their own paths
+  llmApiUrl: process.env.MIMIR_LLM_API || 'http://ollama:11434',
+  defaultModel: process.env.DEFAULT_MODEL || process.env.MIMIR_DEFAULT_MODEL || 'qwen3:4b',
+  embeddingModel: process.env.EMBEDDING_MODEL || process.env.MIMIR_EMBEDDINGS_MODEL || 'mxbai-embed-large',
 };
 
 /**
@@ -438,11 +439,14 @@ ${relevantContext}
       if (normalizedProvider === LLMProvider.OLLAMA) {
         provider = LLMProvider.OLLAMA;
       } else {
-        // OpenAI-compatible endpoint (copilot or openai)
+        // OpenAI-compatible endpoint (copilot-api proxy or openai direct)
         provider = LLMProvider.OPENAI;
       }
       
-      baseUrl = config.llmApiUrl;
+      // ALWAYS use ONLY base URL - LangChain clients add their own paths
+      // Ollama client adds /api/chat internally
+      // OpenAI client adds /v1/chat/completions internally
+      baseUrl = process.env.MIMIR_LLM_API || 'http://ollama:11434';
 
       const providerDisplay = provider === LLMProvider.OLLAMA ? 'Ollama/llama.cpp' : 'OpenAI-compatible (Copilot/OpenAI)';
       console.log(`🤖 Using provider: ${providerDisplay}, model: ${selectedModel}, base: ${baseUrl}`);
@@ -637,9 +641,10 @@ ${relevantContext}
    */
   const handleModelsRequest = async (req: any, res: any) => {
     try {
-      // Proxy to configured LLM endpoint's models endpoint
-      const providerUrl = config.llmApiUrl.replace('/v1', ''); // Remove /v1 suffix if present
-      const modelsUrl = `${providerUrl}/models`;
+      // Simple concatenation: base URL + models path
+      const baseUrl = process.env.MIMIR_LLM_API || 'http://localhost:11434';
+      const modelsPath = process.env.MIMIR_LLM_API_MODELS_PATH || '/v1/models';
+      const modelsUrl = `${baseUrl}${modelsPath}`;
       
       console.log(`🔗 Proxying ${req.path} request to chat provider: ${modelsUrl}`);
       

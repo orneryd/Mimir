@@ -618,9 +618,9 @@ async function main() {
     
     // Report mismatches (if any)
     if (mismatches.length > 0) {
-      console.log('\n⚠️  Mismatches detected:');
-      for (const m of mismatches) {
-        console.log(`   - ${m}`);
+    console.log('\n⚠️  Mismatches detected:');
+    for (const m of mismatches) {
+      console.log(`   - ${m}`);
       }
     } else if (forceReset || shouldReset) {
       console.log('\n✅ No mismatches detected, but proceeding with reset as requested...');

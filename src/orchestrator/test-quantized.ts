@@ -8,7 +8,9 @@
  *   npm run test:quantized -- --models qwen2.5-coder:1.5b,phi3:mini
  *
  * Environment:
- *   OLLAMA_BASE_URL - Override Ollama server URL (default: http://localhost:11434)
+ *   MIMIR_LLM_API - LLM base URL (e.g. http://192.168.1.167:11434)
+ *   MIMIR_LLM_API_PATH - Chat completions path (default: /v1/chat/completions)
+ *   MIMIR_LLM_API_KEY - LLM API key
  */
 
 import { CopilotAgentClient } from "./llm-client.js";
@@ -686,8 +688,14 @@ function generateComparisonReport(results: any[], config: TestConfig): void {
 
 // Parse CLI arguments
 const args = process.argv.slice(2);
+
+// Simple concatenation: base URL + path
+const baseUrl = process.env.MIMIR_LLM_API || "http://192.168.1.167:11434";
+const chatPath = process.env.MIMIR_LLM_API_PATH || "/v1/chat/completions";
+const serverUrl = `${baseUrl}${chatPath}`;
+
 const config: TestConfig = {
-  server: process.env.OLLAMA_BASE_URL || "http://192.168.1.167:11434",
+  server: serverUrl,
   models: RECOMMENDED_MODELS,
   preambles: [
     // NOTE: This field is no longer used directly for test iteration
@@ -779,7 +787,9 @@ Examples:
   npm run test:quantized -- --preambles docs/agents/claudette-quantized.md
 
 Environment:
-  OLLAMA_BASE_URL      Override default Ollama server URL
+  MIMIR_LLM_API        LLM base URL (e.g. http://192.168.1.167:11434)
+  MIMIR_LLM_API_PATH   Chat completions path (default: /v1/chat/completions)
+  MIMIR_LLM_API_KEY    LLM API key
 `);
     process.exit(0);
   }

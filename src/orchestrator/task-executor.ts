@@ -33,7 +33,7 @@ async function getGraphManager(): Promise<GraphManager> {
 /**
  * Parse PM-recommended model string
  * Format can be: "provider/model" or just "model" (uses default provider)
- * Returns null if parsing fails or model not found in config
+ * No validation - trust the downstream API to validate model names
  */
 async function parsePMRecommendedModel(
   recommendedModel: string
@@ -48,27 +48,12 @@ async function parsePMRecommendedModel(
   if (recommended.includes('/')) {
     // Format: "ollama/gpt-oss" or "copilot/gpt-4o"
     const [provider, model] = recommended.split('/').map(s => s.trim());
-    
-    try {
-      // Validate that this provider/model exists in config
-      await configLoader.getModelConfig(provider, model);
-      return { provider, model };
-    } catch (error: any) {
-      console.warn(`⚠️  PM-suggested model "${provider}/${model}" not found in config`);
-      return null;
-    }
+    return { provider, model };
   } else {
-    // Format: just "gpt-oss" - try to find it in default provider
+    // Format: just "gpt-oss" - use default provider
     const config = await configLoader.load();
     const defaultProvider = config.defaultProvider;
-    
-    try {
-      await configLoader.getModelConfig(defaultProvider, recommended);
-      return { provider: defaultProvider, model: recommended };
-    } catch (error: any) {
-      console.warn(`⚠️  PM-suggested model "${recommended}" not found in default provider`);
-      return null;
-    }
+    return { provider: defaultProvider, model: recommended };
   }
 }
 
@@ -512,10 +497,18 @@ export async function generatePreamble(
     
     const agentinatorPrompt = `${agentinatorPreamble}\n\n---\n\n## INPUT\n\n<agent_type>\n${agentType}\n</agent_type>\n\n<role_description>\n${roleDescription}\n</role_description>\n\n<template_path>\n${agentType === 'worker' ? 'templates/worker-template.md' : 'templates/qc-template.md'}\n</template_path>\n\n---\n\n<template_content>\n${template}\n</template_content>\n\n---\n\nGenerate the complete ${agentType} preamble now. Output the preamble directly as markdown (no code fences, no explanations).`;
     
-    const apiUrl = process.env.COPILOT_API_URL || 'http://copilot-api:4141/v1/chat/completions';
+    // Simple concatenation: base URL + path
+    const baseUrl = process.env.MIMIR_LLM_API || 'http://copilot-api:4141';
+    const chatPath = process.env.MIMIR_LLM_API_PATH || '/v1/chat/completions';
+    const apiUrl = `${baseUrl}${chatPath}`;
+    const apiKey = process.env.MIMIR_LLM_API_KEY || 'dummy-key';
+    
     const response = await fetch(apiUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer sk-copilot-dummy' },
+      headers: { 
+        'Content-Type': 'application/json', 
+        'Authorization': `Bearer ${apiKey}`
+      },
       body: JSON.stringify({ model: 'gpt-4.1', messages: [{ role: 'user', content: agentinatorPrompt }], temperature: 0.3, max_tokens: 16000 }),
     });
     

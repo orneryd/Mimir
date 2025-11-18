@@ -246,18 +246,21 @@ describe('Agentinator Preamble Generation', () => {
       expect(result.role).toBe('C++ developer (focus on performance & optimization)');
     });
 
-    it('should use COPILOT_API_URL environment variable if set', async () => {
-      const customUrl = 'http://custom-api:8080/v1/chat/completions';
-      process.env.COPILOT_API_URL = customUrl;
+        it('should use MIMIR_LLM_API environment variable if set', async () => {
+      const customBaseUrl = 'http://custom-api:8080';
+      const customPath = '/v1/chat/completions';
+      process.env.MIMIR_LLM_API = customBaseUrl;
+      process.env.MIMIR_LLM_API_PATH = customPath;
 
       await generatePreambleWithAgentinator('Test Role', 'worker');
 
       expect(fetch).toHaveBeenCalledWith(
-        customUrl,
+        `${customBaseUrl}${customPath}`,
         expect.any(Object)
       );
 
-      delete process.env.COPILOT_API_URL;
+      delete process.env.MIMIR_LLM_API;
+      delete process.env.MIMIR_LLM_API_PATH;
     });
   });
 });

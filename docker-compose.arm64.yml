@@ -130,19 +130,21 @@ services:
       - NODE_ENV=production
       - PORT=3000
       
-      # File Watching
-      - FILE_WATCH_POLLING=true
-      - FILE_WATCH_INTERVAL=1000
+      # Workspace Configuration
       - WORKSPACE_ROOT=/workspace
       - HOST_WORKSPACE_ROOT=${HOST_WORKSPACE_ROOT}  # Pass through from host
       
-      # LLM Configuration
-      # Using llama.cpp server with OpenAI-compatible API
-      - OPENAI_API_BASE=http://llama-server:8080/v1
-      - OPENAI_API_KEY=dummy
-      - OLLAMA_BASE_URL=http://llama-server:8080/v1
-      - COPILOT_BASE_URL=${COPILOT_BASE_URL:-http://copilot-api:4141/v1}
-      # - COPILOT_BASE_URL=${COPILOT_BASE_URL:-http://host.docker.internal:4141/v1}
+      # LLM API Configuration
+      - MIMIR_LLM_API=${MIMIR_LLM_API:-http://copilot-api:4141}
+      - MIMIR_LLM_API_PATH=${MIMIR_LLM_API_PATH:-/v1/chat/completions}
+      - MIMIR_LLM_API_MODELS_PATH=${MIMIR_LLM_API_MODELS_PATH:-/v1/models}
+      - MIMIR_LLM_API_KEY=${MIMIR_LLM_API_KEY:-dummy-key}
+      
+      # Embeddings API Configuration
+      - MIMIR_EMBEDDINGS_API=${MIMIR_EMBEDDINGS_API:-http://copilot-api:4141}
+      - MIMIR_EMBEDDINGS_API_PATH=${MIMIR_EMBEDDINGS_API_PATH:-/v1/embeddings}
+      - MIMIR_EMBEDDINGS_API_MODELS_PATH=${MIMIR_EMBEDDINGS_API_MODELS_PATH:-/v1/models}
+      - MIMIR_EMBEDDINGS_API_KEY=${MIMIR_EMBEDDINGS_API_KEY:-dummy-key}
       
       # Provider and Model Configuration (100% dynamic - no config file needed)
       - MIMIR_DEFAULT_PROVIDER=${MIMIR_DEFAULT_PROVIDER:-copilot}
@@ -153,27 +155,28 @@ services:
       - MIMIR_WORKER_MODEL=${MIMIR_WORKER_MODEL:-}
       - MIMIR_QC_MODEL=${MIMIR_QC_MODEL:-}
       
-      # Context Window Configuration (optional - system queries provider APIs dynamically)
-      - MIMIR_DEFAULT_CONTEXT_WINDOW=${MIMIR_DEFAULT_CONTEXT_WINDOW:-128000}
+      # Context Window Configuration
+      - MIMIR_DEFAULT_CONTEXT_WINDOW=${MIMIR_DEFAULT_CONTEXT_WINDOW:-}
       
-      # Feature Flags (100% ENV-based, no config file needed)
-      - MIMIR_FEATURE_PM_MODEL_SUGGESTIONS=${MIMIR_FEATURE_PM_MODEL_SUGGESTIONS:-false}
-      - MIMIR_FEATURE_VECTOR_EMBEDDINGS=${MIMIR_FEATURE_VECTOR_EMBEDDINGS:-true}
-      
-      # Embeddings Configuration (only used if VECTOR_EMBEDDINGS=true)
-      - MIMIR_EMBEDDINGS_ENABLED=true
-      - MIMIR_EMBEDDINGS_PROVIDER=llama.cpp
-      - MIMIR_EMBEDDINGS_MODEL=mxbai-embed-large
+      # Embeddings Configuration
+      - MIMIR_EMBEDDINGS_ENABLED=${MIMIR_EMBEDDINGS_ENABLED:-true}
+      - MIMIR_EMBEDDINGS_PROVIDER=${MIMIR_EMBEDDINGS_PROVIDER:-ollama}
+      - MIMIR_EMBEDDINGS_MODEL=${MIMIR_EMBEDDINGS_MODEL:-mxbai-embed-large}
       - MIMIR_EMBEDDINGS_DIMENSIONS=${MIMIR_EMBEDDINGS_DIMENSIONS:-1024}
-      - MIMIR_EMBEDDINGS_CHUNK_SIZE=${MIMIR_EMBEDDINGS_CHUNK_SIZE:-700}
-      - MIMIR_EMBEDDINGS_CHUNK_OVERLAP=${MIMIR_EMBEDDINGS_CHUNK_OVERLAP:-100}
-      - MIMIR_EMBEDDINGS_DELAY_MS=${MIMIR_EMBEDDINGS_DELAY_MS:-0}
+      - MIMIR_EMBEDDINGS_CHUNK_SIZE=${MIMIR_EMBEDDINGS_CHUNK_SIZE:-768}
+      - MIMIR_EMBEDDINGS_CHUNK_OVERLAP=${MIMIR_EMBEDDINGS_CHUNK_OVERLAP:-10}
+      - MIMIR_EMBEDDINGS_DELAY_MS=${MIMIR_EMBEDDINGS_DELAY_MS:-100}
       - MIMIR_EMBEDDINGS_MAX_RETRIES=${MIMIR_EMBEDDINGS_MAX_RETRIES:-3}
       
-      # Auto-index documentation on startup (default: true)
-      # Allows users to immediately query Mimir's documentation via semantic search
-      # Set to 'false' in .env to disable: MIMIR_AUTO_INDEX_DOCS=false
+      # Feature Flags
+      - MIMIR_FEATURE_PM_MODEL_SUGGESTIONS=${MIMIR_FEATURE_PM_MODEL_SUGGESTIONS:-true}
+      - MIMIR_FEATURE_VECTOR_EMBEDDINGS=${MIMIR_FEATURE_VECTOR_EMBEDDINGS:-true}
       - MIMIR_AUTO_INDEX_DOCS=${MIMIR_AUTO_INDEX_DOCS:-true}
+      
+      # Advanced Configuration
+      - MIMIR_PARALLEL_EXECUTION=${MIMIR_PARALLEL_EXECUTION:-false}
+      - MIMIR_INSTALL_DIR=${MIMIR_INSTALL_DIR:-/app}
+      - MIMIR_AGENTS_DIR=${MIMIR_AGENTS_DIR:-/app/docs/agents}
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs

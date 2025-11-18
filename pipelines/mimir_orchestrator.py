@@ -38,10 +38,14 @@ class Pipe:
             description="MCP server URL for graph operations",
         )
 
-        # Copilot API Configuration
-        COPILOT_API_URL: str = Field(
-            default="http://copilot-api:4141/v1",
-            description="Copilot API base URL",
+        # LLM API Configuration
+        MIMIR_LLM_API: str = Field(
+            default="http://copilot-api:4141",
+            description="LLM base URL",
+        )
+        MIMIR_LLM_API_PATH: str = Field(
+            default="/v1/chat/completions",
+            description="Chat completions path",
         )
 
         COPILOT_API_KEY: str = Field(
@@ -1649,10 +1653,11 @@ Use the model: {model}
         return 128000  # 128k default
 
     async def _call_llm(self, prompt: str, model: str) -> AsyncGenerator[str, None]:
-        """Call copilot-api with streaming"""
+        """Call LLM API with streaming"""
         import aiohttp
 
-        url = f"{self.valves.COPILOT_API_URL}/chat/completions"
+        # Simple concatenation: base URL + path
+        url = f"{self.valves.MIMIR_LLM_API}{self.valves.MIMIR_LLM_API_PATH}"
         headers = {
             "Authorization": f"Bearer {self.valves.COPILOT_API_KEY}",
             "Content-Type": "application/json",

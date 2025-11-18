@@ -88,16 +88,17 @@ export class LLMConfigLoader {
     if (process.env.NODE_ENV === 'test') {
       return;
     }
-    // Override Ollama baseUrl
-    if (process.env.OLLAMA_BASE_URL && config.providers.ollama) {
-      config.providers.ollama.baseUrl = process.env.OLLAMA_BASE_URL;
-      console.log(`🔧 Ollama URL: ${process.env.OLLAMA_BASE_URL}`);
-    }
-
-    // Override Copilot baseUrl
-    if (process.env.COPILOT_BASE_URL && config.providers.copilot) {
-      config.providers.copilot.baseUrl = process.env.COPILOT_BASE_URL;
-      console.log(`🔧 Copilot URL: ${process.env.COPILOT_BASE_URL}`);
+    // Override LLM base URL for the active provider (simple concat)
+    if (process.env.MIMIR_LLM_API) {
+      const activeProvider = config.defaultProvider;
+      if (config.providers[activeProvider]) {
+        config.providers[activeProvider].baseUrl = process.env.MIMIR_LLM_API;
+        console.log(`🔧 LLM Base URL (${activeProvider}): ${process.env.MIMIR_LLM_API}`);
+        const chatPath = process.env.MIMIR_LLM_API_PATH || '/v1/chat/completions';
+        const modelsPath = process.env.MIMIR_LLM_API_MODELS_PATH || '/v1/models';
+        console.log(`🔧 Chat Path: ${chatPath}`);
+        console.log(`🔧 Models Path: ${modelsPath}`);
+      }
     }
 
     // Feature flags
@@ -194,7 +195,12 @@ export class LLMConfigLoader {
    */
   private async discoverOllamaModels(providerConfig: ProviderConfig): Promise<void> {
     try {
-      const response = await fetch(`${providerConfig.baseUrl}/api/tags`);
+      // Simple concatenation: base URL + models path
+      const baseUrl = providerConfig.baseUrl;
+      const modelsPath = process.env.MIMIR_LLM_API_MODELS_PATH || '/api/tags';
+      const modelsUrl = `${baseUrl}${modelsPath}`;
+      
+      const response = await fetch(modelsUrl);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -208,14 +214,16 @@ export class LLMConfigLoader {
       for (const model of models) {
         const modelName = model.name;
         const sizeGB = model.size ? (model.size / (1024 * 1024 * 1024)).toFixed(1) : '?';
+        const family = model.details?.family || 'Unknown';
+        const paramSize = model.details?.parameter_size || '';
         
-        // Get context window from ENV or use default
+        // Try to extract context window from model info or use ENV/default
         const contextWindow = this.getContextWindowFromEnvOrDefault(modelName);
         
         providerConfig.models[modelName] = {
           name: modelName,
           contextWindow,
-          description: `${model.details?.family || 'Unknown'} model (${sizeGB}GB)`,
+          description: `${family}${paramSize ? ' ' + paramSize : ''} (${sizeGB}GB)`,
           recommendedFor: this.guessRecommendedFor(modelName),
           config: {
             numCtx: contextWindow,
@@ -226,7 +234,7 @@ export class LLMConfigLoader {
         };
       }
       
-      console.log(`✅ Discovered ${models.length} Ollama models`);
+      console.log(`✅ Discovered ${models.length} Ollama models from ${modelsUrl}`);
     } catch (error: any) {
       console.warn(`⚠️  Failed to query Ollama API: ${error.message}`);
       throw error;
@@ -238,7 +246,12 @@ export class LLMConfigLoader {
    */
   private async discoverOpenAIModels(providerConfig: ProviderConfig, provider: string): Promise<void> {
     try {
-      const response = await fetch(`${providerConfig.baseUrl}/models`);
+      // Simple concatenation: base URL + models path
+      const baseUrl = providerConfig.baseUrl;
+      const modelsPath = process.env.MIMIR_LLM_API_MODELS_PATH || '/v1/models';
+      const modelsUrl = `${baseUrl}${modelsPath}`;
+      
+      const response = await fetch(modelsUrl);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -252,13 +265,15 @@ export class LLMConfigLoader {
       for (const model of models) {
         const modelId = model.id;
         
-        // Get context window from ENV or use default
-        const contextWindow = this.getContextWindowFromEnvOrDefault(modelId);
+        // Use context_length from API if available, otherwise ENV or default
+        const contextWindow = model.context_length 
+          || model.max_tokens
+          || this.getContextWindowFromEnvOrDefault(modelId);
         
         providerConfig.models[modelId] = {
           name: modelId,
           contextWindow,
-          description: `${provider} model via API`,
+          description: model.description || `${provider} model via API`,
           recommendedFor: this.guessRecommendedForOpenAI(modelId),
           config: {
             temperature: 0.0,
@@ -268,7 +283,7 @@ export class LLMConfigLoader {
         };
       }
       
-      console.log(`✅ Discovered ${models.length} ${provider} models`);
+      console.log(`✅ Discovered ${models.length} ${provider} models from ${modelsUrl}`);
     } catch (error: any) {
       console.warn(`⚠️  Failed to query ${provider} API: ${error.message}`);
       throw error;
@@ -404,23 +419,26 @@ export class LLMConfigLoader {
     const defaultProvider = (process.env.MIMIR_DEFAULT_PROVIDER || 'copilot') as string;
     const defaultModel = process.env.MIMIR_DEFAULT_MODEL || 'gpt-4.1';
     
+    // Use base URL directly from MIMIR_LLM_API
+    const llmBaseUrl = process.env.MIMIR_LLM_API;
+    
     const config: LLMConfig = {
       defaultProvider,
       providers: {
         copilot: {
-          baseUrl: process.env.COPILOT_BASE_URL || 'http://localhost:4141/v1',
-          defaultModel: defaultModel, // Use unified default
-          models: {}, // Will be populated by discoverModels
+          baseUrl: (defaultProvider === 'copilot' && llmBaseUrl) || 'http://localhost:4141',
+          defaultModel: defaultModel,
+          models: {},
         },
         ollama: {
-          baseUrl: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
-          defaultModel: defaultModel, // Use unified default
-          models: {}, // Will be populated by discoverModels
+          baseUrl: (defaultProvider === 'ollama' && llmBaseUrl) || 'http://localhost:11434',
+          defaultModel: defaultModel,
+          models: {},
         },
         openai: {
-          baseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
-          defaultModel: defaultModel, // Use unified default
-          models: {}, // Will be populated by discoverModels
+          baseUrl: (defaultProvider === 'openai' && llmBaseUrl) || 'https://api.openai.com',
+          defaultModel: defaultModel,
+          models: {},
         },
       },
       // Agent defaults from ENV (all use default provider)
@@ -454,32 +472,27 @@ export class LLMConfigLoader {
       throw new Error(`Provider '${provider}' not found in config`);
     }
 
-    let modelConfig = providerConfig.models[model];
+    // Check if we have cached model config
+    const modelConfig = providerConfig.models[model];
     
-    // If model not found, it may be newly available - refresh and retry
-    if (!modelConfig) {
-      console.log(`🔄 Model '${model}' not cached, refreshing from provider...`);
-      this.config = null; // Force refresh
-      const refreshedConfig = await this.load();
-      modelConfig = refreshedConfig.providers[provider]?.models[model];
+    if (modelConfig) {
+      return modelConfig;
     }
     
-    if (!modelConfig) {
-      console.warn(`⚠️  Model '${model}' not found for provider '${provider}', using defaults`);
-      // Return a sensible default instead of throwing
-      return {
-        name: model,
-        contextWindow: 8192,
-        description: `Unknown model: ${model}`,
-        recommendedFor: ['pm', 'worker', 'qc'],
-        config: {
-          temperature: 0.0,
-        },
-        supportsTools: true,
-      };
-    }
-
-    return modelConfig;
+    // No cached config - return sensible defaults without validation
+    // Let the downstream API decide if the model is valid
+    return {
+      name: model,
+      contextWindow: process.env.MIMIR_DEFAULT_CONTEXT_WINDOW 
+        ? parseInt(process.env.MIMIR_DEFAULT_CONTEXT_WINDOW) 
+        : 128000,
+      description: `Model: ${model}`,
+      recommendedFor: ['pm', 'worker', 'qc'],
+      config: {
+        temperature: 0.0,
+      },
+      supportsTools: true, // Assume modern models support tools
+    };
   }
 
   async getContextWindow(provider: string, model: string): Promise<number> {

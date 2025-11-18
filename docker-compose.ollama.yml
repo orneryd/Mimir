@@ -25,107 +25,57 @@ services:
     networks:
       - mcp_network
 
-  copilot-api:
-    image: timothyswt/copilot-api:latest
-    container_name: copilot_api_server
-    ports:
-      - "4141:4141"  # Fixed: copilot-api listens on 4141, not 3000
-    volumes:
-      - ./copilot-data:/root/.local/share/copilot-api  # Persist GitHub token
-    environment:
-      - NODE_ENV=production
-      # Remove PORT=3000, the app uses 4141 by default
-    restart: unless-stopped
-    healthcheck:
-      # Use CMD-SHELL so shell operators (||) work and allow a proper HTTP probe
-      test: ["CMD-SHELL", "wget --spider -q http://localhost:4141/ || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 15s
-    networks:
-      - mcp_network
-
-# Ollama (Legacy - kept for reference, can be removed)
-  # ollama:
-  #   build:
-  #     context: ./docker/ollama
-  #     dockerfile: Dockerfile
-  #     args:
-  #       - EMBEDDING_MODEL=${MIMIR_EMBEDDINGS_MODEL:-mxbai-embed-large}
-  #     tags:
-  #       - mimir-ollama:${VERSION:-1.0.0}
-  #       - mimir-ollama:latest
-  #   image: mimir-ollama:${VERSION:-1.0.0}
-  #   container_name: ollama_server
+  # copilot-api:
+  #   image: timothyswt/copilot-api:latest
+  #   container_name: copilot_api_server
   #   ports:
-  #     - "11434:11434"
+  #     - "4141:4141"  # Fixed: copilot-api listens on 4141, not 3000
   #   volumes:
-  #     - type: bind
-  #       source: ollama_models
-  #       target: /root/.ollama
+  #     - ./copilot-data:/root/.local/share/copilot-api  # Persist GitHub token
   #   environment:
-  #     - OLLAMA_HOST=0.0.0.0:11434
-  #     - OLLAMA_ORIGINS=*
+  #     - NODE_ENV=production
+  #     # Remove PORT=3000, the app uses 4141 by default
   #   restart: unless-stopped
   #   healthcheck:
-  #     test: ["CMD", "ollama", "list"]
-  #     interval: 10s
-  #     timeout: 5s
+  #     # Use CMD-SHELL so shell operators (||) work and allow a proper HTTP probe
+  #     test: ["CMD-SHELL", "wget --spider -q http://localhost:4141/ || exit 1"]
+  #     interval: 30s
+  #     timeout: 10s
   #     retries: 5
-  #     start_period: 30s
+  #     start_period: 15s
   #   networks:
   #     - mcp_network
-  #   deploy:
-  #     resources:
-  #       reservations:
-  #         devices:
-  #           - driver: nvidia
-  #             count: 1
-  #             capabilities: [gpu]
 
-  # llama.cpp server - OpenAI-compatible embeddings
-  llama-server:
-    image: ghcr.io/ggml-org/llama.cpp:server-cuda
-    container_name: llama_server
+# Ollama (Legacy - kept for reference, can be removed)
+  ollama:
+    build:
+      context: ./docker/ollama
+      dockerfile: Dockerfile
+      args:
+        - EMBEDDING_MODEL=${MIMIR_EMBEDDINGS_MODEL:-mxbai-embed-large}
+      tags:
+        - mimir-ollama:${VERSION:-1.0.0}
+        - mimir-ollama:latest
+    image: mimir-ollama:${VERSION:-1.0.0}
+    container_name: ollama_server
     ports:
-      - "11434:8080"  # External 11434 -> Internal 8080 (llama.cpp default)
+      - "11434:11434"
     volumes:
       - type: bind
         source: ollama_models
-        target: /models
-        read_only: true
+        target: /root/.ollama
     environment:
-      # Model Configuration - using mxbai-embed-large
-      - LLAMA_ARG_MODEL=/models/models/blobs/sha256-819c2adf5ce6df2b6bd2ae4ca90d2a69f060afeb438d0c171db57daa02e39c3d
-      - LLAMA_ARG_ALIAS=mxbai-embed-large
-      
-      # Server Configuration
-      - LLAMA_ARG_HOST=0.0.0.0
-      - LLAMA_ARG_PORT=8080
-      - LLAMA_ARG_CTX_SIZE=2048
-      - LLAMA_ARG_N_PARALLEL=4
-      
-      # Embeddings-specific
-      - LLAMA_ARG_EMBEDDINGS=true
-      - LLAMA_ARG_POOLING=mean
-      
-      # Performance
-      - LLAMA_ARG_THREADS=-1
-      - LLAMA_ARG_NO_MMAP=false
-      
-      # GPU support
-      - LLAMA_ARG_N_GPU_LAYERS=99
+      - OLLAMA_HOST=0.0.0.0:11434
+      - OLLAMA_ORIGINS=*
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
       start_period: 30s
     networks:
       - mcp_network
-    # Uncomment if you have GPU support (NVIDIA)
     deploy:
       resources:
         reservations:
@@ -133,6 +83,56 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+
+  # llama.cpp server - OpenAI-compatible embeddings
+  # llama-server:
+  #   image: ghcr.io/ggml-org/llama.cpp:server-cuda
+  #   container_name: llama_server
+  #   ports:
+  #     - "11434:8080"  # External 11434 -> Internal 8080 (llama.cpp default)
+  #   volumes:
+  #     - type: bind
+  #       source: ollama_models
+  #       target: /models
+  #       read_only: true
+  #   environment:
+  #     # Model Configuration - using mxbai-embed-large
+  #     - LLAMA_ARG_MODEL=/models/models/blobs/sha256-819c2adf5ce6df2b6bd2ae4ca90d2a69f060afeb438d0c171db57daa02e39c3d
+  #     - LLAMA_ARG_ALIAS=mxbai-embed-large
+      
+  #     # Server Configuration
+  #     - LLAMA_ARG_HOST=0.0.0.0
+  #     - LLAMA_ARG_PORT=8080
+  #     - LLAMA_ARG_CTX_SIZE=2048
+  #     - LLAMA_ARG_N_PARALLEL=4
+      
+  #     # Embeddings-specific
+  #     - LLAMA_ARG_EMBEDDINGS=true
+  #     - LLAMA_ARG_POOLING=mean
+      
+  #     # Performance
+  #     - LLAMA_ARG_THREADS=-1
+  #     - LLAMA_ARG_NO_MMAP=false
+      
+  #     # GPU support
+  #     - LLAMA_ARG_N_GPU_LAYERS=99
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 30s
+  #   networks:
+  #     - mcp_network
+  #   # Uncomment if you have GPU support (NVIDIA)
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu]
 
   mimir-server:
     build:
@@ -159,7 +159,7 @@ services:
       - HOST_WORKSPACE_ROOT=${HOST_WORKSPACE_ROOT}  # Pass through from host
       
       # LLM API Configuration (Copilot - OpenAI-compatible)
-      - MIMIR_LLM_API=${MIMIR_LLM_API:-http://copilot-api:4141}
+      - MIMIR_LLM_API=${MIMIR_LLM_API:-http://ollama:11434}
       - MIMIR_LLM_API_PATH=${MIMIR_LLM_API_PATH:-/v1/chat/completions}
       - MIMIR_LLM_API_MODELS_PATH=${MIMIR_LLM_API_MODELS_PATH:-/v1/models}
       - MIMIR_LLM_API_KEY=${MIMIR_LLM_API_KEY:-dummy-key}
@@ -171,8 +171,8 @@ services:
       - MIMIR_EMBEDDINGS_API_KEY=${MIMIR_EMBEDDINGS_API_KEY:-dummy-key}
       
       # Provider and Model Configuration (100% dynamic - no config file needed)
-      - MIMIR_DEFAULT_PROVIDER=${MIMIR_DEFAULT_PROVIDER:-copilot}
-      - MIMIR_DEFAULT_MODEL=${MIMIR_DEFAULT_MODEL:-gpt-4.1}
+      - MIMIR_DEFAULT_PROVIDER=${MIMIR_DEFAULT_PROVIDER:-ollama}
+      - MIMIR_DEFAULT_MODEL=${MIMIR_DEFAULT_MODEL:-qwen3:4b}
       
       # Per-Agent Model Configuration (optional overrides)
       - MIMIR_PM_MODEL=${MIMIR_PM_MODEL:-}
@@ -216,10 +216,10 @@ services:
     depends_on:
       neo4j:
         condition: service_healthy
-      copilot-api:
-        condition: service_healthy
+      # copilot-api:
+      #   condition: service_healthy
       # Ollama is required for embeddings but you can use a local server
-      llama-server:
+      ollama:
         condition: service_healthy
     networks:
       - mcp_network

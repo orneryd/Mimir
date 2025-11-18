@@ -30,10 +30,14 @@ class Pipe:
             description="LLM backend to use: 'copilot' or 'ollama'",
         )
 
-        # Copilot API Configuration
-        COPILOT_API_URL: str = Field(
-            default="http://copilot-api:4141/v1",
-            description="Copilot API base URL (used when LLM_BACKEND='copilot')",
+        # LLM API Configuration
+        MIMIR_LLM_API: str = Field(
+            default="http://copilot-api:4141",
+            description="LLM base URL",
+        )
+        MIMIR_LLM_API_PATH: str = Field(
+            default="/v1/chat/completions",
+            description="Chat completions path",
         )
 
         COPILOT_API_KEY: str = Field(
@@ -1087,8 +1091,8 @@ Please address the user's request using the provided context and your capabiliti
                 }
             }
         else:
-            # Use Copilot API (default)
-            url = f"{self.valves.COPILOT_API_URL}/chat/completions"
+            # Use LLM API (default) - simple concatenation
+            url = f"{self.valves.MIMIR_LLM_API}{self.valves.MIMIR_LLM_API_PATH}"
             headers = {
                 "Authorization": f"Bearer {self.valves.COPILOT_API_KEY}",
                 "Content-Type": "application/json",

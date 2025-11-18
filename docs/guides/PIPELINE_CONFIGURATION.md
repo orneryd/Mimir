@@ -156,7 +156,7 @@ All Mimir pipelines support switching between **Copilot API** (default) and **Ol
 Out of the box, all pipelines use GitHub Copilot API:
 
 ```python
-COPILOT_API_URL: str = Field(
+COPILOT_BASE_URL: str = Field(
     default="http://copilot-api:4141/v1",
     description="Copilot API base URL"
 )
@@ -177,7 +177,7 @@ QC_MODEL: str = Field(default="gpt-4.1")
 
 ```json
 {
-  "COPILOT_API_URL": "http://ollama:11434/v1",
+  "COPILOT_BASE_URL": "http://ollama:11434/v1",
   "PM_MODEL": "llama3.1:8b",
   "WORKER_MODEL": "llama3.1:8b",
   "QC_MODEL": "llama3.1:8b"
@@ -200,7 +200,7 @@ nano pipelines/mimir_orchestrator.py
 ```python
 class Valves(BaseModel):
     # Change Copilot API URL to Ollama
-    COPILOT_API_URL: str = Field(
+    COPILOT_BASE_URL: str = Field(
         default="http://ollama:11434/v1",  # Changed
         description="Ollama API base URL"
     )
@@ -404,7 +404,7 @@ docker compose ps copilot-api
 docker exec -it mimir-open-webui curl http://copilot-api:4141/v1/models
 
 # 3. Verify Copilot API URL in pipeline Valves:
-# COPILOT_API_URL: http://copilot-api:4141/v1
+# COPILOT_BASE_URL: http://copilot-api:4141/v1
 ```
 
 ### Problem: Ollama Models Not Found
@@ -484,7 +484,7 @@ docker compose up -d --force-recreate open-webui
 | Task | Method |
 |------|--------|
 | **Enable pipelines** | Admin Panel → Pipelines → Toggle switches |
-| **Switch to Ollama** | Edit Valves → Change COPILOT_API_URL and models |
+| **Switch to Ollama** | Edit Valves → Change COPILOT_BASE_URL and models |
 | **Update pipelines** | Edit source → Rebuild → Restart |
 | **Troubleshoot** | Check logs → Verify connections → Rebuild if needed |
 

@@ -1450,22 +1450,22 @@ export function Portal() {
 
                     {message.role === 'assistant' ? (
                       message.content ? (
-                        <div className="text-gray-100 leading-relaxed prose prose-invert prose-sm max-w-none
-                          prose-headings:text-valhalla-gold prose-headings:font-semibold
-                          prose-p:text-gray-100 prose-p:leading-relaxed
-                          prose-a:text-valhalla-gold prose-a:underline hover:prose-a:text-yellow-300
-                          prose-strong:text-gray-50 prose-strong:font-semibold
-                          prose-code:text-valhalla-gold prose-code:bg-norse-rune/50 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:break-words
-                          prose-pre:bg-norse-rune/30 prose-pre:border prose-pre:border-norse-rune prose-pre:rounded-lg prose-pre:overflow-x-auto prose-pre:max-w-full
-                          prose-pre:code:break-normal prose-pre:code:whitespace-pre
-                          prose-ul:text-gray-100 prose-ol:text-gray-100
-                          prose-li:text-gray-100 prose-li:marker:text-valhalla-gold
-                          prose-blockquote:border-l-valhalla-gold prose-blockquote:text-gray-300
-                          prose-hr:border-norse-rune">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                            {message.content}
-                          </ReactMarkdown>
-                        </div>
+                      <div className="text-gray-100 leading-relaxed prose prose-invert prose-sm max-w-none
+                        prose-headings:text-valhalla-gold prose-headings:font-semibold
+                        prose-p:text-gray-100 prose-p:leading-relaxed
+                        prose-a:text-valhalla-gold prose-a:underline hover:prose-a:text-yellow-300
+                        prose-strong:text-gray-50 prose-strong:font-semibold
+                        prose-code:text-valhalla-gold prose-code:bg-norse-rune/50 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:break-words
+                        prose-pre:bg-norse-rune/30 prose-pre:border prose-pre:border-norse-rune prose-pre:rounded-lg prose-pre:overflow-x-auto prose-pre:max-w-full
+                        prose-pre:code:break-normal prose-pre:code:whitespace-pre
+                        prose-ul:text-gray-100 prose-ol:text-gray-100
+                        prose-li:text-gray-100 prose-li:marker:text-valhalla-gold
+                        prose-blockquote:border-l-valhalla-gold prose-blockquote:text-gray-300
+                        prose-hr:border-norse-rune">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {message.content}
+                        </ReactMarkdown>
+                      </div>
                       ) : (
                         <div className="flex space-x-2">
                           <div className="w-2 h-2 bg-valhalla-gold rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>

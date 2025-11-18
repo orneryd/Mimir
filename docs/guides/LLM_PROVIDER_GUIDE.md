@@ -221,10 +221,10 @@ docker exec -it ollama_server ollama list
 Edit `pipelines/mimir_orchestrator.py`:
 
 ```python:42:50:pipelines/mimir_orchestrator.py
-# Change Copilot API URL to Ollama
-COPILOT_API_URL: str = Field(
+# Change LLM API URL to Ollama
+LLM_API_URL: str = Field(
     default="http://ollama:11434/v1",  # Changed from copilot-api:4141
-    description="Ollama API base URL",
+    description="LLM API base URL",
 )
 
 # Models must match what you pulled
@@ -306,7 +306,7 @@ QC_MODEL: str = Field(default="llama3.1:8b")
 
 ```python:42:82:pipelines/mimir_orchestrator.py
 # Use Copilot for PM and QC (strategic)
-COPILOT_API_URL: str = Field(default="http://copilot-api:4141/v1")
+COPILOT_BASE_URL: str = Field(default="http://copilot-api:4141/v1")
 PM_MODEL: str = Field(default="gpt-4.1")
 QC_MODEL: str = Field(default="gpt-4.1")
 
