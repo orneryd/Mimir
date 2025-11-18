@@ -159,19 +159,14 @@ services:
       - HOST_WORKSPACE_ROOT=${HOST_WORKSPACE_ROOT}  # Pass through from host
       
       # LLM API Configuration (Copilot - OpenAI-compatible)
+      - MIMIR_DEFAULT_PROVIDER=${MIMIR_DEFAULT_PROVIDER:-copilot}
       - MIMIR_LLM_API=${MIMIR_LLM_API:-http://copilot-api:4141}
       - MIMIR_LLM_API_PATH=${MIMIR_LLM_API_PATH:-/v1/chat/completions}
       - MIMIR_LLM_API_MODELS_PATH=${MIMIR_LLM_API_MODELS_PATH:-/v1/models}
       - MIMIR_LLM_API_KEY=${MIMIR_LLM_API_KEY:-dummy-key}
       
-      # Embeddings API Configuration (llama.cpp server - OpenAI-compatible)
-      - MIMIR_EMBEDDINGS_API=${MIMIR_EMBEDDINGS_API:-http://llama-server:8080}
-      - MIMIR_EMBEDDINGS_API_PATH=${MIMIR_EMBEDDINGS_API_PATH:-/v1/embeddings}
-      - MIMIR_EMBEDDINGS_API_MODELS_PATH=${MIMIR_EMBEDDINGS_API_MODELS_PATH:-/v1/models}
-      - MIMIR_EMBEDDINGS_API_KEY=${MIMIR_EMBEDDINGS_API_KEY:-dummy-key}
       
       # Provider and Model Configuration (100% dynamic - no config file needed)
-      - MIMIR_DEFAULT_PROVIDER=${MIMIR_DEFAULT_PROVIDER:-copilot}
       - MIMIR_DEFAULT_MODEL=${MIMIR_DEFAULT_MODEL:-gpt-4.1}
       
       # Per-Agent Model Configuration (optional overrides)
@@ -180,11 +175,16 @@ services:
       - MIMIR_QC_MODEL=${MIMIR_QC_MODEL:-}
       
       # Context Window Configuration
-      - MIMIR_DEFAULT_CONTEXT_WINDOW=${MIMIR_DEFAULT_CONTEXT_WINDOW:-}
+      - MIMIR_DEFAULT_CONTEXT_WINDOW=${MIMIR_DEFAULT_CONTEXT_WINDOW:-128000}
       
+      # Embeddings API Configuration (llama.cpp server - OpenAI-compatible)
+      - MIMIR_EMBEDDINGS_PROVIDER=${MIMIR_EMBEDDINGS_PROVIDER:-openai}
+      - MIMIR_EMBEDDINGS_API=${MIMIR_EMBEDDINGS_API:-http://llama-server:8080}
+      - MIMIR_EMBEDDINGS_API_PATH=${MIMIR_EMBEDDINGS_API_PATH:-/v1/embeddings}
+      - MIMIR_EMBEDDINGS_API_MODELS_PATH=${MIMIR_EMBEDDINGS_API_MODELS_PATH:-/v1/models}
+      - MIMIR_EMBEDDINGS_API_KEY=${MIMIR_EMBEDDINGS_API_KEY:-dummy-key}
       # Embeddings Configuration (llama.cpp uses OpenAI-compatible format)
       - MIMIR_EMBEDDINGS_ENABLED=${MIMIR_EMBEDDINGS_ENABLED:-true}
-      - MIMIR_EMBEDDINGS_PROVIDER=${MIMIR_EMBEDDINGS_PROVIDER:-llama.cpp}
       - MIMIR_EMBEDDINGS_MODEL=${MIMIR_EMBEDDINGS_MODEL:-mxbai-embed-large}
       - MIMIR_EMBEDDINGS_DIMENSIONS=${MIMIR_EMBEDDINGS_DIMENSIONS:-1024}
       - MIMIR_EMBEDDINGS_CHUNK_SIZE=${MIMIR_EMBEDDINGS_CHUNK_SIZE:-768}

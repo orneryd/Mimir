@@ -159,19 +159,13 @@ services:
       - HOST_WORKSPACE_ROOT=${HOST_WORKSPACE_ROOT}  # Pass through from host
       
       # LLM API Configuration (Copilot - OpenAI-compatible)
+      - MIMIR_DEFAULT_PROVIDER=${MIMIR_DEFAULT_PROVIDER:-ollama}
       - MIMIR_LLM_API=${MIMIR_LLM_API:-http://ollama:11434}
       - MIMIR_LLM_API_PATH=${MIMIR_LLM_API_PATH:-/v1/chat/completions}
       - MIMIR_LLM_API_MODELS_PATH=${MIMIR_LLM_API_MODELS_PATH:-/v1/models}
-      - MIMIR_LLM_API_KEY=${MIMIR_LLM_API_KEY:-dummy-key}
-      
-      # Embeddings API Configuration
-      - MIMIR_EMBEDDINGS_API=${MIMIR_EMBEDDINGS_API:-http://ollama:11434}
-      - MIMIR_EMBEDDINGS_API_PATH=${MIMIR_EMBEDDINGS_API_PATH:-/api/embeddings}
-      - MIMIR_EMBEDDINGS_API_MODELS_PATH=${MIMIR_EMBEDDINGS_API_MODELS_PATH:-/api/tags}
-      - MIMIR_EMBEDDINGS_API_KEY=${MIMIR_EMBEDDINGS_API_KEY:-dummy-key}
+      - MIMIR_LLM_API_KEY=${MIMIR_LLM_API_KEY:-dummy-key}     
       
       # Provider and Model Configuration (100% dynamic - no config file needed)
-      - MIMIR_DEFAULT_PROVIDER=${MIMIR_DEFAULT_PROVIDER:-ollama}
       - MIMIR_DEFAULT_MODEL=${MIMIR_DEFAULT_MODEL:-qwen3:4b}
       
       # Per-Agent Model Configuration (optional overrides)
@@ -182,9 +176,14 @@ services:
       # Context Window Configuration
       - MIMIR_DEFAULT_CONTEXT_WINDOW=${MIMIR_DEFAULT_CONTEXT_WINDOW:-}
       
+       # Embeddings API Configuration
+      - MIMIR_EMBEDDINGS_PROVIDER=${MIMIR_EMBEDDINGS_PROVIDER:-ollama}
+      - MIMIR_EMBEDDINGS_API=${MIMIR_EMBEDDINGS_API:-http://ollama:11434}
+      - MIMIR_EMBEDDINGS_API_PATH=${MIMIR_EMBEDDINGS_API_PATH:-/api/embeddings}
+      - MIMIR_EMBEDDINGS_API_MODELS_PATH=${MIMIR_EMBEDDINGS_API_MODELS_PATH:-/api/tags}
+      - MIMIR_EMBEDDINGS_API_KEY=${MIMIR_EMBEDDINGS_API_KEY:-dummy-key}
       # Embeddings Configuration
       - MIMIR_EMBEDDINGS_ENABLED=${MIMIR_EMBEDDINGS_ENABLED:-true}
-      - MIMIR_EMBEDDINGS_PROVIDER=${MIMIR_EMBEDDINGS_PROVIDER:-ollama}
       - MIMIR_EMBEDDINGS_MODEL=${MIMIR_EMBEDDINGS_MODEL:-mxbai-embed-large}
       - MIMIR_EMBEDDINGS_DIMENSIONS=${MIMIR_EMBEDDINGS_DIMENSIONS:-1024}
       - MIMIR_EMBEDDINGS_CHUNK_SIZE=${MIMIR_EMBEDDINGS_CHUNK_SIZE:-768}

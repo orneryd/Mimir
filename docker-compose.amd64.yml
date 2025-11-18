@@ -86,39 +86,15 @@ services:
 
   # llama.cpp server - OpenAI-compatible embeddings
   llama-server:
-    image: ghcr.io/ggml-org/llama.cpp:server-cuda
+    image: timothyswt/llama-cpp-server-amd64-mxbai:latest
     container_name: llama_server
     ports:
       - "11434:8080"  # External 11434 -> Internal 8080 (llama.cpp default)
-    volumes:
-      - type: bind
-        source: ollama_models
-        target: /models
-        read_only: true
-    environment:
-      # Model Configuration - using nomic-embed-text
-      - LLAMA_ARG_MODEL=/models/models/blobs/sha256-970aa74c0a90ef7482477cf803618e776e173c007bf957f635f1015bfcfef0e6
-      - LLAMA_ARG_ALIAS=nomic-embed-text
-      
-      # Server Configuration
-      - LLAMA_ARG_HOST=0.0.0.0
-      - LLAMA_ARG_PORT=8080
-      - LLAMA_ARG_CTX_SIZE=2048
-      - LLAMA_ARG_N_PARALLEL=4
-      
-      # Embeddings-specific
-      - LLAMA_ARG_EMBEDDINGS=true
-      - LLAMA_ARG_POOLING=mean
-      
-      # Performance
-      - LLAMA_ARG_THREADS=-1
-      - LLAMA_ARG_NO_MMAP=false
-      
-      # GPU support
-      - LLAMA_ARG_N_GPU_LAYERS=99
+    # Note: Model is bundled in the image (nomic-embed-text, 261MB)
+    # No volumes needed unless you want to add additional models
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -158,19 +134,13 @@ services:
       - HOST_WORKSPACE_ROOT=${HOST_WORKSPACE_ROOT}  # Pass through from host
       
       # LLM API Configuration
+      - MIMIR_DEFAULT_PROVIDER=${MIMIR_DEFAULT_PROVIDER:-copilot}
       - MIMIR_LLM_API=${MIMIR_LLM_API:-http://copilot-api:4141}
       - MIMIR_LLM_API_PATH=${MIMIR_LLM_API_PATH:-/v1/chat/completions}
       - MIMIR_LLM_API_MODELS_PATH=${MIMIR_LLM_API_MODELS_PATH:-/v1/models}
       - MIMIR_LLM_API_KEY=${MIMIR_LLM_API_KEY:-dummy-key}
       
-      # Embeddings API Configuration
-      - MIMIR_EMBEDDINGS_API=${MIMIR_EMBEDDINGS_API:-http://copilot-api:4141}
-      - MIMIR_EMBEDDINGS_API_PATH=${MIMIR_EMBEDDINGS_API_PATH:-/v1/embeddings}
-      - MIMIR_EMBEDDINGS_API_MODELS_PATH=${MIMIR_EMBEDDINGS_API_MODELS_PATH:-/v1/models}
-      - MIMIR_EMBEDDINGS_API_KEY=${MIMIR_EMBEDDINGS_API_KEY:-dummy-key}
-      
       # Provider and Model Configuration (100% dynamic - no config file needed)
-      - MIMIR_DEFAULT_PROVIDER=${MIMIR_DEFAULT_PROVIDER:-copilot}
       - MIMIR_DEFAULT_MODEL=${MIMIR_DEFAULT_MODEL:-gpt-4.1}
       
       # Per-Agent Model Configuration (optional overrides)
@@ -179,16 +149,23 @@ services:
       - MIMIR_QC_MODEL=${MIMIR_QC_MODEL:-}
       
       # Context Window Configuration
-      - MIMIR_DEFAULT_CONTEXT_WINDOW=${MIMIR_DEFAULT_CONTEXT_WINDOW:-}
+      - MIMIR_DEFAULT_CONTEXT_WINDOW=${MIMIR_DEFAULT_CONTEXT_WINDOW:-128000}
+      
+      
+      # Embeddings API Configuration
+      - MIMIR_EMBEDDINGS_PROVIDER=${MIMIR_EMBEDDINGS_PROVIDER:-openai}
+      - MIMIR_EMBEDDINGS_API=${MIMIR_EMBEDDINGS_API:-http://llama-server:8080}
+      - MIMIR_EMBEDDINGS_API_PATH=${MIMIR_EMBEDDINGS_API_PATH:-/v1/embeddings}
+      - MIMIR_EMBEDDINGS_API_MODELS_PATH=${MIMIR_EMBEDDINGS_API_MODELS_PATH:-/v1/models}
+      - MIMIR_EMBEDDINGS_API_KEY=${MIMIR_EMBEDDINGS_API_KEY:-dummy-key}
       
       # Embeddings Configuration
       - MIMIR_EMBEDDINGS_ENABLED=${MIMIR_EMBEDDINGS_ENABLED:-true}
-      - MIMIR_EMBEDDINGS_PROVIDER=${MIMIR_EMBEDDINGS_PROVIDER:-ollama}
-      - MIMIR_EMBEDDINGS_MODEL=${MIMIR_EMBEDDINGS_MODEL:-nomic-embed-text}
-      - MIMIR_EMBEDDINGS_DIMENSIONS=${MIMIR_EMBEDDINGS_DIMENSIONS:-768}
+      - MIMIR_EMBEDDINGS_MODEL=${MIMIR_EMBEDDINGS_MODEL:-mxbai-embed-large}
+      - MIMIR_EMBEDDINGS_DIMENSIONS=${MIMIR_EMBEDDINGS_DIMENSIONS:-1024}
       - MIMIR_EMBEDDINGS_CHUNK_SIZE=${MIMIR_EMBEDDINGS_CHUNK_SIZE:-768}
-      - MIMIR_EMBEDDINGS_CHUNK_OVERLAP=${MIMIR_EMBEDDINGS_CHUNK_OVERLAP:-10}
-      - MIMIR_EMBEDDINGS_DELAY_MS=${MIMIR_EMBEDDINGS_DELAY_MS:-100}
+      - MIMIR_EMBEDDINGS_CHUNK_OVERLAP=${MIMIR_EMBEDDINGS_CHUNK_OVERLAP:-100}
+      - MIMIR_EMBEDDINGS_DELAY_MS=${MIMIR_EMBEDDINGS_DELAY_MS:-0}
       - MIMIR_EMBEDDINGS_MAX_RETRIES=${MIMIR_EMBEDDINGS_MAX_RETRIES:-3}
       
       # Feature Flags
@@ -262,9 +239,9 @@ services:
   #   extra_hosts:
   #     - "host.docker.internal:host-gateway"  # Allow access to host's localhost
 
-volumes:
+# volumes:
   # open-webui:
-  ollama_models:
+  # ollama_models:
 
 networks:
   mcp_network:

@@ -39,8 +39,8 @@ COPY --from=builder /build/build/bin/llama-server /usr/local/bin/llama-server
 # Create models directory
 RUN mkdir -p /models
 
-# Copy mxbai-embed-large model from build context
-COPY docker/llama-cpp/models/mxbai-embed-large.gguf /models/mxbai-embed-large.gguf
+# Copy mxbai-embed-large model from local ollama models
+COPY ollama_models/models/blobs/sha256-819c2adf5ce6df2b6bd2ae4ca90d2a69f060afeb438d0c171db57daa02e39c3d /models/mxbai-embed-large.gguf
 
 # Expose port
 EXPOSE 8080
