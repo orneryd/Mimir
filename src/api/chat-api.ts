@@ -59,15 +59,14 @@ interface ChatCompletionRequest {
  * Default configuration
  * 
  * Provider Switching:
- * - Set LLM_PROVIDER to:
- *   - 'openai' or 'copilot' (OpenAI-compatible endpoint - GitHub Copilot or OpenAI API)
- *   - 'ollama' or 'llama.cpp' (Local LLM provider - Ollama or llama.cpp, interchangeable)
- * - Both providers are OpenAI-compatible and support full MCP tool calling through LangChain agents
- * - Configure LLM_API_URL for the endpoint (e.g., http://copilot-api:4141/v1 or http://localhost:11434)
+ * - Set MIMIR_DEFAULT_PROVIDER to:
+ *   - 'ollama' (Native Ollama API - uses /api/chat endpoint)
+ *   - 'openai', 'copilot', or 'llama.cpp' (OpenAI-compatible - uses /v1/chat/completions endpoint)
+ * - Configure MIMIR_LLM_API for the base URL (e.g., http://ollama:11434, http://copilot-api:4141, http://llama-server:11434)
  * 
  * Provider aliases are normalized automatically:
- *   llama.cpp → ollama (local LLM)
- *   copilot → openai (OpenAI-compatible API)
+ *   llama.cpp → openai (OpenAI-compatible)
+ *   copilot → openai (OpenAI-compatible)
  */
 const DEFAULT_CONFIG: ChatConfig = {
   semanticSearchEnabled: true,
@@ -448,7 +447,7 @@ ${relevantContext}
       // OpenAI client adds /v1/chat/completions internally
       baseUrl = process.env.MIMIR_LLM_API || 'http://ollama:11434';
 
-      const providerDisplay = provider === LLMProvider.OLLAMA ? 'Ollama/llama.cpp' : 'OpenAI-compatible (Copilot/OpenAI)';
+      const providerDisplay = provider === LLMProvider.OLLAMA ? 'Ollama (native)' : 'OpenAI-compatible (Copilot/OpenAI/llama.cpp)';
       console.log(`🤖 Using provider: ${providerDisplay}, model: ${selectedModel}, base: ${baseUrl}`);
 
       // Build task for agent - include RAG context and conversation history
@@ -493,7 +492,7 @@ ${relevantContext}
       await agent.loadPreamble(systemContent, true); // true = load as content, not file path
 
       if (stream) {
-        const providerDisplay = provider === LLMProvider.OLLAMA ? 'Ollama/llama.cpp' : 'OpenAI';
+        const providerDisplay = provider === LLMProvider.OLLAMA ? 'Ollama' : 'OpenAI-compatible';
         res.write(`: 🤖 Processing with ${selectedModel} (${providerDisplay})...\n\n`);
       }
 
@@ -581,8 +580,13 @@ ${relevantContext}
       // Normalize input to array
       const inputs = Array.isArray(input) ? input : [input];
 
-      // Call LLM endpoint for embeddings (Ollama or OpenAI-compatible)
-      const embeddingsUrl = `${config.llmApiUrl}/api/embeddings`;
+      // Use split URL configuration for embeddings
+      const baseUrl = process.env.MIMIR_EMBEDDINGS_API || 'http://llama-server:11434';
+      const embeddingsPath = process.env.MIMIR_EMBEDDINGS_API_PATH || '/v1/embeddings';
+      const embeddingsUrl = `${baseUrl}${embeddingsPath}`;
+      
+      console.log(`🔗 Embeddings URL: ${embeddingsUrl}`);
+      
       const embeddings: number[][] = [];
 
       for (const text of inputs) {
@@ -593,7 +597,7 @@ ${relevantContext}
           },
           body: JSON.stringify({
             model,
-            prompt: text,
+            input: text, // OpenAI-compatible format
           }),
         });
 
@@ -603,7 +607,24 @@ ${relevantContext}
         }
 
         const data = await response.json() as any;
-        embeddings.push(data.embedding);
+        
+        // Handle both OpenAI-compatible and Ollama native response formats
+        let embedding: number[];
+        if (data.data && Array.isArray(data.data) && data.data[0]?.embedding) {
+          // OpenAI-compatible format: { data: [{ embedding: [...] }] }
+          const embeddingData = data.data[0].embedding;
+          // Handle space-separated string (llama.cpp format)
+          embedding = typeof embeddingData === 'string' 
+            ? embeddingData.split(' ').map(parseFloat)
+            : embeddingData;
+        } else if (data.embedding) {
+          // Ollama native format: { embedding: [...] }
+          embedding = data.embedding;
+        } else {
+          throw new Error(`Unexpected embeddings response format: ${JSON.stringify(data).substring(0, 200)}`);
+        }
+        
+        embeddings.push(embedding);
       }
 
       // Return OpenAI-compatible response

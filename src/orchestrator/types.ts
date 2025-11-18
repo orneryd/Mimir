@@ -13,7 +13,9 @@ export enum LLMProvider {
 
 /**
  * Normalize provider name to canonical value
- * Handles aliases: llama.cpp→ollama, copilot→openai
+ * Handles aliases:
+ * - llama.cpp → openai (llama.cpp is OpenAI-compatible)
+ * - copilot → openai
  */
 export function normalizeProvider(providerName: string | LLMProvider | undefined): LLMProvider {
   if (!providerName) return LLMProvider.OPENAI; // Default
@@ -23,12 +25,11 @@ export function normalizeProvider(providerName: string | LLMProvider | undefined
   // Map aliases to canonical values
   switch (normalized) {
     case 'ollama':
+      return LLMProvider.OLLAMA; // Native Ollama API (/api/chat)
     case 'llama.cpp':
-    case 'llamacpp':
-      return LLMProvider.OLLAMA;
     case 'openai':
     case 'copilot':
-      return LLMProvider.OPENAI;
+      return LLMProvider.OPENAI; // OpenAI-compatible APIs (/v1/chat/completions)
     default:
       // Try to match enum values
       if (Object.values(LLMProvider).includes(normalized as LLMProvider)) {
