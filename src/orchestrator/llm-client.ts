@@ -719,7 +719,7 @@ CONCISE SUMMARY:`;
     }
 
     // Direct LLM mode (no agent/tools)
-    if (!this.agent) {
+    if (this.tools.length === 0) {
       console.log("📤 Invoking LLM directly (no tool calling)...");
 
       // Use conversation history if available, otherwise use simple messages
