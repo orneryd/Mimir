@@ -30,8 +30,7 @@ export class StudioPanel {
     // Handle panel disposal
     this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
 
-    // Load preambles from server
-    this._loadPreambles();
+    // Note: Preambles are loaded after webview sends 'ready' message
   }
 
   /**
@@ -93,6 +92,12 @@ export class StudioPanel {
     console.log('📨 Studio message:', message.command);
 
     switch (message.command) {
+      case 'ready':
+        // Webview is ready - load preambles
+        console.log('✅ Studio webview ready - loading preambles');
+        await this._loadPreambles();
+        break;
+
       case 'generatePlan':
         await this._generatePlan(message.prompt);
         break;

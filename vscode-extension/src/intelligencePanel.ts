@@ -271,9 +271,6 @@ export class IntelligencePanel {
   }
 
   private async _handleConfirmRemoveFolder(path: string) {
-    // Extract folder name for cleaner display
-    const folderName = path.split('/').pop() || path;
-    
     const confirmed = await vscode.window.showWarningMessage(
       `Remove folder from indexing?`,
       {

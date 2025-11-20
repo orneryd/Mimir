@@ -107,6 +107,11 @@ export function Studio() {
     };
 
     window.addEventListener('message', handleMessage);
+    
+    // Send ready message to extension host after listener is set up
+    console.log('📤 Sending ready message to extension host');
+    vscode.postMessage({ command: 'ready' });
+    
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
