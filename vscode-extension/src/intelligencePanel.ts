@@ -201,12 +201,18 @@ export class IntelligencePanel {
     const normalizedHostPath = path.normalize(hostPath);
     console.log('[IntelligencePanel] Normalized path:', normalizedHostPath);
 
+    // Detect Windows (case-insensitive filesystem)
+    const isWindows = process.platform === 'win32';
+
     // If HOST_WORKSPACE_ROOT is set, validate against it (Docker/container scenario)
     if (hostWorkspaceRoot) {
       const normalizedHostRoot = path.normalize(hostWorkspaceRoot);
       
-      // Check if the selected path is within the mounted workspace
-      if (!normalizedHostPath.startsWith(normalizedHostRoot)) {
+      // Check if the selected path is within the mounted workspace (case-insensitive on Windows)
+      const pathToCheck = isWindows ? normalizedHostPath.toLowerCase() : normalizedHostPath;
+      const rootToCheck = isWindows ? normalizedHostRoot.toLowerCase() : normalizedHostRoot;
+      
+      if (!pathToCheck.startsWith(rootToCheck)) {
         return {
           isValid: false,
           error: `Folder is outside the mounted workspace.\n\nMounted workspace: ${hostWorkspaceRoot} (expanded)\nSelected folder: ${hostPath}\n\nOnly folders within the mounted workspace can be indexed.`
@@ -228,7 +234,12 @@ export class IntelligencePanel {
 
     for (const folder of workspaceFolders) {
       const folderPath = path.normalize(folder.uri.fsPath);
-      if (normalizedHostPath.startsWith(folderPath)) {
+      
+      // Case-insensitive comparison on Windows
+      const pathToCheck = isWindows ? normalizedHostPath.toLowerCase() : normalizedHostPath;
+      const workspacePathToCheck = isWindows ? folderPath.toLowerCase() : folderPath;
+      
+      if (pathToCheck.startsWith(workspacePathToCheck)) {
         isWithinWorkspace = true;
         break;
       }
