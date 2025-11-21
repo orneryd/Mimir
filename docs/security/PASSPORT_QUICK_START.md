@@ -246,6 +246,7 @@ MIMIR_OAUTH_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
 MIMIR_OAUTH_CLIENT_SECRET=your-google-client-secret
 MIMIR_OAUTH_CALLBACK_URL=http://localhost:9042/auth/oauth/callback
 MIMIR_OAUTH_ISSUER=https://accounts.google.com
+MIMIR_OAUTH_USERINFO_URL=https://accounts.google.com/oauth2/v1/userinfo  # Optional
 
 # Session
 MIMIR_SESSION_SECRET=generate-with-openssl-rand-base64-32
