@@ -27,6 +27,8 @@
 mkdir -p nginx/ssl
 ```
 
+**⚠️ Important**: The configuration below uses `${MIMIR_API_KEY}` for environment variable substitution. Standard Nginx doesn't support this natively. Use `envsubst` to preprocess the config or pass the variable via Docker environment (shown in docker-compose.yml below).
+
 Create `nginx/nginx.conf`:
 
 ```nginx
