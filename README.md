@@ -1161,6 +1161,57 @@ src/
 - 🔍 **Vector Embeddings** - Optional semantic search with AI embeddings
 - 📈 **Graph Visualization** - View your task network in Neo4j Browser
 
+## 🚀 PCTX Integration (Code Mode)
+
+**NEW:** Mimir now supports [PCTX](https://github.com/portofcontext/pctx) for **Code Mode** execution, reducing token usage by up to 98%!
+
+Instead of sequential tool calls, AI agents can write TypeScript code that executes in a sandboxed environment:
+
+```typescript
+// Traditional MCP: 3 separate calls, 50K+ tokens
+// With PCTX Code Mode: Single execution, ~2K tokens (96% reduction!)
+
+async function run() {
+  const results = await Mimir.vectorSearchNodes({
+    query: "authentication tasks",
+    types: ["todo"],
+    limit: 10
+  });
+  
+  const pending = results.results.filter(r => r.properties.status === "pending");
+  
+  await Mimir.memoryBatch({
+    operation: "update_nodes",
+    updates: pending.map(r => ({id: r.id, properties: {status: "in_progress"}}))
+  });
+  
+  return {updated: pending.length};
+}
+```
+
+**Benefits:**
+- ✅ **98% token reduction** for complex operations
+- ✅ **Type-safe TypeScript** with instant feedback
+- ✅ **Secure sandbox** execution (Deno)
+- ✅ **All 13 Mimir tools** available via `Mimir.*` namespace
+- ✅ **Multi-server workflows** (combine Mimir + GitHub + Slack)
+
+**Quick Start:**
+```bash
+# Install PCTX
+brew install portofcontext/tap/pctx
+
+# Start PCTX (Mimir must be running)
+cd Mimir
+pctx start
+
+# Connect your AI to: http://localhost:8080/mcp
+```
+
+**Documentation:**
+- 📖 [PCTX Integration Guide](docs/guides/PCTX_INTEGRATION_GUIDE.md) - Complete usage guide with examples
+- 🔬 [Integration Analysis](docs/research/PCTX_INTEGRATION_ANALYSIS.md) - Architecture and rationale
+
 ## 🗺️ Roadmap
 
 **Current Status (v1.0):** Production ready with core features
