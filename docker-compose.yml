@@ -156,7 +156,7 @@ services:
       
       # Workspace Configuration
       - WORKSPACE_ROOT=/workspace
-      - HOST_WORKSPACE_ROOT=${HOST_WORKSPACE_ROOT}  # Pass through from host
+      - HOST_WORKSPACE_ROOT=${HOST_WORKSPACE_ROOT:-~/src}  # Pass through from host
       
       # LLM API Configuration (Copilot - OpenAI-compatible)
       - MIMIR_DEFAULT_PROVIDER=${MIMIR_DEFAULT_PROVIDER:-copilot}
@@ -206,7 +206,7 @@ services:
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
-      - ${HOST_WORKSPACE_ROOT:-~/src}:/workspace  # Read-write for file editing (remove :ro)
+      - ${HOST_WORKSPACE_ROOT:-~/src}:${WORKSPACE_ROOT:-/workspace}  # Read-write for file editing (remove :ro)
       # - ${HOST_WORKSPACE_ROOT:-~/src}:/workspace:ro  # Read-write for file editing (remove :ro)
     ports:
       - "9042:3000"
