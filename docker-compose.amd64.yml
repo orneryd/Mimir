@@ -140,6 +140,11 @@ services:
       - MIMIR_LLM_API_MODELS_PATH=${MIMIR_LLM_API_MODELS_PATH:-/v1/models}
       - MIMIR_LLM_API_KEY=${MIMIR_LLM_API_KEY:-dummy-key}
       
+      # PCTX Integration (Code Mode for 90-98% token reduction)
+      - PCTX_URL=${PCTX_URL:-http://host.docker.internal:8080}
+      - PCTX_ENABLED=${PCTX_ENABLED:-false} 
+
+      
       # Provider and Model Configuration (100% dynamic - no config file needed)
       - MIMIR_DEFAULT_MODEL=${MIMIR_DEFAULT_MODEL:-gpt-4.1}
       

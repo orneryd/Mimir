@@ -50,6 +50,13 @@ import {
   handleTodoList
 } from "./tools/todoList.tools.js";
 
+// Orchestration
+import { orchestrationTools } from "./tools/orchestration.tools.js";
+import { 
+  executeWorkflowFromJSON, 
+  executionStates 
+} from "./api/orchestration/workflow-executor.js";
+
 // ============================================================================
 // Global State
 // ============================================================================
@@ -235,6 +242,107 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
+      // ========================================================================
+      // ORCHESTRATION OPERATIONS
+      // ========================================================================
+
+      case "execute_workflow": {
+        const { tasks } = args as { tasks: any[] };
+        
+        // Use configured server URL (defaults to localhost for local, internal for Docker)
+        const serverUrl = process.env.MIMIR_SERVER_URL || 'http://localhost:9042';
+        
+        // Call the orchestration API
+        const response = await fetch(`${serverUrl}/api/execute-workflow`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tasks })
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Orchestration API error: ${response.status} ${response.statusText} - ${errorText}`);
+        }
+        
+        const result = await response.json();
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(result, null, 2)
+            }
+          ]
+        };
+      }
+
+      case "get_execution_status": {
+        const { execution_id } = args as { execution_id: string };
+        
+        const serverUrl = process.env.MIMIR_SERVER_URL || 'http://localhost:9042';
+        const response = await fetch(`${serverUrl}/api/executions/${execution_id}`);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Failed to get execution status: ${response.status} - ${errorText}`);
+        }
+        
+        const result = await response.json();
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(result, null, 2)
+            }
+          ]
+        };
+      }
+
+      case "get_execution_results": {
+        const { execution_id } = args as { execution_id: string };
+        
+        const serverUrl = process.env.MIMIR_SERVER_URL || 'http://localhost:9042';
+        const response = await fetch(`${serverUrl}/api/deliverables/${execution_id}`);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Failed to get execution results: ${response.status} - ${errorText}`);
+        }
+        
+        const result = await response.json();
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(result, null, 2)
+            }
+          ]
+        };
+      }
+
+      case "cancel_execution": {
+        const { execution_id } = args as { execution_id: string };
+        
+        const serverUrl = process.env.MIMIR_SERVER_URL || 'http://localhost:9042';
+        const response = await fetch(`${serverUrl}/api/cancel-execution/${execution_id}`, {
+          method: 'POST'
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Failed to cancel execution: ${response.status} - ${errorText}`);
+        }
+        
+        const result = await response.json();
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(result, null, 2)
+            }
+          ]
+        };
+      }
+
       default:
         throw new Error(`Unknown tool: ${name}`);
     }
@@ -283,7 +391,7 @@ export async function initializeGraphManager() {
     const fileIndexingTools = createFileIndexingTools(graphManager.getDriver(), fileWatchManager);
     const vectorSearchTools = createVectorSearchTools(graphManager.getDriver());
     const todoTools = createTodoListTools();
-    allTools = [...GRAPH_TOOLS, ...fileIndexingTools, ...vectorSearchTools, ...todoTools];
+    allTools = [...GRAPH_TOOLS, ...fileIndexingTools, ...vectorSearchTools, ...todoTools, ...orchestrationTools];
   }
   return graphManager;
 }

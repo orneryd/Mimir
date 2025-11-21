@@ -87,6 +87,7 @@ export class CopilotAgentClient {
 
   constructor(config: AgentConfig) {
     // Use custom tools if provided, otherwise default to consolidatedTools
+    // Note: consolidatedTools will be replaced with PCTX-enhanced tools in loadPreamble
     this.tools = config.tools || consolidatedTools;
 
     // Store config for lazy initialization in loadPreamble
@@ -214,6 +215,14 @@ export class CopilotAgentClient {
     // Display model-specific warnings if any
     await this.configLoader.displayModelWarnings(this.provider, this.modelName);
 
+    // Load PCTX-enhanced tools if not using custom tools
+    if (!this.agentConfig.tools) {
+      const { getConsolidatedTools } = await import('./tools.js');
+      const includePCTX = process.env.PCTX_ENABLED !== 'false'; // Default to true
+      this.tools = await getConsolidatedTools(includePCTX);
+      console.log(`🔧 Loaded tools with PCTX support: ${includePCTX ? 'enabled' : 'disabled'}`);
+    }
+
     // Add tool usage instructions to the system prompt
 
     // Verify LLM is initialized before creating agent
@@ -226,7 +235,7 @@ export class CopilotAgentClient {
     console.log(
       `🔍 Creating LangGraph agent with LLM: ${this.llm.constructor.name}`
     );
-    console.log(`🔍 Tools count: ${this.tools.length}`);
+    console.log(`🔧 Tools count: ${this.tools.length}`);
     console.log(
       `🔍 System prompt length: ${this.systemPrompt.length} chars`
     );    

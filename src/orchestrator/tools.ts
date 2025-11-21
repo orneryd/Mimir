@@ -1,4 +1,5 @@
 import { DynamicStructuredTool } from '@langchain/core/tools';
+import type { StructuredToolInterface } from '@langchain/core/tools';
 import { z } from 'zod';
 import { exec } from 'child_process';
 import { promisify } from 'util';
@@ -315,13 +316,35 @@ import { mcpTools, consolidatedMCPTools, getMCPToolNames } from './mcp-tools.js'
 import { memoryNodeTool, memoryEdgeTool } from './mcp-tools.js';
 
 /**
- * Consolidated tools (8 filesystem + 6 MCP = 14 total)
+ * Consolidated tools (8 filesystem + 6 MCP = 14 total, +1 PCTX if configured)
  * RECOMMENDED for chat agents to avoid tool limit and reduce API calls
  */
 export const consolidatedTools = [
   ...fileSystemTools,
   ...consolidatedMCPTools,
 ];
+
+/**
+ * Get consolidated tools with optional PCTX support
+ * Call this instead of using consolidatedTools directly to get PCTX integration
+ */
+export async function getConsolidatedTools(includePCTX: boolean = true): Promise<StructuredToolInterface[]> {
+  const tools: StructuredToolInterface[] = [...consolidatedTools];
+  
+  if (includePCTX) {
+    const pctxUrl = process.env.PCTX_URL || 'http://localhost:8080';
+    const { createPCTXTool, isPCTXAvailable } = await import('./pctx-tool.js');
+    
+    if (await isPCTXAvailable(pctxUrl)) {
+      console.log(`✅ PCTX available at ${pctxUrl}, adding execute_pctx_code tool`);
+      tools.push(createPCTXTool(pctxUrl) as StructuredToolInterface);
+    } else {
+      console.log(`⚠️  PCTX not available at ${pctxUrl}, skipping PCTX tool`);
+    }
+  }
+  
+  return tools;
+}
 
 /**
  * Planning tools for PM/Ecko agents (8 filesystem + 2 MCP = 10 total)
