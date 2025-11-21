@@ -424,17 +424,23 @@ router.post('/:id/embeddings', async (req: Request, res: Response) => {
   const session = driver.session();
 
   try {
-    // Import GraphManager to use its embedding generation logic
-    const { GraphManager } = await import('../managers/GraphManager.js');
-    const graphManager = new GraphManager(
-      process.env.NEO4J_URI || 'bolt://localhost:7687',
-      process.env.NEO4J_USER || 'neo4j',
-      process.env.NEO4J_PASSWORD || 'password'
-    );
+    // Import EmbeddingsService
+    const { EmbeddingsService } = await import('../indexing/EmbeddingsService.js');
+    const embeddingsService = new EmbeddingsService();
+    
+    await embeddingsService.initialize();
+    
+    if (!embeddingsService.isEnabled()) {
+      await driver.close();
+      return res.status(503).json({ 
+        error: 'Embeddings service is not enabled',
+        details: 'Check your LLM configuration'
+      });
+    }
 
-    // Get the node
+    // Get the node (any label)
     const nodeResult = await session.run(
-      `MATCH (n:Node {id: $id}) RETURN n`,
+      `MATCH (n) WHERE n.id = $id RETURN n`,
       { id }
     );
 
@@ -447,35 +453,122 @@ router.post('/:id/embeddings', async (req: Request, res: Response) => {
 
     console.log(`🔄 Generating embeddings for node ${id} (${node.type})...`);
 
-    // Use GraphManager's private method to generate embeddings
-    await (graphManager as any).generateEmbeddingsForNode(id, node);
+    // Extract text content for embedding
+    const textContent = node.content || node.text || node.title || node.description || '';
+    
+    if (!textContent || textContent.trim().length === 0) {
+      await driver.close();
+      return res.status(400).json({ 
+        error: 'No text content found',
+        details: 'Node must have content, text, title, or description property'
+      });
+    }
 
-    // Count embeddings after generation
-    const countResult = await session.run(
-      `
-      MATCH (n:Node {id: $id})
-      OPTIONAL MATCH (n)-[:HAS_CHUNK]->(chunk:NodeChunk)
-      WITH n, 
-           count(DISTINCT chunk) as chunkCount,
-           CASE WHEN n.embedding IS NOT NULL THEN 1 ELSE 0 END as hasDirectEmbedding
-      RETURN CASE 
-        WHEN n.has_chunks = true THEN chunkCount
-        WHEN hasDirectEmbedding = 1 THEN 1
-        ELSE 0
-      END as embeddingCount
-      `,
-      { id }
-    );
-
-    const embeddingCount = countResult.records[0].get('embeddingCount').toInt();
-
-    console.log(`✅ Generated ${embeddingCount} embeddings for node ${id}`);
-
-    res.json({
-      success: true,
-      message: `Generated ${embeddingCount} embedding${embeddingCount !== 1 ? 's' : ''}`,
-      embeddingCount
-    });
+    const chunkSize = parseInt(process.env.MIMIR_EMBEDDINGS_CHUNK_SIZE || '768', 10);
+    
+    // Check if content needs chunking
+    if (textContent.length > chunkSize) {
+      // Large content - use chunking
+      console.log(`📦 Node ${id} has large content (${textContent.length} chars), creating chunks...`);
+      
+      const chunks = await embeddingsService.generateChunkEmbeddings(textContent);
+      
+      // Delete existing chunks first
+      await session.run(
+        `MATCH (n) WHERE n.id = $id
+         OPTIONAL MATCH (n)-[r:HAS_CHUNK]->(chunk:NodeChunk)
+         DELETE r, chunk`,
+        { id }
+      );
+      
+      // Create chunk nodes and relationships
+      for (const chunk of chunks) {
+        const chunkId = `chunk-${id}-${chunk.chunkIndex}`;
+        
+        await session.run(
+          `
+          MATCH (n) WHERE n.id = $nodeId
+          CREATE (c:NodeChunk:Node {
+            id: $chunkId,
+            chunk_index: $chunkIndex,
+            text: $text,
+            start_offset: $startOffset,
+            end_offset: $endOffset,
+            embedding: $embedding,
+            embedding_dimensions: $dimensions,
+            embedding_model: $model,
+            type: 'node_chunk',
+            indexed_date: datetime(),
+            parentNodeId: $nodeId,
+            has_embedding: true
+          })
+          CREATE (n)-[:HAS_CHUNK {index: $chunkIndex}]->(c)
+          `,
+          {
+            nodeId: id,
+            chunkId,
+            chunkIndex: chunk.chunkIndex,
+            text: chunk.text,
+            startOffset: chunk.startOffset,
+            endOffset: chunk.endOffset,
+            embedding: chunk.embedding,
+            dimensions: chunk.dimensions,
+            model: chunk.model
+          }
+        );
+      }
+      
+      // Update node to mark it has chunks
+      await session.run(
+        `MATCH (n) WHERE n.id = $id 
+         SET n.has_embedding = true, 
+             n.has_chunks = true,
+             n.embedding_model = $model
+         REMOVE n.embedding`,
+        { id, model: chunks[0].model }
+      );
+      
+      console.log(`✅ Generated ${chunks.length} chunk embeddings for node ${id}`);
+      
+      res.json({
+        success: true,
+        message: `Generated ${chunks.length} chunk embeddings`,
+        embeddingCount: chunks.length,
+        chunked: true
+      });
+    } else {
+      // Small content - single embedding
+      const result = await embeddingsService.generateEmbedding(textContent);
+      
+      await session.run(
+        `MATCH (n) WHERE n.id = $id
+         SET n.embedding = $embedding,
+             n.embedding_dimensions = $dimensions,
+             n.embedding_model = $model,
+             n.has_embedding = true,
+             n.has_chunks = false
+         WITH n
+         OPTIONAL MATCH (n)-[r:HAS_CHUNK]->(chunk:NodeChunk)
+         DELETE r, chunk`,
+        {
+          id,
+          embedding: result.embedding,
+          dimensions: result.dimensions,
+          model: result.model
+        }
+      );
+      
+      console.log(`✅ Generated single embedding for node ${id} (${result.dimensions} dimensions)`);
+      
+      res.json({
+        success: true,
+        message: 'Generated 1 embedding',
+        embeddingCount: 1,
+        chunked: false,
+        dimensions: result.dimensions,
+        model: result.model
+      });
+    }
   } catch (error: any) {
     console.error('❌ Error generating embeddings:', error);
     res.status(500).json({
@@ -485,6 +578,151 @@ router.post('/:id/embeddings', async (req: Request, res: Response) => {
   } finally {
     await session.close();
     await driver.close();
+  }
+});
+
+/**
+ * POST /api/nodes
+ * Create a new node
+ */
+router.post('/', async (req: Request, res: Response) => {
+  const { type, properties } = req.body;
+
+  if (!type) {
+    return res.status(400).json({ error: 'Node type is required' });
+  }
+
+  try {
+    const { createGraphManager } = await import('../managers/index.js');
+    const graphManager = await createGraphManager();
+
+    const node = await graphManager.addNode(type, properties || {});
+
+    await graphManager.close();
+
+    res.status(201).json({
+      success: true,
+      node
+    });
+  } catch (error: any) {
+    console.error('❌ Error creating node:', error);
+    res.status(500).json({
+      error: 'Failed to create node',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * PUT /api/nodes/:id
+ * Update a node (full update)
+ */
+router.put('/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { properties } = req.body;
+
+  if (!properties) {
+    return res.status(400).json({ error: 'Properties are required' });
+  }
+
+  try {
+    const { createGraphManager } = await import('../managers/index.js');
+    const graphManager = await createGraphManager();
+
+    const node = await graphManager.updateNode(id, properties);
+
+    await graphManager.close();
+
+    res.json({
+      success: true,
+      node
+    });
+  } catch (error: any) {
+    console.error('❌ Error updating node:', error);
+    
+    if (error.message.includes('not found')) {
+      return res.status(404).json({
+        error: 'Node not found',
+        details: error.message
+      });
+    }
+
+    res.status(500).json({
+      error: 'Failed to update node',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * PATCH /api/nodes/:id
+ * Partially update a node
+ */
+router.patch('/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const properties = req.body;
+
+  if (!properties || Object.keys(properties).length === 0) {
+    return res.status(400).json({ error: 'At least one property is required' });
+  }
+
+  try {
+    const { createGraphManager } = await import('../managers/index.js');
+    const graphManager = await createGraphManager();
+
+    const node = await graphManager.updateNode(id, properties);
+
+    await graphManager.close();
+
+    res.json({
+      success: true,
+      node
+    });
+  } catch (error: any) {
+    console.error('❌ Error patching node:', error);
+    
+    if (error.message.includes('not found')) {
+      return res.status(404).json({
+        error: 'Node not found',
+        details: error.message
+      });
+    }
+
+    res.status(500).json({
+      error: 'Failed to patch node',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/nodes/:id
+ * Get a single node by ID (catch-all route - must be last)
+ */
+router.get('/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    const { createGraphManager } = await import('../managers/index.js');
+    const graphManager = await createGraphManager();
+
+    const node = await graphManager.getNode(id);
+
+    await graphManager.close();
+
+    if (!node) {
+      return res.status(404).json({
+        error: 'Node not found'
+      });
+    }
+
+    res.json(node);
+  } catch (error: any) {
+    console.error('❌ Error fetching node:', error);
+    res.status(500).json({
+      error: 'Failed to fetch node',
+      details: error.message
+    });
   }
 });
 

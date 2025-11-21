@@ -437,8 +437,8 @@ export class GraphManager implements IGraphManager {
     try {
       const now = new Date().toISOString();
 
-  // Build SET clauses for each property (flatten nested structures)
-  const setProperties = { ...flattenForMCP(properties as Record<string, any>), updated: now };
+      // Build SET clauses for each property (flatten nested structures)
+      const setProperties = { ...flattenForMCP(properties as Record<string, any>), updated: now };
 
       const result = await session.run(
         `
@@ -451,6 +451,82 @@ export class GraphManager implements IGraphManager {
 
       if (result.records.length === 0) {
         throw new Error(`Node not found: ${id}`);
+      }
+
+      const updatedNode = result.records[0].get('n');
+
+      // Regenerate embeddings if content changed and embeddings service is enabled
+      const contentChanged = properties.content !== undefined || 
+                            properties.text !== undefined || 
+                            properties.title !== undefined ||
+                            properties.description !== undefined;
+
+      if (contentChanged && this.embeddingsService) {
+        // Ensure embeddings service is initialized
+        if (!this.embeddingsService.isEnabled()) {
+          await this.embeddingsService.initialize();
+        }
+
+        if (this.embeddingsService.isEnabled()) {
+          // Extract text content for embedding generation
+          const textContent = this.extractTextContent(updatedNode);
+
+          if (textContent && textContent.trim().length > 0) {
+            const chunkSize = parseInt(process.env.MIMIR_EMBEDDINGS_CHUNK_SIZE || '768', 10);
+
+            try {
+              // Check if content needs chunking
+              if (textContent.length > chunkSize) {
+                // Large content - use chunking
+                console.log(`📦 Node ${id} has large content (${textContent.length} chars), regenerating chunks...`);
+                
+                // Delete existing chunks first
+                await session.run(
+                  `MATCH (n:Node {id: $id})
+                   OPTIONAL MATCH (n)-[r:HAS_CHUNK]->(chunk:NodeChunk)
+                   DELETE r, chunk`,
+                  { id }
+                );
+                
+                await this.createNodeChunks(id, textContent, session);
+
+                // Update node to mark it has chunks (no single embedding on parent node)
+                await session.run(
+                  `MATCH (n:Node {id: $id}) 
+                   SET n.has_embedding = true, 
+                       n.has_chunks = true
+                   REMOVE n.embedding`,
+                  { id }
+                );
+              } else {
+                // Small content - single embedding
+                const embeddingResult = await this.embeddingsService.generateEmbedding(textContent);
+                
+                // Delete existing chunks if any
+                await session.run(
+                  `MATCH (n:Node {id: $id})
+                   SET n.embedding = $embedding,
+                       n.embedding_dimensions = $dimensions,
+                       n.embedding_model = $model,
+                       n.has_embedding = true,
+                       n.has_chunks = false
+                   WITH n
+                   OPTIONAL MATCH (n)-[r:HAS_CHUNK]->(chunk:NodeChunk)
+                   DELETE r, chunk`,
+                  {
+                    id,
+                    embedding: embeddingResult.embedding,
+                    dimensions: embeddingResult.dimensions,
+                    model: embeddingResult.model
+                  }
+                );
+                console.log(`✅ Regenerated embedding for node ${id} (${embeddingResult.dimensions} dimensions)`);
+              }
+            } catch (error: any) {
+              console.error(`⚠️  Failed to regenerate embedding for node ${id}: ${error.message}`);
+            }
+          }
+        }
       }
 
       // Single node operation - return full content (don't strip)
