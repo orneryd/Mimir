@@ -1,6 +1,6 @@
 # Security Environment Variables Reference
 
-**Version**: 1.0.0  
+**Version**: 1.1.0  
 **Date**: 2025-11-21  
 **Purpose**: Pre-defined environment variables for all security stages
 
@@ -12,7 +12,7 @@ This document defines **all environment variables** needed for each stage of Mim
 
 **Stages**:
 1. **Current** - No security (backward compatible)
-2. **Phase 1** - Basic Security (Reverse Proxy)
+2. **Phase 1** - Basic Security (Reverse Proxy + OAuth)
 3. **Phase 2** - Compliance (GDPR-ready)
 4. **Phase 3** - Enterprise (HIPAA/FISMA-ready)
 
@@ -23,9 +23,9 @@ This document defines **all environment variables** needed for each stage of Mim
 | Stage | Variables | Implementation Time | Cost |
 |-------|-----------|---------------------|------|
 | **Current** | 0 security vars | 0 (existing) | $0 |
-| **Phase 1** | 15 vars | 2-4 hours | $0 |
-| **Phase 2** | +20 vars (35 total) | 4-6 weeks | $10K |
-| **Phase 3** | +25 vars (60 total) | 2-3 months | $50K |
+| **Phase 1** | 35 vars (OAuth + Proxy) | 1 week | $0-$500/mo |
+| **Phase 2** | +20 vars (55 total) | 4-6 weeks | $10K |
+| **Phase 3** | +25 vars (80 total) | 2-3 months | $50K |
 
 ---
 
@@ -68,21 +68,36 @@ MIMIR_ENABLE_SECURITY=false  # Security disabled by default
 
 ---
 
-## Phase 1: Basic Security (Reverse Proxy)
+## Phase 1: Basic Security (Reverse Proxy + OAuth)
 
-**Goal**: HTTPS, API key auth, rate limiting  
-**Time**: 2-4 hours  
-**Cost**: $0
+**Goal**: HTTPS, OAuth/OIDC authentication, API key auth, rate limiting  
+**Time**: 1 week (4 hours for proxy, 3-4 days for OAuth)  
+**Cost**: $0 (self-hosted) to $500/month (commercial IdP)
 
 ### New Variables
 
 ```bash
 # ============================================================================
-# PHASE 1: BASIC SECURITY (Reverse Proxy with Nginx)
+# PHASE 1: BASIC SECURITY (Reverse Proxy + OAuth/OIDC)
 # ============================================================================
 
 # ─────────────────────────────────────────────────────────────────────────────
-# API Authentication
+# Feature Flag
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Enable security features (set to true to activate Phase 1)
+MIMIR_ENABLE_SECURITY=true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Authentication Configuration
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Authentication methods (comma-separated: api-key, oauth, jwt)
+MIMIR_AUTH_METHODS=api-key,oauth
+MIMIR_DEFAULT_AUTH_METHOD=api-key  # Start with API keys, migrate to OAuth
+
+# ─────────────────────────────────────────────────────────────────────────────
+# API Key Authentication (Legacy/Service-to-Service)
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Primary API key (generate with: openssl rand -base64 32)
@@ -92,22 +107,133 @@ MIMIR_API_KEY=your-generated-api-key-here
 # MIMIR_API_KEYS=key1,key2,key3
 
 # ─────────────────────────────────────────────────────────────────────────────
-# SSL/TLS Configuration
+# OAuth 2.0 / OIDC Provider Configuration
 # ─────────────────────────────────────────────────────────────────────────────
 
-# SSL certificate paths (inside nginx container)
-NGINX_SSL_CERTIFICATE=/etc/nginx/ssl/mimir.crt
-NGINX_SSL_CERTIFICATE_KEY=/etc/nginx/ssl/mimir.key
+# Provider type (okta, auth0, azure, google, keycloak, generic)
+MIMIR_AUTH_PROVIDER=okta
 
-# SSL protocols (TLS 1.2+ only)
-NGINX_SSL_PROTOCOLS=TLSv1.2 TLSv1.3
+# OAuth 2.0 / OIDC endpoints
+MIMIR_OAUTH_ISSUER=https://your-tenant.okta.com
+MIMIR_OAUTH_AUTHORIZATION_ENDPOINT=https://your-tenant.okta.com/oauth2/v1/authorize
+MIMIR_OAUTH_TOKEN_ENDPOINT=https://your-tenant.okta.com/oauth2/v1/token
+MIMIR_OAUTH_JWKS_URI=https://your-tenant.okta.com/oauth2/v1/keys
+MIMIR_OAUTH_USERINFO_ENDPOINT=https://your-tenant.okta.com/oauth2/v1/userinfo
+MIMIR_OAUTH_REVOCATION_ENDPOINT=https://your-tenant.okta.com/oauth2/v1/revoke
 
-# SSL ciphers (strong ciphers only)
-NGINX_SSL_CIPHERS=ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384
+# Client credentials (from IdP)
+MIMIR_OAUTH_CLIENT_ID=your-client-id
+MIMIR_OAUTH_CLIENT_SECRET=your-client-secret
+MIMIR_OAUTH_REDIRECT_URI=https://mimir.yourcompany.com/auth/callback
 
-# SSL session cache
-NGINX_SSL_SESSION_CACHE=shared:SSL:10m
-NGINX_SSL_SESSION_TIMEOUT=10m
+# OAuth scopes
+MIMIR_OAUTH_SCOPE=openid profile email groups
+
+# OAuth audience (optional, provider-specific)
+MIMIR_OAUTH_AUDIENCE=mimir-api
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Provider-Specific Configuration (Choose One)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Okta
+MIMIR_OKTA_DOMAIN=your-tenant.okta.com
+MIMIR_OKTA_AUTHORIZATION_SERVER=default
+
+# Auth0
+# MIMIR_AUTH0_DOMAIN=your-tenant.auth0.com
+# MIMIR_AUTH0_AUDIENCE=https://mimir.yourcompany.com/api
+
+# Azure AD
+# MIMIR_AZURE_TENANT_ID=your-tenant-id
+# MIMIR_AZURE_TENANT_NAME=yourcompany.onmicrosoft.com
+
+# Google
+# MIMIR_GOOGLE_HOSTED_DOMAIN=yourcompany.com
+
+# Keycloak
+# MIMIR_KEYCLOAK_REALM=mimir
+# MIMIR_KEYCLOAK_SERVER_URL=https://keycloak.yourcompany.com
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Token Management
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Token storage (redis, memory, database)
+MIMIR_TOKEN_STORAGE=redis
+MIMIR_REDIS_URL=redis://redis:6379
+MIMIR_REDIS_DB=0
+MIMIR_REDIS_KEY_PREFIX=mimir:tokens:
+
+# Mimir JWT configuration
+MIMIR_JWT_SECRET=your-jwt-secret-key-generate-with-openssl
+MIMIR_JWT_ALGORITHM=RS256
+MIMIR_JWT_ISSUER=https://mimir.yourcompany.com
+MIMIR_JWT_AUDIENCE=mimir-api
+
+# Token lifetimes (seconds)
+MIMIR_ACCESS_TOKEN_LIFETIME=3600      # 1 hour
+MIMIR_REFRESH_TOKEN_LIFETIME=2592000  # 30 days
+MIMIR_ID_TOKEN_LIFETIME=3600          # 1 hour
+
+# Token features
+MIMIR_ENABLE_TOKEN_REFRESH=true
+MIMIR_REFRESH_TOKEN_ROTATION=true
+MIMIR_ENABLE_TOKEN_REVOCATION=true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Session Management
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Session storage (redis, memory, cookie)
+MIMIR_SESSION_STORAGE=redis
+MIMIR_SESSION_SECRET=your-session-secret-generate-with-openssl
+MIMIR_SESSION_TIMEOUT=900  # 15 minutes
+MIMIR_SESSION_COOKIE_NAME=mimir_session
+MIMIR_SESSION_COOKIE_SECURE=true
+MIMIR_SESSION_COOKIE_HTTPONLY=true
+MIMIR_SESSION_COOKIE_SAMESITE=strict
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Downstream Service Authentication (PCTX, etc.)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Enable service accounts
+MIMIR_ENABLE_SERVICE_ACCOUNTS=true
+
+# Service account token lifetime (seconds)
+MIMIR_SERVICE_ACCOUNT_TOKEN_LIFETIME=86400  # 24 hours
+
+# Token forwarding (pass upstream token to downstream)
+MIMIR_ENABLE_TOKEN_FORWARDING=true
+MIMIR_TOKEN_FORWARDING_HEADER=X-Forwarded-Token
+
+# User context propagation
+MIMIR_ENABLE_USER_CONTEXT_PROPAGATION=true
+MIMIR_USER_CONTEXT_HEADER=X-User-ID
+MIMIR_USER_EMAIL_HEADER=X-User-Email
+MIMIR_USER_ROLES_HEADER=X-User-Roles
+
+# ─────────────────────────────────────────────────────────────────────────────
+# OAuth Security Features
+# ─────────────────────────────────────────────────────────────────────────────
+
+# PKCE (Proof Key for Code Exchange) - recommended for public clients
+MIMIR_OAUTH_ENABLE_PKCE=true
+
+# State parameter validation (prevent CSRF)
+MIMIR_OAUTH_ENABLE_STATE=true
+MIMIR_OAUTH_STATE_TIMEOUT=600  # 10 minutes
+
+# Nonce validation (OIDC, prevent replay attacks)
+MIMIR_OAUTH_ENABLE_NONCE=true
+
+# Token binding
+MIMIR_ENABLE_TOKEN_BINDING=true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SSL/TLS Configuration (Nginx Reverse Proxy)
+# ─────────────────────────────────────────────────────────────────────────────
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Rate Limiting
@@ -206,6 +332,28 @@ NGINX_CLIENT_MAX_BODY_SIZE=10m
 # Gzip compression
 NGINX_GZIP_ENABLED=on
 NGINX_GZIP_COMP_LEVEL=6
+```
+
+### PCTX Configuration for Phase 1
+
+```bash
+# ============================================================================
+# PCTX AUTHENTICATION WITH MIMIR (Phase 1)
+# ============================================================================
+
+# Mimir URL
+MIMIR_URL=https://mimir.yourcompany.com
+
+# Authentication mode (api-key, token-forwarding, service-account)
+MIMIR_AUTH_MODE=service-account
+
+# Service Account mode (recommended)
+MIMIR_SERVICE_ACCOUNT_ID=pctx-service
+MIMIR_SERVICE_ACCOUNT_SECRET=your-pctx-service-secret
+
+# User context propagation
+MIMIR_USER_CONTEXT_ENABLED=true
+MIMIR_USER_CONTEXT_SOURCE=header  # header, jwt, session
 ```
 
 ### Complete Phase 1 `.env` Example
