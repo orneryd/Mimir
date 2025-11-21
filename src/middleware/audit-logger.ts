@@ -161,7 +161,6 @@ function getUserId(req: Request): string | null {
  */
 function getAction(req: Request): string {
   const method = req.method;
-  const path = req.path;
 
   // Map HTTP methods to actions
   if (method === 'GET') return 'read';
