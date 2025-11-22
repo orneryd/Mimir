@@ -7,6 +7,16 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+// Set fallback environment variables
+// NODE_ENV falls back to MIMIR_ENV if not defined
+if (!process.env.NODE_ENV && process.env.MIMIR_ENV) {
+  process.env.NODE_ENV = process.env.MIMIR_ENV;
+}
+// PORT falls back to MIMIR_PORT if not defined (MIMIR_PORT takes precedence in actual usage)
+if (!process.env.PORT && process.env.MIMIR_PORT) {
+  process.env.PORT = process.env.MIMIR_PORT;
+}
+
 import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
@@ -484,7 +494,8 @@ async function startHttpServer() {
     }
   });
 
-  const port = parseInt(process.env.PORT || process.env.MCP_HTTP_PORT || '3000', 10);
+  // Port configuration: MIMIR_PORT takes precedence, falls back to PORT, then MIMIR_ENV-based default
+  const port = parseInt(process.env.MIMIR_PORT || process.env.PORT || '3000', 10);
   const httpServer = app.listen(port, () => {
     console.error(`✅ HTTP server listening on http://localhost:${port}/mcp`);
     console.error(`✅ Health check: http://localhost:${port}/health`);

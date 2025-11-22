@@ -166,150 +166,172 @@ describe('CSRF Protection - OAuth State Validation', () => {
   });
 
   describe('State Validation - CSRF Attack Prevention', () => {
-    it('should reject missing state parameter', (done) => {
-      const mockReq = {};
-      
-      stateStore.verify(mockReq, '', (err: any, valid: boolean) => {
-        expect(err).toBeDefined();
-        expect(err.message).toContain('Missing state parameter');
-        expect(err.message).toContain('CSRF protection failed');
-        done();
-      });
-    });
-
-    it('should reject null state parameter', (done) => {
-      const mockReq = {};
-      
-      stateStore.verify(mockReq, null as any, (err: any, valid: boolean) => {
-        expect(err).toBeDefined();
-        expect(err.message).toContain('Missing state parameter');
-        done();
-      });
-    });
-
-    it('should reject undefined state parameter', (done) => {
-      const mockReq = {};
-      
-      stateStore.verify(mockReq, undefined as any, (err: any, valid: boolean) => {
-        expect(err).toBeDefined();
-        expect(err.message).toContain('Missing state parameter');
-        done();
-      });
-    });
-
-    it('should reject invalid state parameter (not in store)', (done) => {
-      const mockReq = {};
-      const fakeState = 'attacker-controlled-state-12345';
-      
-      stateStore.verify(mockReq, fakeState, (err: any, valid: boolean) => {
-        expect(err).toBeDefined();
-        expect(err.message).toContain('Invalid state parameter');
-        expect(err.message).toContain('possible CSRF attack');
-        done();
-      });
-    });
-
-    it('should reject reused state parameter (replay attack)', (done) => {
-      const mockReq = {};
-      
-      // First, store a state
-      stateStore.store(mockReq, (err: any, state: string) => {
-        // Verify it once (should succeed)
-        stateStore.verify(mockReq, state, (err1: any, valid1: boolean) => {
-          expect(err1).toBeNull();
-          expect(valid1).toBe(true);
-          
-          // Try to verify it again (should fail - one-time use)
-          stateStore.verify(mockReq, state, (err2: any, valid2: boolean) => {
-            expect(err2).toBeDefined();
-            expect(err2.message).toContain('Invalid state parameter');
-            done();
-          });
-        });
-      });
-    });
-
-    it('should accept valid state parameter', (done) => {
-      const mockReq = {};
-      
-      stateStore.store(mockReq, (err: any, state: string) => {
-        stateStore.verify(mockReq, state, (err2: any, valid: boolean) => {
-          expect(err2).toBeNull();
-          expect(valid).toBe(true);
-          done();
-        });
-      });
-    });
-
-    it('should restore VSCode data from state', (done) => {
-      const mockReq = {
-        _vscodeState: { redirect: 'vscode://extension/callback', apiKey: 'test-key' }
-      };
-      
-      stateStore.store(mockReq, (err: any, state: string) => {
-        const verifyReq: any = {};
+    it('should reject missing state parameter', () => {
+      return new Promise<void>((resolve) => {
+        const mockReq = {};
         
-        stateStore.verify(verifyReq, state, (err2: any, valid: boolean) => {
-          expect(err2).toBeNull();
-          expect(verifyReq._vscodeState).toEqual({
-            redirect: 'vscode://extension/callback',
-            apiKey: 'test-key'
+        stateStore.verify(mockReq, '', (err: any, valid: boolean) => {
+          expect(err).toBeDefined();
+          expect(err.message).toContain('Missing state parameter');
+          expect(err.message).toContain('CSRF protection failed');
+          resolve();
+        });
+      });
+    });
+
+    it('should reject null state parameter', () => {
+      return new Promise<void>((resolve) => {
+        const mockReq = {};
+        
+        stateStore.verify(mockReq, null as any, (err: any, valid: boolean) => {
+          expect(err).toBeDefined();
+          expect(err.message).toContain('Missing state parameter');
+          resolve();
+        });
+      });
+    });
+
+    it('should reject undefined state parameter', () => {
+      return new Promise<void>((resolve) => {
+        const mockReq = {};
+        
+        stateStore.verify(mockReq, undefined as any, (err: any, valid: boolean) => {
+          expect(err).toBeDefined();
+          expect(err.message).toContain('Missing state parameter');
+          resolve();
+        });
+      });
+    });
+
+    it('should reject invalid state parameter (not in store)', () => {
+      return new Promise<void>((resolve) => {
+        const mockReq = {};
+        const fakeState = 'attacker-controlled-state-12345';
+        
+        stateStore.verify(mockReq, fakeState, (err: any, valid: boolean) => {
+          expect(err).toBeDefined();
+          expect(err.message).toContain('Invalid state parameter');
+          expect(err.message).toContain('possible CSRF attack');
+          resolve();
+        });
+      });
+    });
+
+    it('should reject reused state parameter (replay attack)', () => {
+      return new Promise<void>((resolve) => {
+        const mockReq = {};
+        
+        // First, store a state
+        stateStore.store(mockReq, (err: any, state: string) => {
+          // Verify it once (should succeed)
+          stateStore.verify(mockReq, state, (err1: any, valid1: boolean) => {
+            expect(err1).toBeNull();
+            expect(valid1).toBe(true);
+            
+            // Try to verify it again (should fail - one-time use)
+            stateStore.verify(mockReq, state, (err2: any, valid2: boolean) => {
+              expect(err2).toBeDefined();
+              expect(err2.message).toContain('Invalid state parameter');
+              resolve();
+            });
           });
-          done();
+        });
+      });
+    });
+
+    it('should accept valid state parameter', () => {
+      return new Promise<void>((resolve) => {
+        const mockReq = {};
+        
+        stateStore.store(mockReq, (err: any, state: string) => {
+          stateStore.verify(mockReq, state, (err2: any, valid: boolean) => {
+            expect(err2).toBeNull();
+            expect(valid).toBe(true);
+            resolve();
+          });
+        });
+      });
+    });
+
+    it('should restore VSCode data from state', () => {
+      return new Promise<void>((resolve) => {
+        const mockReq = {
+          _vscodeState: { redirect: 'vscode://extension/callback', apiKey: 'test-key' }
+        };
+        
+        stateStore.store(mockReq, (err: any, state: string) => {
+          const verifyReq: any = {};
+          
+          stateStore.verify(verifyReq, state, (err2: any, valid: boolean) => {
+            expect(err2).toBeNull();
+            expect(verifyReq._vscodeState).toEqual({
+              redirect: 'vscode://extension/callback',
+              apiKey: 'test-key'
+            });
+            resolve();
+          });
         });
       });
     });
   });
 
   describe('State Expiration', () => {
-    it('should reject expired state after 10 minutes', (done) => {
-      const mockReq = {};
-      
-      stateStore.store(mockReq, (err: any, state: string) => {
-        // Fast-forward time by 11 minutes
-        vi.advanceTimersByTime(11 * 60 * 1000);
+    it('should reject expired state after 10 minutes', () => {
+      return new Promise<void>((resolve) => {
+        const mockReq = {};
+        const startTime = Date.now();
         
-        stateStore.verify(mockReq, state, (err2: any, valid: boolean) => {
-          expect(err2).toBeDefined();
-          expect(err2.message).toContain('State parameter expired');
-          expect(err2.message).toContain('please retry authentication');
-          done();
-        });
-      });
-    });
-
-    it('should accept state within 10 minute window', (done) => {
-      const mockReq = {};
-      
-      stateStore.store(mockReq, (err: any, state: string) => {
-        // Fast-forward time by 9 minutes (still valid)
-        vi.advanceTimersByTime(9 * 60 * 1000);
-        
-        stateStore.verify(mockReq, state, (err2: any, valid: boolean) => {
-          expect(err2).toBeNull();
-          expect(valid).toBe(true);
-          done();
-        });
-      });
-    });
-
-    it('should clean up expired states automatically', (done) => {
-      const mockReq = {};
-      
-      // Store multiple states
-      stateStore.store(mockReq, (err1: any, state1: string) => {
-        stateStore.store(mockReq, (err2: any, state2: string) => {
-          expect(stateStore.getStates().size).toBe(2);
-          
+        stateStore.store(mockReq, (err: any, state: string) => {
           // Fast-forward time by 11 minutes
-          vi.advanceTimersByTime(11 * 60 * 1000);
+          vi.setSystemTime(startTime + 11 * 60 * 1000);
           
-          // Trigger cleanup (runs every minute)
-          vi.advanceTimersByTime(60 * 1000);
+          stateStore.verify(mockReq, state, (err2: any, valid: boolean) => {
+            expect(err2).toBeDefined();
+            expect(err2.message).toContain('State parameter expired');
+            expect(err2.message).toContain('please retry authentication');
+            resolve();
+          });
+        });
+      });
+    });
+
+    it('should accept state within 10 minute window', () => {
+      return new Promise<void>((resolve) => {
+        const mockReq = {};
+        const startTime = Date.now();
+        
+        stateStore.store(mockReq, (err: any, state: string) => {
+          // Fast-forward time by 9 minutes (still valid)
+          vi.setSystemTime(startTime + 9 * 60 * 1000);
           
-          // Both states should be cleaned up
-          expect(stateStore.getStates().size).toBe(0);
-          done();
+          stateStore.verify(mockReq, state, (err2: any, valid: boolean) => {
+            expect(err2).toBeNull();
+            expect(valid).toBe(true);
+            resolve();
+          });
+        });
+      });
+    });
+
+    it('should clean up expired states automatically', () => {
+      return new Promise<void>((resolve) => {
+        const mockReq = {};
+        
+        // Store multiple states
+        stateStore.store(mockReq, (err1: any, state1: string) => {
+          stateStore.store(mockReq, (err2: any, state2: string) => {
+            expect(stateStore.getStates().size).toBe(2);
+            
+            // Fast-forward time by 11 minutes
+            vi.advanceTimersByTime(11 * 60 * 1000);
+            
+            // Trigger cleanup (runs every minute)
+            vi.advanceTimersByTime(60 * 1000);
+            
+            // Both states should be cleaned up
+            expect(stateStore.getStates().size).toBe(0);
+            resolve();
+          });
         });
       });
     });
@@ -324,17 +346,19 @@ describe('CSRF Protection - OAuth State Validation', () => {
       expect(clearIntervalSpy).toHaveBeenCalled();
     });
 
-    it('should clear all states on destroy', (done) => {
-      const mockReq = {};
-      
-      stateStore.store(mockReq, (err1: any, state1: string) => {
-        stateStore.store(mockReq, (err2: any, state2: string) => {
-          expect(stateStore.getStates().size).toBe(2);
-          
-          stateStore.destroy();
-          
-          expect(stateStore.getStates().size).toBe(0);
-          done();
+    it('should clear all states on destroy', () => {
+      return new Promise<void>((resolve) => {
+        const mockReq = {};
+        
+        stateStore.store(mockReq, (err1: any, state1: string) => {
+          stateStore.store(mockReq, (err2: any, state2: string) => {
+            expect(stateStore.getStates().size).toBe(2);
+            
+            stateStore.destroy();
+            
+            expect(stateStore.getStates().size).toBe(0);
+            resolve();
+          });
         });
       });
     });
@@ -347,139 +371,152 @@ describe('CSRF Protection - OAuth State Validation', () => {
   });
 
   describe('CSRF Attack Scenarios', () => {
-    it('should prevent cross-site request forgery with forged state', (done) => {
-      // Attacker tries to use a forged state parameter
-      const attackerState = 'forged-state-from-attacker-site';
-      const mockReq = {};
-      
-      stateStore.verify(mockReq, attackerState, (err: any, valid: boolean) => {
-        expect(err).toBeDefined();
-        expect(err.message).toContain('Invalid state parameter');
-        expect(err.message).toContain('possible CSRF attack');
-        done();
+    it('should prevent cross-site request forgery with forged state', () => {
+      return new Promise<void>((resolve) => {
+        // Attacker tries to use a forged state parameter
+        const attackerState = 'forged-state-from-attacker-site';
+        const mockReq = {};
+        
+        stateStore.verify(mockReq, attackerState, (err: any, valid: boolean) => {
+          expect(err).toBeDefined();
+          expect(err.message).toContain('Invalid state parameter');
+          expect(err.message).toContain('possible CSRF attack');
+          resolve();
+        });
       });
     });
 
-    it('should prevent state reuse in replay attacks', (done) => {
-      const mockReq = {};
-      
-      // Legitimate flow: store and verify state
-      stateStore.store(mockReq, (err: any, state: string) => {
-        stateStore.verify(mockReq, state, (err1: any, valid1: boolean) => {
-          expect(valid1).toBe(true);
-          
-          // Attacker intercepts the state and tries to reuse it
-          stateStore.verify(mockReq, state, (err2: any, valid2: boolean) => {
-            expect(err2).toBeDefined();
-            expect(err2.message).toContain('Invalid state parameter');
-            done();
+    it('should prevent state reuse in replay attacks', () => {
+      return new Promise<void>((resolve) => {
+        const mockReq = {};
+        
+        // Legitimate flow: store and verify state
+        stateStore.store(mockReq, (err: any, state: string) => {
+          stateStore.verify(mockReq, state, (err1: any, valid1: boolean) => {
+            expect(valid1).toBe(true);
+            
+            // Attacker intercepts the state and tries to reuse it
+            stateStore.verify(mockReq, state, (err2: any, valid2: boolean) => {
+              expect(err2).toBeDefined();
+              expect(err2.message).toContain('Invalid state parameter');
+              resolve();
+            });
           });
         });
       });
     });
 
-    it('should prevent timing attacks with expired states', (done) => {
-      const mockReq = {};
-      
-      stateStore.store(mockReq, (err: any, state: string) => {
-        // Fast-forward past expiration
-        vi.advanceTimersByTime(11 * 60 * 1000);
+    it('should prevent timing attacks with expired states', () => {
+      return new Promise<void>((resolve) => {
+        const mockReq = {};
+        const startTime = Date.now();
         
-        // Attacker tries to use expired state
-        stateStore.verify(mockReq, state, (err2: any, valid: boolean) => {
-          expect(err2).toBeDefined();
-          expect(err2.message).toContain('State parameter expired');
+        stateStore.store(mockReq, (err: any, state: string) => {
+          // Fast-forward past expiration
+          vi.setSystemTime(startTime + 11 * 60 * 1000);
           
-          // Verify state is deleted after expiration check
-          expect(stateStore.getStates().has(state)).toBe(false);
-          done();
+          // Attacker tries to use expired state
+          stateStore.verify(mockReq, state, (err2: any, valid: boolean) => {
+            expect(err2).toBeDefined();
+            expect(err2.message).toContain('State parameter expired');
+            
+            // Verify state is deleted after expiration check
+            expect(stateStore.getStates().has(state)).toBe(false);
+            resolve();
+          });
         });
       });
     });
 
-    it('should prevent session fixation attacks', (done) => {
-      // Attacker tries to pre-generate a state and trick user into using it
-      const attackerPreGeneratedState = 'attacker-pre-generated-state';
-      const mockReq = {};
-      
-      // User's legitimate OAuth flow
-      stateStore.store(mockReq, (err: any, legitimateState: string) => {
-        // Attacker tries to use their pre-generated state
-        stateStore.verify(mockReq, attackerPreGeneratedState, (err2: any, valid: boolean) => {
-          expect(err2).toBeDefined();
-          expect(err2.message).toContain('Invalid state parameter');
-          done();
+    it('should prevent session fixation attacks', () => {
+      return new Promise<void>((resolve) => {
+        // Attacker tries to pre-generate a state and trick user into using it
+        const attackerPreGeneratedState = 'attacker-pre-generated-state';
+        const mockReq = {};
+        
+        // User's legitimate OAuth flow
+        stateStore.store(mockReq, (err: any, legitimateState: string) => {
+          // Attacker tries to use their pre-generated state
+          stateStore.verify(mockReq, attackerPreGeneratedState, (err2: any, valid: boolean) => {
+            expect(err2).toBeDefined();
+            expect(err2.message).toContain('Invalid state parameter');
+            resolve();
+          });
         });
       });
     });
   });
 
   describe('Concurrent Request Handling', () => {
-    it('should handle multiple concurrent OAuth flows', (done) => {
-      const mockReq1 = { _vscodeState: { user: 'user1' } };
-      const mockReq2 = { _vscodeState: { user: 'user2' } };
-      const mockReq3 = { _vscodeState: { user: 'user3' } };
-      
-      let completed = 0;
-      const checkDone = () => {
-        completed++;
-        if (completed === 3) done();
-      };
-      
-      // Start 3 concurrent OAuth flows
-      stateStore.store(mockReq1, (err1: any, state1: string) => {
-        stateStore.store(mockReq2, (err2: any, state2: string) => {
-          stateStore.store(mockReq3, (err3: any, state3: string) => {
-            // Verify each state independently
-            const verifyReq1: any = {};
-            const verifyReq2: any = {};
-            const verifyReq3: any = {};
-            
-            stateStore.verify(verifyReq1, state1, (errV1: any, valid1: boolean) => {
-              expect(valid1).toBe(true);
-              expect(verifyReq1._vscodeState.user).toBe('user1');
-              checkDone();
-            });
-            
-            stateStore.verify(verifyReq2, state2, (errV2: any, valid2: boolean) => {
-              expect(valid2).toBe(true);
-              expect(verifyReq2._vscodeState.user).toBe('user2');
-              checkDone();
-            });
-            
-            stateStore.verify(verifyReq3, state3, (errV3: any, valid3: boolean) => {
-              expect(valid3).toBe(true);
-              expect(verifyReq3._vscodeState.user).toBe('user3');
-              checkDone();
+    it('should handle multiple concurrent OAuth flows', () => {
+      return new Promise<void>((resolve) => {
+        const mockReq1 = { _vscodeState: { user: 'user1' } };
+        const mockReq2 = { _vscodeState: { user: 'user2' } };
+        const mockReq3 = { _vscodeState: { user: 'user3' } };
+        
+        let completed = 0;
+        const checkDone = () => {
+          completed++;
+          if (completed === 3) resolve();
+        };
+        
+        // Start 3 concurrent OAuth flows
+        stateStore.store(mockReq1, (err1: any, state1: string) => {
+          stateStore.store(mockReq2, (err2: any, state2: string) => {
+            stateStore.store(mockReq3, (err3: any, state3: string) => {
+              // Verify each state independently
+              const verifyReq1: any = {};
+              const verifyReq2: any = {};
+              const verifyReq3: any = {};
+              
+              stateStore.verify(verifyReq1, state1, (errV1: any, valid1: boolean) => {
+                expect(valid1).toBe(true);
+                expect(verifyReq1._vscodeState.user).toBe('user1');
+                checkDone();
+              });
+              
+              stateStore.verify(verifyReq2, state2, (errV2: any, valid2: boolean) => {
+                expect(valid2).toBe(true);
+                expect(verifyReq2._vscodeState.user).toBe('user2');
+                checkDone();
+              });
+              
+              stateStore.verify(verifyReq3, state3, (errV3: any, valid3: boolean) => {
+                expect(valid3).toBe(true);
+                expect(verifyReq3._vscodeState.user).toBe('user3');
+                checkDone();
+              });
             });
           });
         });
       });
     });
 
-    it('should isolate states between different users', (done) => {
-      const mockReq1 = { _vscodeState: { user: 'alice' } };
-      const mockReq2 = { _vscodeState: { user: 'bob' } };
-      
-      stateStore.store(mockReq1, (err1: any, state1: string) => {
-        stateStore.store(mockReq2, (err2: any, state2: string) => {
-          const verifyReq1: any = {};
-          const verifyReq2: any = {};
-          
-          // Verify Alice's state
-          stateStore.verify(verifyReq1, state1, (errV1: any, valid1: boolean) => {
-            expect(valid1).toBe(true);
-            expect(verifyReq1._vscodeState.user).toBe('alice');
+    it('should isolate states between different users', () => {
+      return new Promise<void>((resolve) => {
+        const mockReq1 = { _vscodeState: { user: 'alice' } };
+        const mockReq2 = { _vscodeState: { user: 'bob' } };
+        
+        stateStore.store(mockReq1, (err1: any, state1: string) => {
+          stateStore.store(mockReq2, (err2: any, state2: string) => {
+            const verifyReq1: any = {};
+            const verifyReq2: any = {};
             
-            // Verify Bob's state
-            stateStore.verify(verifyReq2, state2, (errV2: any, valid2: boolean) => {
-              expect(valid2).toBe(true);
-              expect(verifyReq2._vscodeState.user).toBe('bob');
+            // Verify Alice's state
+            stateStore.verify(verifyReq1, state1, (errV1: any, valid1: boolean) => {
+              expect(valid1).toBe(true);
+              expect(verifyReq1._vscodeState.user).toBe('alice');
               
-              // Ensure states don't cross-contaminate
-              expect(verifyReq1._vscodeState.user).not.toBe('bob');
-              expect(verifyReq2._vscodeState.user).not.toBe('alice');
-              done();
+              // Verify Bob's state
+              stateStore.verify(verifyReq2, state2, (errV2: any, valid2: boolean) => {
+                expect(valid2).toBe(true);
+                expect(verifyReq2._vscodeState.user).toBe('bob');
+                
+                // Ensure states don't cross-contaminate
+                expect(verifyReq1._vscodeState.user).not.toBe('bob');
+                expect(verifyReq2._vscodeState.user).not.toBe('alice');
+                resolve();
+              });
             });
           });
         });

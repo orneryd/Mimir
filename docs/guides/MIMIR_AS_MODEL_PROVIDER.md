@@ -32,10 +32,11 @@ When using Mimir as a model provider, you automatically get:
    ```bash
    # Set in .env file
    MIMIR_SERVER_URL=http://localhost:9042
-   MIMIR_SERVER_PORT=9042
+   MIMIR_PORT=9042                # Primary port config (falls back to PORT if not set)
    
    # Or export as environment variable
    export MIMIR_SERVER_URL=http://localhost:9042
+   export MIMIR_PORT=9042
    ```
    
    **When to customize:**

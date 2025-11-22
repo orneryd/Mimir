@@ -45,8 +45,8 @@ NEO4J_PASSWORD=your-secure-password
 
 # Mimir Server
 MIMIR_SERVER_URL=http://localhost:9042
-MIMIR_SERVER_PORT=9042
-PORT=3000
+MIMIR_PORT=9042                # Primary port config (falls back to PORT if not set)
+PORT=3000                      # Fallback port if MIMIR_PORT not defined
 
 # LLM Configuration
 COPILOT_API_URL=http://copilot-api:4141
