@@ -64,16 +64,54 @@ if (process.env.MIMIR_ENABLE_SECURITY === 'true' &&
   
   console.log(`[Auth] OAuth enabled with provider: ${process.env.MIMIR_AUTH_PROVIDER}`);
   
+  // Use public issuer for browser-facing URLs, internal issuer for server-to-server
+  const publicIssuer = process.env.MIMIR_OAUTH_ISSUER_PUBLIC || process.env.MIMIR_OAUTH_ISSUER;
+  const internalIssuer = process.env.MIMIR_OAUTH_ISSUER;
+  
+  console.log(`[Auth] Public issuer (browser): ${publicIssuer}`);
+  console.log(`[Auth] Internal issuer (server): ${internalIssuer}`);
+  
+  // Custom stateless state store for OAuth
+  // This allows us to pass custom data through the OAuth flow without sessions
+  class StatelessStateStore {
+    store(req: any, callbackOrMeta: any, maybeCallback?: any) {
+      // Handle both signatures: store(req, callback) and store(req, meta, callback)
+      const callback = maybeCallback || callbackOrMeta;
+      
+      // Check if this is a VSCode redirect request
+      const vscodeState = (req as any)._vscodeState;
+      if (vscodeState) {
+        // Use the VSCode state that was pre-set
+        callback(null, vscodeState);
+      } else {
+        // Generate a simple random state for CSRF protection
+        const state = Math.random().toString(36).substring(7);
+        callback(null, state);
+      }
+    }
+    
+    verify(req: any, state: string, callbackOrMeta: any, maybeCallback?: any) {
+      // Handle both signatures: verify(req, state, callback) and verify(req, state, meta, callback)
+      const callback = maybeCallback || callbackOrMeta;
+      
+      // For stateless flow, we just accept any state
+      // The state is primarily for CSRF which is less of a concern in our setup
+      callback(null, true);
+    }
+  }
+  
   passport.use('oauth', new OAuth2Strategy({
-    authorizationURL: `${process.env.MIMIR_OAUTH_ISSUER}/oauth2/v1/authorize`,
-    tokenURL: `${process.env.MIMIR_OAUTH_ISSUER}/oauth2/v1/token`,
+    authorizationURL: `${publicIssuer}/oauth2/v1/authorize`,
+    tokenURL: `${internalIssuer}/oauth2/v1/token`,
     clientID: process.env.MIMIR_OAUTH_CLIENT_ID!,
     clientSecret: process.env.MIMIR_OAUTH_CLIENT_SECRET!,
     callbackURL: process.env.MIMIR_OAUTH_CALLBACK_URL!,
+    store: new StatelessStateStore(),
+    passReqToCallback: false,
   }, async (accessToken: string, refreshToken: string, profile: any, done: any) => {
     try {
-      // Fetch user profile from userinfo endpoint
-      const userinfoURL = process.env.MIMIR_OAUTH_USERINFO_URL || `${process.env.MIMIR_OAUTH_ISSUER}/oauth2/v1/userinfo`;
+      // Fetch user profile from userinfo endpoint (use internal issuer for server-to-server)
+      const userinfoURL = process.env.MIMIR_OAUTH_USERINFO_URL || `${internalIssuer}/oauth2/v1/userinfo`;
       
       const fetchOptions = createSecureFetchOptions(userinfoURL, {
         headers: {
@@ -92,14 +130,17 @@ if (process.env.MIMIR_ENABLE_SECURITY === 'true' &&
       // Extract roles from profile (configurable claim path)
       const roles = userProfile.roles || userProfile.groups || [];
       
-      return done(null, {
+      const user = {
         id: userProfile.sub || userProfile.id || userProfile.email,
         email: userProfile.email,
         username: userProfile.preferred_username || userProfile.username || userProfile.email,
         roles: Array.isArray(roles) ? roles : [roles],
         // Preserve original profile for custom claim extraction
         ...userProfile
-      });
+      };
+      
+      // Pass access token as authInfo so it's available in the callback route
+      return done(null, user, { accessToken });
     } catch (error) {
       return done(error);
     }

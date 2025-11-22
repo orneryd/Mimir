@@ -43,10 +43,9 @@ export class PortalPanel {
   private async _sendConfig() {
     let authHeaders = {};
     try {
-      const { AuthManager } = require('./authManager');
-      const context = (global as any).mimirExtensionContext;
-      if (context) {
-        const authManager = new AuthManager(context, this._apiUrl);
+      // Use the global authManager instance (has OAuth resolver)
+      const authManager = (global as any).mimirAuthManager;
+      if (authManager) {
         await authManager.authenticate();
         authHeaders = await authManager.getAuthHeaders();
       }

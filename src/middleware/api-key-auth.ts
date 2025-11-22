@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
+import { createSecureFetchOptions } from '../utils/fetch-helper.js';
 
 // JWT secret from environment
 // Only required when security is enabled
@@ -10,6 +11,10 @@ const JWT_SECRET: string = process.env.MIMIR_JWT_SECRET || (() => {
   }
   return 'dev-only-secret-not-for-production';
 })();
+
+// OAuth userinfo endpoint for token validation (stateless)
+const OAUTH_USERINFO_URL = process.env.MIMIR_OAUTH_USERINFO_URL || 
+  (process.env.MIMIR_OAUTH_ISSUER ? `${process.env.MIMIR_OAUTH_ISSUER}/oauth2/v1/userinfo` : null);
 
 // Legacy helper functions removed - no longer needed with JWT stateless auth
 
@@ -36,7 +41,7 @@ export async function apiKeyAuth(req: Request, res: Response, next: NextFunction
   
   // Check HTTP-only cookie (for browser UI)
   if (!token && req.cookies) {
-    token = req.cookies.mimir_api_key;
+    token = req.cookies.mimir_oauth_token;
     if (token) source = 'HTTP-only cookie';
   }
   
@@ -51,17 +56,16 @@ export async function apiKeyAuth(req: Request, res: Response, next: NextFunction
     return next(); // No token provided, continue to next middleware
   }
   
-  console.log(`[JWT Auth] Received token from ${source}`);
+  console.log(`[OAuth Auth] Received token from ${source}`);
 
+  // Try JWT validation first (for Mimir-issued tokens)
   try {
-    // Verify JWT signature and decode payload
     const decoded = jwt.verify(token, JWT_SECRET, {
       algorithms: ['HS256']
     }) as any;
 
-    console.log(`[JWT Auth] Valid token for user: ${decoded.email}, roles: ${decoded.roles?.join(', ')}`);
+    console.log(`[JWT Auth] Valid JWT for user: ${decoded.email}, roles: ${decoded.roles?.join(', ')}`);
 
-    // Attach user info to request for downstream middleware/routes
     req.user = {
       id: decoded.sub,
       email: decoded.email,
@@ -69,39 +73,50 @@ export async function apiKeyAuth(req: Request, res: Response, next: NextFunction
     };
 
     return next();
-  } catch (error: any) {
-    if (error.name === 'TokenExpiredError') {
-      console.log('[JWT Auth] Token expired');
-      return res.status(401).json({ error: 'Token expired' });
-    }
-    if (error.name === 'JsonWebTokenError') {
-      console.log('[JWT Auth] Invalid token:', error.message);
+  } catch (jwtError: any) {
+    // Not a valid JWT - try OAuth token validation
+    if (!OAUTH_USERINFO_URL) {
+      console.log('[OAuth Auth] No OAuth provider configured, rejecting non-JWT token');
       return res.status(401).json({ error: 'Invalid token' });
     }
-    
-    console.error('[JWT Auth] Token validation error:', error);
-    return res.status(401).json({ error: 'Authentication failed' });
+
+    try {
+      console.log('[OAuth Auth] Validating OAuth token with provider...');
+      
+      // Validate token by calling OAuth provider's userinfo endpoint
+      const fetchOptions = createSecureFetchOptions(OAUTH_USERINFO_URL, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      const response = await fetch(OAUTH_USERINFO_URL, fetchOptions);
+      
+      if (!response.ok) {
+        console.log(`[OAuth Auth] Token validation failed: ${response.status}`);
+        return res.status(401).json({ error: 'Invalid or expired OAuth token' });
+      }
+      
+      const userProfile = await response.json();
+      console.log(`[OAuth Auth] Valid OAuth token for user: ${userProfile.email || userProfile.preferred_username}`);
+      
+      // Extract roles from profile
+      const roles = userProfile.roles || userProfile.groups || ['viewer'];
+      
+      // Attach user info to request
+      req.user = {
+        id: userProfile.sub || userProfile.id || userProfile.email,
+        email: userProfile.email,
+        roles: Array.isArray(roles) ? roles : [roles]
+      };
+      
+      return next();
+    } catch (oauthError: any) {
+      console.error('[OAuth Auth] OAuth validation error:', oauthError.message);
+      return res.status(401).json({ error: 'Authentication failed' });
+    }
   }
 }
 
 // Legacy database-based API key validation removed - now using JWT stateless auth
-
-/**
- * Middleware that requires either session auth OR API key auth
- * Use this to protect routes that accept both authentication methods
- */
-export function requireAuth(req: Request, res: Response, next: NextFunction) {
-  // Check session authentication first
-  if (req.isAuthenticated && req.isAuthenticated()) {
-    return next();
-  }
-
-  // Check API key authentication
-  const apiKey = req.headers['x-api-key'];
-  if (apiKey) {
-    return apiKeyAuth(req, res, next);
-  }
-
-  // No authentication provided
-  return res.status(401).json({ error: 'Unauthorized', message: 'Authentication required' });
-}
+// Legacy session-based requireAuth removed - now STATELESS ONLY

@@ -11,7 +11,6 @@ import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import cookieParser from 'cookie-parser';
-import session from 'express-session';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -185,6 +184,7 @@ async function startHttpServer() {
       const authHeader = req.headers['authorization'] as string;
       const hasAuth = authHeader || 
                       req.headers['x-api-key'] || 
+                      req.cookies?.mimir_oauth_token ||
                       req.query.access_token ||
                       req.query.api_key;
       

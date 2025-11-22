@@ -296,6 +296,75 @@ curl -X POST http://localhost:8080/mcp \
 
 **See**: [Authentication Provider Integration](./AUTHENTICATION_PROVIDER_INTEGRATION.md) → Testing & Validation
 
+### Configure MCP Clients After OAuth Login
+
+**⚠️ IMPORTANT**: After successfully authenticating with OAuth (using VSCode extension commands like `Mimir: Login`), you need to manually copy your access token to your MCP client configuration.
+
+**Steps**:
+
+1. **Authenticate via VSCode Extension**:
+   ```
+   Cmd+Shift+P → "Mimir: Login"
+   ```
+   Complete the OAuth flow in your browser.
+
+2. **Copy Your Access Token**:
+   - Open VSCode Settings (JSON): `Cmd+Shift+P` → "Preferences: Open User Settings (JSON)"
+   - Find your OAuth token:
+     ```json
+     {
+       "mimir.auth.apiKey": "316a95be487900ba08873e5009f9c5a8ee6e5670fbf82af1cafaef2a4103da6f",
+       "mimir.auth.username": "admin"
+     }
+     ```
+   - Copy the `mimir.auth.apiKey` value
+
+3. **Configure Your MCP Client** (Cursor, Claude Desktop, etc.):
+   
+   Open your MCP client's configuration file and add the Authorization header:
+   
+   **Cursor** (`~/.cursor/config.json` or `~/Library/Application Support/Cursor/User/globalStorage/rooveterinaryinc.roo-cline/settings/cline_mcp_settings.json`):
+   ```json
+   {
+     "Mimir": {
+       "url": "http://localhost:9042/mcp",
+       "type": "http",
+       "transport": "streamable-http",
+       "description": "MCP Server for tracking TODOs and managing memories",
+       "headers": {
+         "Authorization": "Bearer 316a95be487900ba08873e5009f9c5a8ee6e5670fbf82af1cafaef2a4103da6f"
+       }
+     }
+   }
+   ```
+   
+   **Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+   ```json
+   {
+     "mcpServers": {
+       "Mimir": {
+         "url": "http://localhost:9042/mcp",
+         "headers": {
+           "Authorization": "Bearer 316a95be487900ba08873e5009f9c5a8ee6e5670fbf82af1cafaef2a4103da6f"
+         }
+       }
+     }
+   }
+   ```
+
+4. **Restart Your MCP Client** to apply the new configuration.
+
+**Why This is Needed**:
+- OAuth authentication is **stateless** - no session cookies or database storage
+- Your access token is validated on every request by calling the OAuth provider's userinfo endpoint
+- MCP clients cannot access VSCode's stored credentials directly, so manual configuration is required
+
+**Token Refresh**:
+- OAuth tokens typically expire after 7 days
+- When your token expires, you'll see `401 Unauthorized` errors
+- Simply run `Mimir: Logout` → `Mimir: Login` again to get a fresh token
+- Copy the new token to your MCP client configuration
+
 ---
 
 ## 🛠️ Troubleshooting

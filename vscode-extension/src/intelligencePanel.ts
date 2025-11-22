@@ -23,13 +23,10 @@ export class IntelligencePanel {
             let authHeaders = {};
             
             try {
-              // Dynamic import to avoid circular dependencies
-              const { AuthManager } = require('./authManager');
-              const context = (global as any).mimirExtensionContext;
+              // Use the global authManager instance (has OAuth resolver)
+              const authManager = (global as any).mimirAuthManager;
               
-              if (context) {
-                const authManager = new AuthManager(context, this._apiUrl);
-                
+              if (authManager) {
                 // First authenticate (will use cached credentials if available)
                 console.log('[IntelligencePanel] Authenticating...');
                 const authenticated = await authManager.authenticate();
@@ -42,7 +39,7 @@ export class IntelligencePanel {
                   console.log('[IntelligencePanel] Header keys:', Object.keys(authHeaders));
                 }
               } else {
-                console.error('[IntelligencePanel] No extension context available');
+                console.error('[IntelligencePanel] No authManager available');
               }
             } catch (error) {
               console.error('[IntelligencePanel] Failed to get auth headers:', error);

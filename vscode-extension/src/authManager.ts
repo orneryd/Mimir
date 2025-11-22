@@ -28,10 +28,14 @@ export class AuthManager {
   private context: vscode.ExtensionContext;
   private baseUrl: string;
   private authState: AuthState | null = null;
+  private oauthResolver: { resolve: (value: any) => void; state: string } | null = null;
+  private instanceId: string;
 
   constructor(context: vscode.ExtensionContext, baseUrl: string) {
     this.context = context;
     this.baseUrl = baseUrl;
+    this.instanceId = Math.random().toString(36).substring(7);
+    console.log(`[Auth] AuthManager instance created: ${this.instanceId}`);
   }
 
   /**
@@ -254,56 +258,118 @@ export class AuthManager {
   }
 
   /**
-   * OAuth Mode: Browser-based login, then API key
+   * OAuth Mode: Browser-based login with automatic callback
    */
   private async authenticateOAuth(): Promise<boolean> {
-    // No auto-login - always require fresh OAuth flow
+    console.log(`[Auth] authenticateOAuth called on instance: ${this.instanceId}`);
     
-    // Open browser for OAuth login
-    const authUrl = `${this.baseUrl}/auth/oauth`;
+    // Generate state token for CSRF protection
+    const state = Math.random().toString(36).substring(7);
+    
+    // Create promise that will resolve when OAuth callback is received
+    const authPromise = new Promise<{ apiKey: string; username: string } | null>((resolve) => {
+      // Store resolver in instance variable for URI handler to use
+      this.oauthResolver = { resolve, state };
+      console.log(`[Auth] OAuth resolver set on instance ${this.instanceId} with state: ${state}`);
+      
+      // Timeout after 5 minutes
+      setTimeout(() => {
+        if (this.oauthResolver) {
+          console.log(`[Auth] OAuth resolver timed out on instance ${this.instanceId}`);
+          this.oauthResolver = null;
+          resolve(null);
+        }
+      }, 5 * 60 * 1000);
+    });
+    
+    // Build auth URL with VSCode redirect
+    const redirectUri = encodeURIComponent(`vscode://mimir.mimir-chat/oauth-callback`);
+    const authUrl = `${this.baseUrl}/auth/oauth/login?vscode_redirect=true&state=${state}&redirect_uri=${redirectUri}`;
+    
+    console.log('[Auth] Opening OAuth login:', authUrl);
     const opened = await vscode.env.openExternal(vscode.Uri.parse(authUrl));
     
     if (!opened) {
       vscode.window.showErrorMessage('Mimir: Failed to open browser for authentication');
+      this.oauthResolver = null;
       return false;
     }
 
-    // Wait for user to complete OAuth flow
-    const result = await vscode.window.showInformationMessage(
-      'Complete the login in your browser, then click Continue',
-      'Continue',
-      'Cancel'
-    );
-
-    if (result !== 'Continue') {
-      return false;
-    }
-
-    // Prompt for API key (user must generate it from Portal after OAuth)
-    const apiKey = await vscode.window.showInputBox({
-      prompt: 'Paste your API key from Mimir Portal',
-      placeHolder: 'mimir_...',
-      ignoreFocusOut: true,
-      password: true
+    // Show progress while waiting for OAuth
+    const result = await vscode.window.withProgress({
+      location: vscode.ProgressLocation.Notification,
+      title: 'Mimir: Waiting for OAuth login...',
+      cancellable: true
+    }, async (progress, token) => {
+      token.onCancellationRequested(() => {
+        this.oauthResolver = null;
+      });
+      
+      return await authPromise;
     });
 
-    if (!apiKey) {
+    if (!result) {
+      vscode.window.showWarningMessage('Mimir: OAuth login cancelled or timed out');
       return false;
     }
 
-    // Verify API key
-    if (await this.verifyApiKey(apiKey)) {
-      await this.saveAuthState({
-        authenticated: true,
-        apiKey,
-        username: 'OAuth user'
-      });
-      vscode.window.showInformationMessage('Mimir: Authenticated successfully');
-      return true;
-    } else {
-      vscode.window.showErrorMessage('Mimir: Invalid API key');
-      return false;
+    // Save authentication state
+    await this.saveAuthState({
+      authenticated: true,
+      apiKey: result.apiKey,
+      username: result.username
+    });
+
+    vscode.window.showInformationMessage(`Mimir: Authenticated as ${result.username}`);
+    return true;
+  }
+  
+  /**
+   * Handle OAuth callback from URI
+   * Called by extension.ts URI handler
+   */
+  async handleOAuthCallback(query: URLSearchParams): Promise<void> {
+    console.log(`[Auth] handleOAuthCallback called on instance: ${this.instanceId}`);
+    console.log(`[Auth] oauthResolver status: ${this.oauthResolver ? 'present' : 'null'}`);
+    
+    if (!this.oauthResolver) {
+      console.error(`[Auth] No OAuth resolver found on instance ${this.instanceId}`);
+      return;
     }
+    
+    const state = query.get('state');
+    const accessToken = query.get('access_token');
+    const username = query.get('username');
+    const error = query.get('error');
+    
+    // Verify state matches
+    if (state !== this.oauthResolver.state) {
+      console.error('[Auth] State mismatch in OAuth callback');
+      this.oauthResolver.resolve(null);
+      this.oauthResolver = null;
+      return;
+    }
+    
+    if (error) {
+      console.error('[Auth] OAuth error:', error);
+      this.oauthResolver.resolve(null);
+      this.oauthResolver = null;
+      return;
+    }
+    
+    if (!accessToken) {
+      console.error('[Auth] No access token in OAuth callback');
+      this.oauthResolver.resolve(null);
+      this.oauthResolver = null;
+      return;
+    }
+    
+    // Resolve with OAuth access token (stateless - no DB storage)
+    this.oauthResolver.resolve({
+      apiKey: accessToken,  // Store OAuth token in apiKey field
+      username: username || 'OAuth user'
+    });
+    this.oauthResolver = null;
   }
 
   /**

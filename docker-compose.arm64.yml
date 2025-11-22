@@ -192,6 +192,13 @@ services:
       - MIMIR_PARALLEL_EXECUTION=${MIMIR_PARALLEL_EXECUTION:-false}
       - MIMIR_INSTALL_DIR=${MIMIR_INSTALL_DIR:-/app}
       - MIMIR_AGENTS_DIR=${MIMIR_AGENTS_DIR:-/app/docs/agents}
+
+      - MIMIR_AUTH_PROVIDER=oauth
+      - MIMIR_OAUTH_ISSUER=http://host.docker.internal:8888  # Internal URL for server-to-server
+      - MIMIR_OAUTH_ISSUER_PUBLIC=http://localhost:8888  # Public URL for browser redirects
+      - MIMIR_OAUTH_CLIENT_ID=mimir-local-test
+      - MIMIR_OAUTH_CLIENT_SECRET=local-test-secret-123
+      - MIMIR_OAUTH_CALLBACK_URL=http://localhost:9042/auth/oauth/callback
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs

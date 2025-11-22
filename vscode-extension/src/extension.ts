@@ -67,6 +67,31 @@ export async function activate(context: vscode.ExtensionContext) {
   const config = getConfig();
   authManager = new AuthManager(context, config.apiUrl);
   preambleManager = new PreambleManager(config.apiUrl, () => authManager.getAuthHeaders());
+  
+  // Store authManager globally so URI handler can access it
+  (global as any).mimirAuthManager = authManager;
+
+  // Register URI handler for OAuth callbacks
+  context.subscriptions.push(
+    vscode.window.registerUriHandler({
+      handleUri: async (uri: vscode.Uri) => {
+        console.log('[Extension] Received URI:', uri.toString());
+        
+        if (uri.path === '/oauth-callback') {
+          // Decode query string once (it comes double-encoded from browser redirect)
+          const decodedQuery = decodeURIComponent(uri.query);
+          console.log('[Extension] Decoded query:', decodedQuery);
+          const query = new URLSearchParams(decodedQuery);
+          const auth = (global as any).mimirAuthManager as AuthManager;
+          if (auth) {
+            await auth.handleOAuthCallback(query);
+          } else {
+            console.error('[Extension] authManager not available for OAuth callback');
+          }
+        }
+      }
+    })
+  );
 
   // Authentication is handled via explicit login command only
   // No auto-login on extension activation

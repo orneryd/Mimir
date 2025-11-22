@@ -52,14 +52,10 @@ export class NodeManagerPanel {
             let authHeaders = {};
             
             try {
-              // Dynamic import to avoid circular dependencies
-              const { AuthManager } = require('./authManager');
-              const context = (global as any).mimirExtensionContext;
+              // Use the global authManager instance (has OAuth resolver)
+              const authManager = (global as any).mimirAuthManager;
               
-              if (context) {
-                const apiUrl = vscode.workspace.getConfiguration('mimir').get('apiUrl', 'http://localhost:9042');
-                const authManager = new AuthManager(context, apiUrl);
-                
+              if (authManager) {
                 // First authenticate (will use cached credentials if available)
                 console.log('[NodeManagerPanel] Authenticating...');
                 const authenticated = await authManager.authenticate();
@@ -69,7 +65,7 @@ export class NodeManagerPanel {
                 authHeaders = await authManager.getAuthHeaders();
                 console.log('[NodeManagerPanel] Auth headers:', Object.keys(authHeaders).length > 0 ? 'Present' : 'Empty');
               } else {
-                console.error('[NodeManagerPanel] No extension context available');
+                console.error('[NodeManagerPanel] No authManager available');
               }
             } catch (error) {
               console.error('[NodeManagerPanel] Failed to get auth headers:', error);

@@ -18,10 +18,22 @@ export function Login() {
   const [authConfig, setAuthConfig] = useState<AuthConfig | null>(null);
 
   useEffect(() => {
-    // Fetch auth configuration from server
-    fetch('/auth/config', { credentials: 'include' })
+    // Check if already authenticated by testing auth status
+    fetch('/auth/status', { credentials: 'include' })
       .then(res => res.json())
-      .then(config => setAuthConfig(config))
+      .then(data => {
+        if (data.authenticated) {
+          // Already logged in, redirect to home
+          console.log('[Login] Already authenticated, redirecting to home');
+          window.location.href = '/';
+          return;
+        }
+        
+        // Not authenticated, fetch auth configuration
+        return fetch('/auth/config', { credentials: 'include' })
+          .then(res => res.json())
+          .then(config => setAuthConfig(config));
+      })
       .catch(() => {
         // Default to OAuth if config fetch fails
         setAuthConfig({

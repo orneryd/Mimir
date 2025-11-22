@@ -2,7 +2,6 @@ import { Router } from 'express';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import passport from '../config/passport.js';
-import { GraphManager } from '../managers/GraphManager.js';
 
 const router = Router();
 
@@ -88,7 +87,7 @@ router.post('/auth/token', async (req, res) => {
   })(req, res);
 });
 
-// Development: Login with username/password - returns API key in HTTP-only cookie (for browser UI)
+// Development: Login with username/password - STATELESS JWT (for browser UI)
 router.post('/auth/login', async (req, res, next) => {
   passport.authenticate('local', async (err: any, user: any, info: any) => {
     if (err) {
@@ -99,48 +98,30 @@ router.post('/auth/login', async (req, res, next) => {
     }
     
     try {
-      // Generate API key for this user session
-      const apiKey = `mimir_${crypto.randomBytes(32).toString('hex')}`;
-      const keyHash = crypto.createHash('sha256').update(apiKey).digest('hex');
+      // STATELESS: Generate JWT token (no database storage)
+      const expiresInDays = 7;
+      const expiresInSeconds = expiresInDays * 24 * 60 * 60;
       
-      // Store API key in Neo4j
-      const graphManager = new GraphManager(
-        process.env.NEO4J_URI || 'bolt://localhost:7687',
-        process.env.NEO4J_USER || 'neo4j',
-        process.env.NEO4J_PASSWORD || 'password'
-      );
+      const payload = {
+        sub: user.id,
+        email: user.email,
+        roles: user.roles || ['viewer'],
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + expiresInSeconds
+      };
+
+      const jwtToken = jwt.sign(payload, JWT_SECRET, { algorithm: 'HS256' });
       
-      const expiresInDays = 7; // 7 days for login sessions
-      const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000).toISOString();
-      
-      await graphManager.addNode('custom', {
-        type: 'apiKey',
-        keyHash,
-        name: 'Login Session',
-        userId: user.id,
-        userEmail: user.email,
-        permissions: user.roles || ['viewer'],
-        createdAt: new Date().toISOString(),
-        expiresAt,
-        lastUsedAt: null,
-        lastValidated: new Date().toISOString(),
-        usageCount: 0,
-        status: 'active'
-      });
-      
-      await graphManager.close();
-      
-      // Set API key in HTTP-only cookie (secure in production)
-      res.cookie('mimir_api_key', apiKey, {
+      // Set JWT in HTTP-only cookie (same cookie name as OAuth for consistency)
+      res.cookie('mimir_oauth_token', jwtToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
-        maxAge: expiresInDays * 24 * 60 * 60 * 1000 // 7 days in milliseconds
+        maxAge: expiresInDays * 24 * 60 * 60 * 1000
       });
       
       return res.json({ 
         success: true,
-        expiresAt,
         user: { 
           id: user.id, 
           email: user.email, 
@@ -148,16 +129,30 @@ router.post('/auth/login', async (req, res, next) => {
         } 
       });
     } catch (error: any) {
-      console.error('[Auth] Error generating API key:', error);
-      return res.status(500).json({ error: 'Failed to generate API key', details: error.message });
+      console.error('[Auth] Error generating JWT:', error);
+      return res.status(500).json({ error: 'Failed to generate token', details: error.message });
     }
   })(req, res, next);
 });
 
 // Production: OAuth login - returns API key
-router.get('/auth/oauth/login', 
-  passport.authenticate('oauth', { session: false })
-);
+router.get('/auth/oauth/login', (req, res, next) => {
+  // Encode VSCode redirect info into OAuth state parameter (stateless)
+  // This preserves the info through the OAuth flow without sessions
+  if (req.query.vscode_redirect === 'true') {
+    const vscodeState = {
+      vscode: true,
+      state: req.query.state || ''
+    };
+    const encodedState = Buffer.from(JSON.stringify(vscodeState)).toString('base64url');
+    
+    // Set on request for our custom state store to use
+    (req as any)._vscodeState = encodedState;
+  }
+  
+  // Passport will use our custom stateless state store
+  passport.authenticate('oauth', { session: false })(req, res, next);
+});
 
 router.get('/auth/oauth/callback', 
   passport.authenticate('oauth', { session: false }), 
@@ -165,79 +160,96 @@ router.get('/auth/oauth/callback',
     try {
       const user = req.user;
       
-      // Generate API key for OAuth user
-      const apiKey = `mimir_${crypto.randomBytes(32).toString('hex')}`;
-      const keyHash = crypto.createHash('sha256').update(apiKey).digest('hex');
+      // STATELESS: Use the OAuth access token directly, don't generate or store anything
+      const accessToken = (req as any).authInfo?.accessToken || (req as any).account?.accessToken;
       
-      const graphManager = new GraphManager(
-        process.env.NEO4J_URI || 'bolt://localhost:7687',
-        process.env.NEO4J_USER || 'neo4j',
-        process.env.NEO4J_PASSWORD || 'password'
-      );
+      if (!accessToken) {
+        console.error('[Auth] No access token available from OAuth provider');
+        return res.redirect('/login?error=no_token');
+      }
       
-      const expiresInDays = 7;
-      const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000).toISOString();
+      console.log('[Auth] OAuth callback successful, user:', user.username || user.email);
       
-      await graphManager.addNode('custom', {
-        type: 'apiKey',
-        keyHash,
-        name: 'OAuth Login Session',
-        userId: user.id,
-        userEmail: user.email,
-        permissions: user.roles || ['viewer'],
-        createdAt: new Date().toISOString(),
-        expiresAt,
-        lastUsedAt: null,
-        lastValidated: new Date().toISOString(),
-        usageCount: 0,
-        status: 'active'
-      });
-      
-      await graphManager.close();
-      
-      // Set API key in HTTP-only cookie
-      res.cookie('mimir_api_key', apiKey, {
+      // Set OAuth token in HTTP-only cookie for browser clients
+      res.cookie('mimir_oauth_token', accessToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
-        maxAge: expiresInDays * 24 * 60 * 60 * 1000
+        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
       });
       
-      // Redirect to frontend
+      // Check if this is a VSCode extension OAuth flow
+      // Decode the state parameter to check for VSCode redirect info
+      let vscodeRedirect = false;
+      let originalState = '';
+      
+      const stateParam = req.query.state as string;
+      if (stateParam) {
+        try {
+          const decoded = JSON.parse(Buffer.from(stateParam, 'base64url').toString());
+          if (decoded.vscode === true) {
+            vscodeRedirect = true;
+            originalState = decoded.state;
+          }
+        } catch (e) {
+          // Not a VSCode state, continue as normal browser flow
+        }
+      }
+      
+      if (vscodeRedirect) {
+        // Build VSCode URI with OAuth access token and user info
+        const vscodeUri = new URL('vscode://mimir.mimir-chat/oauth-callback');
+        vscodeUri.searchParams.set('access_token', accessToken);
+        vscodeUri.searchParams.set('username', user.username || user.email);
+        if (originalState) {
+          vscodeUri.searchParams.set('state', originalState);
+        }
+        
+        console.log('[Auth] Redirecting to VSCode with OAuth token');
+        return res.redirect(vscodeUri.toString());
+      }
+      
+      // Regular browser redirect
       res.redirect('/');
     } catch (error: any) {
       console.error('[Auth] OAuth callback error:', error);
+      
+      // Check if VSCode redirect from state parameter
+      let vscodeRedirect = false;
+      let originalState = '';
+      
+      const stateParam = req.query.state as string;
+      if (stateParam) {
+        try {
+          const decoded = JSON.parse(Buffer.from(stateParam, 'base64url').toString());
+          if (decoded.vscode === true) {
+            vscodeRedirect = true;
+            originalState = decoded.state;
+          }
+        } catch (e) {
+          // Not a VSCode state
+        }
+      }
+      
+      if (vscodeRedirect) {
+        const vscodeUri = new URL('vscode://mimir.mimir-chat/oauth-callback');
+        vscodeUri.searchParams.set('error', 'oauth_failed');
+        if (originalState) {
+          vscodeUri.searchParams.set('state', originalState);
+        }
+        return res.redirect(vscodeUri.toString());
+      }
+      
       res.redirect('/login?error=oauth_failed');
     }
   }
 );
 
-// Logout - revoke API key and clear cookie
+// Logout - STATELESS: just clear cookie (no database operations)
 router.post('/auth/logout', async (req, res) => {
   try {
-    // Get API key from cookie
-    const apiKey = req.cookies?.mimir_api_key;
-    
-    if (apiKey) {
-      const keyHash = crypto.createHash('sha256').update(apiKey).digest('hex');
-      
-      const graphManager = new GraphManager(
-        process.env.NEO4J_URI || 'bolt://localhost:7687',
-        process.env.NEO4J_USER || 'neo4j',
-        process.env.NEO4J_PASSWORD || 'password'
-      );
-      
-      const keys = await graphManager.queryNodes(undefined, { type: 'apiKey', keyHash });
-      
-      if (keys.length > 0) {
-        await graphManager.updateNode(keys[0].id, { status: 'revoked' });
-      }
-      
-      await graphManager.close();
-    }
-    
-    // Clear the cookie
-    res.clearCookie('mimir_api_key', {
+    // Clear the OAuth/JWT cookie
+    res.clearCookie('mimir_oauth_token', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax'
@@ -261,42 +273,58 @@ router.get('/auth/status', async (req, res) => {
       });
     }
 
-    // Extract API key from cookie
-    const apiKey = req.cookies?.mimir_api_key;
-    if (!apiKey) {
+    // Extract OAuth/JWT token from cookie (STATELESS)
+    const token = req.cookies?.mimir_oauth_token;
+    if (!token) {
       return res.json({ authenticated: false });
     }
 
-    const keyHash = crypto.createHash('sha256').update(apiKey).digest('hex');
-    
-    const graphManager = new GraphManager(
-      process.env.NEO4J_URI || 'bolt://localhost:7687',
-      process.env.NEO4J_USER || 'neo4j',
-      process.env.NEO4J_PASSWORD || 'password'
-    );
-    
-    const keys = await graphManager.queryNodes(undefined, { type: 'apiKey', keyHash, status: 'active' });
-    await graphManager.close();
-    
-    if (keys.length === 0) {
-      return res.json({ authenticated: false, error: 'Invalid or expired API key' });
-    }
-    
-    const keyData = keys[0].properties as any;
-    
-    // Check expiration
-    if (keyData.expiresAt && new Date(keyData.expiresAt) < new Date()) {
-      return res.json({ authenticated: false, error: 'API key expired' });
-    }
-    
-    return res.json({ 
-      authenticated: true,
-      user: {
-        id: keyData.userId,
-        email: keyData.userEmail,
-        roles: keyData.permissions
+    // Try JWT validation first (for dev login)
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as any;
+      return res.json({ 
+        authenticated: true,
+        user: {
+          id: decoded.sub,
+          email: decoded.email,
+          username: decoded.email,
+          roles: decoded.roles || ['viewer']
+        }
+      });
+    } catch (jwtError) {
+      // Not a JWT, try OAuth token validation
+      const OAUTH_USERINFO_URL = process.env.MIMIR_OAUTH_USERINFO_URL || 
+        (process.env.MIMIR_OAUTH_ISSUER ? `${process.env.MIMIR_OAUTH_ISSUER}/oauth2/v1/userinfo` : null);
+      
+      if (!OAUTH_USERINFO_URL) {
+        return res.json({ authenticated: false, error: 'Invalid token' });
       }
-    });
+
+      try {
+        const response = await fetch(OAUTH_USERINFO_URL, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!response.ok) {
+          return res.json({ authenticated: false, error: 'Invalid OAuth token' });
+        }
+        
+        const userProfile = await response.json();
+        const roles = userProfile.roles || userProfile.groups || ['viewer'];
+        
+        return res.json({ 
+          authenticated: true,
+          user: {
+            id: userProfile.sub || userProfile.id || userProfile.email,
+            email: userProfile.email,
+            username: userProfile.preferred_username || userProfile.username || userProfile.email,
+            roles: Array.isArray(roles) ? roles : [roles]
+          }
+        });
+      } catch (oauthError: any) {
+        return res.json({ authenticated: false, error: 'Token validation failed' });
+      }
+    }
   } catch (error: any) {
     console.error('[Auth] Status check error:', error);
     return res.status(500).json({ error: 'Internal server error' });
