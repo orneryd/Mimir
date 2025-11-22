@@ -105,6 +105,7 @@ export function extractClaims(user: any, claimPath: string): string[] {
   }
   
   // Handle single object
+  // Note: typeof null === 'object' in JavaScript, so we need the null check for type narrowing
   if (typeof value === 'object' && value !== null) {
     // Check for common object patterns
     if ('name' in value && typeof value.name === 'string') {

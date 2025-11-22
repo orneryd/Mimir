@@ -250,16 +250,23 @@ export function translateHostToContainer(hostPath: string): string {
     // If the path starts with common patterns, extract the workspace root
     const pathParts = normalizedPath.split('/');
     
-    // For paths like /Users/username/src/project, extract /Users/username/src
-    // For paths like /home/username/workspace/project, extract /home/username/workspace
-    if (pathParts.length >= 4) {
+    // Common workspace root patterns by depth:
+    // Depth 4: /Users/username/src          (macOS: /Users/<user>/<workspace>)
+    //          /home/username/workspace     (Linux: /home/<user>/<workspace>)
+    // Depth 5: /Users/username/Documents/workspace  (macOS: /Users/<user>/Documents/<workspace>)
+    //          /home/username/dev/projects          (Linux: /home/<user>/dev/<workspace>)
+    const WORKSPACE_ROOT_DEPTH_SHALLOW = 4;  // /Users/username/src
+    const WORKSPACE_ROOT_DEPTH_NESTED = 5;   // /Users/username/Documents/workspace
+    
+    if (pathParts.length >= WORKSPACE_ROOT_DEPTH_SHALLOW) {
       // Try to find a common workspace pattern
       const possibleRoots = [
-        pathParts.slice(0, 4).join('/'),  // /Users/username/src
-        pathParts.slice(0, 5).join('/'),  // /Users/username/Documents/workspace
+        pathParts.slice(0, WORKSPACE_ROOT_DEPTH_SHALLOW).join('/'),  // Shallow: /Users/username/src
+        pathParts.slice(0, WORKSPACE_ROOT_DEPTH_NESTED).join('/'),   // Nested: /Users/username/Documents/workspace
       ];
       
-      // Use the first one that makes sense (we'll verify later)
+      // Use the shallow root (most common pattern)
+      // Note: This is a heuristic - actual workspace root should be explicitly configured
       hostRoot = possibleRoots[0];
       console.log(`📍 Inferred host root from path: ${hostRoot} (env has unexpanded tilde: ${hostRootEnv})`);
     } else {
