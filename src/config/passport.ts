@@ -2,6 +2,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+import crypto from 'crypto';
 import passport from 'passport';
 import { Strategy as LocalStrategy } from 'passport-local';
 import { Strategy as OAuth2Strategy } from 'passport-oauth2';
@@ -108,7 +109,6 @@ if (process.env.MIMIR_ENABLE_SECURITY === 'true' &&
       const callback = maybeCallback || callbackOrMeta;
       
       // Generate cryptographically secure random state
-      const crypto = require('crypto');
       const state = crypto.randomBytes(32).toString('hex');
       
       // Check if this is a VSCode redirect request

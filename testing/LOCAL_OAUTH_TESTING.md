@@ -53,6 +53,7 @@ MIMIR_OAUTH_CLIENT_ID=mimir-local-test
 MIMIR_OAUTH_CLIENT_SECRET=local-test-secret-123
 MIMIR_OAUTH_CALLBACK_URL=http://localhost:9042/auth/oauth/callback
 MIMIR_OAUTH_PROVIDER_NAME=Local Test OAuth
+MIMIR_OAUTH_ALLOW_HTTP=true  # Required for local HTTP OAuth testing
 ```
 
 ### 3. Start Mimir

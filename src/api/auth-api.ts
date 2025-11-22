@@ -422,11 +422,12 @@ router.get('/auth/config', (req, res) => {
     key.startsWith('MIMIR_DEV_USER_') && process.env[key]
   );
 
-  // Check if OAuth is configured
+  // Check if OAuth is configured (using new explicit endpoint URLs)
   const oauthEnabled = !!(
     process.env.MIMIR_OAUTH_CLIENT_ID &&
     process.env.MIMIR_OAUTH_CLIENT_SECRET &&
-    process.env.MIMIR_OAUTH_ISSUER
+    process.env.MIMIR_OAUTH_AUTHORIZATION_URL &&
+    process.env.MIMIR_OAUTH_TOKEN_URL
   );
 
   // Build OAuth providers array

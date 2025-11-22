@@ -123,23 +123,25 @@ export function validateOAuthUserinfoUrl(url: string): boolean {
   } catch (error) {
     throw new Error('Invalid URL format');
   }
+  // Check if HTTP is explicitly allowed (for local OAuth testing)
+  const allowHttp = process.env.MIMIR_OAUTH_ALLOW_HTTP === 'true';
   
-  // Only allow HTTPS in production (HTTP allowed for local development)
+  // Only allow HTTPS in production (unless explicitly overridden)
   const isProduction = process.env.NODE_ENV === 'production';
-  if (isProduction && parsedUrl.protocol !== 'https:') {
-    throw new Error('Only HTTPS URLs are allowed in production');
+  if (isProduction && !allowHttp && parsedUrl.protocol !== 'https:') {
+    throw new Error('Only HTTPS URLs are allowed in production (set MIMIR_OAUTH_ALLOW_HTTP=true to override)');
   }
   
   if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
     throw new Error('Only HTTP/HTTPS protocols are allowed');
   }
   
-  // Block private IP ranges and localhost (except in development)
+  // Block private IP ranges and localhost (except in development or when HTTP is explicitly allowed)
   const hostname = parsedUrl.hostname.toLowerCase();
   
-  // Allow localhost and host.docker.internal in development
+  // Allow localhost and host.docker.internal in development OR when HTTP is explicitly allowed
   const isDevelopment = process.env.NODE_ENV !== 'production';
-  if (isDevelopment) {
+  if (isDevelopment || allowHttp) {
     const allowedDevHosts = ['localhost', '127.0.0.1', '::1', 'host.docker.internal'];
     if (allowedDevHosts.includes(hostname)) {
       return true;
