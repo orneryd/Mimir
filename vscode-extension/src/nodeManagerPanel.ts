@@ -48,27 +48,39 @@ export class NodeManagerPanel {
       async (message) => {
         switch (message.command) {
           case 'ready': {
-            // Webview is loaded and ready - send config with auth headers
+            // Webview is loaded and ready - check security status first
             let authHeaders = {};
+            const workspaceConfig = vscode.workspace.getConfiguration('mimir');
+            const apiUrl = workspaceConfig.get<string>('apiUrl', 'http://localhost:9042');
             
             try {
-              // Use the global authManager instance (has OAuth resolver)
-              const authManager = (global as any).mimirAuthManager;
+              // Check if server has security enabled
+              console.log('[NodeManagerPanel] Checking server security status...');
+              const configResponse = await fetch(`${apiUrl}/auth/config`);
+              const serverConfig: any = await configResponse.json();
               
-              if (authManager) {
-                // First authenticate (will use cached credentials if available)
-                console.log('[NodeManagerPanel] Authenticating...');
-                const authenticated = await authManager.authenticate();
-                console.log('[NodeManagerPanel] Authentication result:', authenticated);
+              const securityEnabled = serverConfig.devLoginEnabled || (serverConfig.oauthProviders && serverConfig.oauthProviders.length > 0);
+              console.log('[NodeManagerPanel] Server security enabled:', securityEnabled);
+              
+              if (securityEnabled) {
+                // Use the global authManager instance (has OAuth resolver)
+                const authManager = (global as any).mimirAuthManager;
                 
-                // Then get auth headers
-                authHeaders = await authManager.getAuthHeaders();
-                console.log('[NodeManagerPanel] Auth headers:', Object.keys(authHeaders).length > 0 ? 'Present' : 'Empty');
+                if (authManager) {
+                  console.log('[NodeManagerPanel] Authenticating...');
+                  const authenticated = await authManager.authenticate();
+                  console.log('[NodeManagerPanel] Authentication result:', authenticated);
+                  
+                  authHeaders = await authManager.getAuthHeaders();
+                  console.log('[NodeManagerPanel] Auth headers:', Object.keys(authHeaders).length > 0 ? 'Present' : 'Empty');
+                } else {
+                  console.error('[NodeManagerPanel] No authManager available');
+                }
               } else {
-                console.error('[NodeManagerPanel] No authManager available');
+                console.log('[NodeManagerPanel] Security disabled - no auth needed');
               }
             } catch (error) {
-              console.error('[NodeManagerPanel] Failed to get auth headers:', error);
+              console.error('[NodeManagerPanel] Failed to check security status:', error);
             }
             
             // Send configuration when webview is ready

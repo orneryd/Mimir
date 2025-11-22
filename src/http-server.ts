@@ -58,9 +58,10 @@ async function startHttpServer() {
     console.log(`   Edges: ${stats.edgeCount}`);
     console.log(`   Types: ${JSON.stringify(stats.types)}`);
 
-    // Initialize FileWatchManager
-    watchManager = new FileWatchManager(graphManager.getDriver());
-    console.log(`✅ FileWatchManager initialized`);
+    // Get FileWatchManager instance from index.ts (already initialized there)
+    const { fileWatchManager: indexWatchManager } = await import('./index.js');
+    watchManager = indexWatchManager;
+    console.log(`✅ Using FileWatchManager instance from index.ts`);
     
     // Make watchManager globally accessible for API routes
     (globalThis as any).fileWatchManager = watchManager;
@@ -170,6 +171,7 @@ async function startHttpServer() {
 
   // Protect API routes (only if security enabled)
   if (process.env.MIMIR_ENABLE_SECURITY === 'true') {
+    console.log('🔐 Security ENABLED - API routes require authentication');
     app.use('/api', async (req, res, next) => {
       // Skip auth check for health endpoint
       if (req.path === '/health') {
@@ -196,6 +198,8 @@ async function startHttpServer() {
       // No authentication provided
       res.status(401).json({ error: 'Unauthorized', message: 'Authentication required' });
     });
+  } else {
+    console.log('🔓 Security DISABLED - all API requests allowed (auth headers ignored)');
   }
 
   // Mount chat API routes (OpenAI-compatible, at root level)

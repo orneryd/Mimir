@@ -43,14 +43,22 @@ export class PortalPanel {
   private async _sendConfig() {
     let authHeaders = {};
     try {
-      // Use the global authManager instance (has OAuth resolver)
-      const authManager = (global as any).mimirAuthManager;
-      if (authManager) {
-        await authManager.authenticate();
-        authHeaders = await authManager.getAuthHeaders();
+      // Check if server has security enabled
+      const configResponse = await fetch(`${this._apiUrl}/auth/config`);
+      const serverConfig: any = await configResponse.json();
+      
+      const securityEnabled = serverConfig.devLoginEnabled || (serverConfig.oauthProviders && serverConfig.oauthProviders.length > 0);
+      
+      if (securityEnabled) {
+        // Use the global authManager instance (has OAuth resolver)
+        const authManager = (global as any).mimirAuthManager;
+        if (authManager) {
+          await authManager.authenticate();
+          authHeaders = await authManager.getAuthHeaders();
+        }
       }
     } catch (error) {
-      console.error('[PortalPanel] Failed to get auth headers:', error);
+      console.error('[PortalPanel] Failed to check security status:', error);
     }
 
     this._panel.webview.postMessage({

@@ -19,33 +19,43 @@ export class IntelligencePanel {
       async (message) => {
         switch (message.command) {
           case 'ready': {
-            // Webview is loaded and ready - send config with auth headers
+            // Webview is loaded and ready - check security status first
             let authHeaders = {};
             
             try {
-              // Use the global authManager instance (has OAuth resolver)
-              const authManager = (global as any).mimirAuthManager;
+              // Check if server has security enabled
+              console.log('[IntelligencePanel] Checking server security status...');
+              const configResponse = await fetch(`${this._apiUrl}/auth/config`);
+              const serverConfig: any = await configResponse.json();
               
-              if (authManager) {
-                // First authenticate (will use cached credentials if available)
-                console.log('[IntelligencePanel] Authenticating...');
-                const authenticated = await authManager.authenticate();
-                console.log('[IntelligencePanel] Authentication result:', authenticated);
+              const securityEnabled = serverConfig.devLoginEnabled || (serverConfig.oauthProviders && serverConfig.oauthProviders.length > 0);
+              console.log('[IntelligencePanel] Server security enabled:', securityEnabled);
+              
+              if (securityEnabled) {
+                // Use the global authManager instance (has OAuth resolver)
+                const authManager = (global as any).mimirAuthManager;
                 
-                // Then get auth headers
-                authHeaders = await authManager.getAuthHeaders();
-                console.log('[IntelligencePanel] Auth headers:', Object.keys(authHeaders).length > 0 ? 'Present' : 'Empty');
-                if (Object.keys(authHeaders).length > 0) {
-                  console.log('[IntelligencePanel] Header keys:', Object.keys(authHeaders));
+                if (authManager) {
+                  // First authenticate (will use cached credentials if available)
+                  console.log('[IntelligencePanel] Authenticating...');
+                  const authenticated = await authManager.authenticate();
+                  console.log('[IntelligencePanel] Authentication result:', authenticated);
+                  
+                  // Then get auth headers
+                  authHeaders = await authManager.getAuthHeaders();
+                  console.log('[IntelligencePanel] Auth headers:', Object.keys(authHeaders).length > 0 ? 'Present' : 'Empty');
+                } else {
+                  console.error('[IntelligencePanel] No authManager available');
                 }
               } else {
-                console.error('[IntelligencePanel] No authManager available');
+                console.log('[IntelligencePanel] Security disabled - no auth needed');
               }
             } catch (error) {
-              console.error('[IntelligencePanel] Failed to get auth headers:', error);
+              console.error('[IntelligencePanel] Failed to check security status:', error);
+              // On error, fall back to trying auth
             }
             
-            console.log('[IntelligencePanel] Sending config to webview with auth headers');
+            console.log('[IntelligencePanel] Sending config to webview');
             this._panel.webview.postMessage({
               command: 'config',
               apiUrl: this._apiUrl,
@@ -223,7 +233,7 @@ export class IntelligencePanel {
         <meta http-equiv="Content-Security-Policy" content="default-src 'none'; 
           script-src 'nonce-${nonce}' 'unsafe-eval'; 
           style-src ${webview.cspSource} 'unsafe-inline'; 
-          connect-src http: https:;
+          connect-src ${this._apiUrl} http://localhost:* http://127.0.0.1:*;
           font-src ${webview.cspSource};">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Mimir Code Intelligence</title>

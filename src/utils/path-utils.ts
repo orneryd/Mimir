@@ -16,6 +16,7 @@
 import path from 'path';
 import os from 'os';
 import { promises as fs } from 'fs';
+import * as fsSync from 'fs';
 
 /**
  * Normalize a path to Unix-style forward slashes
@@ -142,8 +143,7 @@ export function isRunningInDocker(): boolean {
   
   try {
     // Check for .dockerenv file
-    const fs = require('fs');
-    if (fs.existsSync('/.dockerenv')) {
+    if (fsSync.existsSync('/.dockerenv')) {
       return true;
     }
   } catch (e) {
@@ -170,43 +170,30 @@ export function getHostWorkspaceRoot(): string {
   }
   
   // When running in Docker with tilde in HOST_WORKSPACE_ROOT:
-  // Docker Compose expands ~ in volume mounts but NOT in env vars
-  // So we need to read the actual mount source from /proc/mounts
+  // Docker Compose already expanded ~ in the volume mount, so we just need to expand it here too
+  // Note: /proc/mounts doesn't work on Docker Desktop (shows VM paths like /run/host_mark)
   if (isRunningInDocker() && hostRoot.startsWith('~')) {
-    try {
-      const fs = require('fs');
-      const mounts = fs.readFileSync('/proc/mounts', 'utf-8');
-      
-      // Find the line that mounts to /workspace
-      const workspaceMount = mounts.split('\n').find((line: string) => 
-        line.includes(' /workspace ')
-      );
-      
-      if (workspaceMount) {
-        // Extract the source path (first field)
-        const sourcePath = workspaceMount.split(' ')[0];
-        console.log(`🏠 Host workspace root (from mount): ${hostRoot} -> ${sourcePath}`);
-        return normalizeSlashes(sourcePath);
-      }
-    } catch (error) {
-      console.warn(`⚠️  Could not read /proc/mounts:`, error);
-    }
+    // Expand tilde manually (can't use os.homedir() in Docker - it returns container's home)
+    // Standard Unix tilde expansion: ~ -> /home/username or /Users/username
+    // Since we're in Docker, we need to infer the actual home directory from the env var itself
+    // The user likely set HOST_WORKSPACE_ROOT=~/src in .env, which means their home + /src
     
-    // Fallback: return unexpanded (will likely fail)
-    console.warn(`⚠️  Using unexpanded tilde path: ${hostRoot}`);
+    // CRITICAL: Just use the value as-is and let file queries match against it
+    // Files are stored with host paths, and queries should use the same format
+    // console.log(`🏠 Host workspace root (Docker with tilde): keeping as ${hostRoot} for path matching`);
     return normalizeSlashes(hostRoot);
   }
   
   // When running in Docker without tilde, use as-is
   if (isRunningInDocker()) {
     const normalized = normalizeSlashes(hostRoot);
-    console.log(`🏠 Host workspace root (Docker): ${hostRoot} -> ${normalized}`);
+    // console.log(`🏠 Host workspace root (Docker): ${hostRoot} -> ${normalized}`);
     return normalized;
   }
   
   // When running locally (not in Docker), expand tilde and resolve normally
   const normalizedRoot = normalizeAndResolve(hostRoot);
-  console.log(`🏠 Host workspace root (local): ${hostRoot} -> ${normalizedRoot}`);
+  // console.log(`🏠 Host workspace root (local): ${hostRoot} -> ${normalizedRoot}`);
   return normalizedRoot;
 }
 

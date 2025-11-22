@@ -40,13 +40,32 @@ router.get('/indexed-folders', async (req: Request, res: Response) => {
       watchConfigs.map(async (config) => {
         const session = driver!.session();
         try {
-          // Ensure folder path ends with / for exact matching
-          const folderPath = config.path.endsWith('/') ? config.path : config.path + '/';
+          // Translate host path to container path for querying files
+          // Files may be stored with different path formats:
+          // 1. Container path: /workspace/ngx-cmk-translate/...
+          // 2. Full host path: /Users/c815719/src/ngx-cmk-translate/...
+          // 3. Tilde host path: ~/src/ngx-cmk-translate/... (legacy)
+          const containerPath = translateHostToContainer(config.path);
+          const containerFolderPath = containerPath.endsWith('/') ? containerPath : containerPath + '/';
+          
+          // Also check for host path format (config.path might be host or container)
+          const hostFolderPath = config.path.endsWith('/') ? config.path : config.path + '/';
+          
+          // Check for tilde-based path (legacy format)
+          const hostWorkspaceRoot = getHostWorkspaceRoot();
+          let tildeFolderPath = null;
+          if (config.path.startsWith(hostWorkspaceRoot)) {
+            // Convert /Users/c815719/src/folder -> ~/src/folder
+            const relativePath = config.path.substring(hostWorkspaceRoot.length);
+            tildeFolderPath = `~/src${relativePath}/`;
+          }
           
           const result = await session.run(
             `
             MATCH (f:File)
-            WHERE f.path STARTS WITH $folderPath OR f.path = $exactPath
+            WHERE f.path STARTS WITH $containerFolderPath OR f.path = $containerPath
+               OR f.path STARTS WITH $hostFolderPath OR f.path = $hostPath
+               OR ($tildeFolderPath IS NOT NULL AND (f.path STARTS WITH $tildeFolderPath OR f.path = $tildePath))
             WITH DISTINCT f
             OPTIONAL MATCH (f)-[:HAS_CHUNK]->(c:FileChunk)
             WITH f, c, 
@@ -58,8 +77,12 @@ router.get('/indexed-folders', async (req: Request, res: Response) => {
               SUM(chunkHasEmbedding) + SUM(fileHasEmbedding) as embeddingCount
             `,
             { 
-              folderPath: folderPath,
-              exactPath: config.path
+              containerFolderPath,
+              containerPath,
+              hostFolderPath,
+              hostPath: config.path,
+              tildeFolderPath,
+              tildePath: tildeFolderPath ? tildeFolderPath.slice(0, -1) : null
             }
           );
 
@@ -194,9 +217,9 @@ router.post('/index-folder', async (req: Request, res: Response) => {
       });
     }
 
-    // Create watch configuration (use container path)
+    // Create watch configuration (use host path for consistency)
     const config = await configManager.createWatch({
-      path: containerPath,  // Store container path
+      path: resolvedPath,  // Store host path (for UI/SSE matching)
       host_path: resolvedPath,  // Store resolved host path
       recursive: recursive !== false,
       generate_embeddings: generate_embeddings !== false,
@@ -484,44 +507,70 @@ router.get('/indexing-status', async (req: Request, res: Response) => {
 });
 
 /**
+ * OPTIONS /api/indexing-progress
+ * CORS preflight for SSE endpoint
+ */
+router.options('/indexing-progress', (req: Request, res: Response) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key');
+  res.sendStatus(204);
+});
+
+/**
  * GET /api/indexing-progress (SSE)
  * Streams real-time indexing progress updates for all active indexing jobs
  */
 router.get('/indexing-progress', (req: Request, res: Response) => {
+  // Set CORS headers for webview compatibility
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key');
+  
   // Set SSE headers
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+  
+  // Ensure response is flushed immediately
+  res.flushHeaders();
 
   const watchManager = getWatchManager();
 
   // Send initial progress for all active jobs
-  const sendProgress = () => {
-    const allProgress = watchManager.getAllProgress();
-    
-    for (const progress of allProgress) {
+  const allProgress = watchManager.getAllProgress();
+  console.log(`[SSE] New client connected. Sending ${allProgress.length} initial progress updates`);
+  for (const progress of allProgress) {
+    const data = JSON.stringify(progress);
+    console.log(`[SSE] Initial progress for path: ${progress.path} (${progress.indexed}/${progress.totalFiles}) status: ${progress.status}`);
+    res.write(`data: ${data}\n\n`);
+  }
+
+  // Register callback for real-time progress updates (per-file)
+  const unsubscribe = watchManager.onProgress((progress) => {
+    try {
       const data = JSON.stringify(progress);
+      console.log(`[SSE] Sending progress for path: ${progress.path} (${progress.indexed}/${progress.totalFiles})`);
       res.write(`data: ${data}\n\n`);
+    } catch (error) {
+      console.error('Error sending SSE progress:', error);
     }
+  });
 
-    // Send heartbeat if no active jobs
-    if (allProgress.length === 0) {
+  // Send heartbeat every 30 seconds to keep connection alive
+  const heartbeatId = setInterval(() => {
+    try {
       res.write(`: heartbeat\n\n`);
+    } catch (error) {
+      clearInterval(heartbeatId);
     }
-  };
-
-  // Send progress immediately
-  sendProgress();
-
-  // Set up interval to send updates
-  const intervalId = setInterval(() => {
-    sendProgress();
-  }, 1000); // Update every second
+  }, 30000);
 
   // Clean up on client disconnect
   req.on('close', () => {
-    clearInterval(intervalId);
+    unsubscribe();
+    clearInterval(heartbeatId);
     console.log('📡 SSE client disconnected from indexing progress');
   });
 

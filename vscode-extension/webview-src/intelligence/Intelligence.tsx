@@ -216,10 +216,11 @@ export function Intelligence() {
     return () => window.removeEventListener('message', handleMessage);
   }, [loadData, performRemoveFolder]);
 
-  // Load data once config is received AND auth headers are set
+  // Load data once config is received (with or without auth headers)
   useEffect(() => {
-    if (configReceived && Object.keys(authHeaders).length > 0) {
-      console.log('[Intelligence] Config and auth headers received, loading data');
+    if (configReceived) {
+      const hasAuth = Object.keys(authHeaders).length > 0;
+      console.log(`[Intelligence] Config received (auth: ${hasAuth ? 'yes' : 'no'}), loading data`);
       loadData();
     }
   }, [configReceived, authHeaders, loadData]);
@@ -231,30 +232,18 @@ export function Intelligence() {
       return;
     }
 
-    // EventSource doesn't support custom headers, so pass API key as query param
-    // Extract token from Authorization: Bearer header (OAuth 2.0 RFC 6750)
-    const authHeader = authHeadersRef.current['Authorization'];
-    let apiKey: string | undefined;
-    
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      apiKey = authHeader.substring(7); // Remove 'Bearer ' prefix
-    }
-    
-    // Using 'access_token' query param follows OAuth 2.0 RFC 6750
-    const sseUrl = apiKey 
-      ? `${apiUrl}/api/indexing-progress?access_token=${encodeURIComponent(apiKey)}`
-      : `${apiUrl}/api/indexing-progress`;
-    
-    const eventSource = new EventSource(sseUrl);
+    const eventSource = new EventSource(`${apiUrl}/api/indexing-progress`);
 
     eventSource.onmessage = (event) => {
       if (event.data && event.data !== ': heartbeat') {
         try {
           const progress: IndexingProgress = JSON.parse(event.data);
+          console.log('[Intelligence] Received progress for path:', progress.path, `(${progress.indexed}/${progress.totalFiles})`, `status: ${progress.status}`, progress.currentFile ? `file: ${progress.currentFile}` : '');
           
           setProgressMap((prev) => {
             const newMap = new Map(prev);
             newMap.set(progress.path, progress);
+            console.log('[Intelligence] Updated progressMap, size:', newMap.size, 'keys:', Array.from(newMap.keys()));
             return newMap;
           });
 
@@ -638,6 +627,7 @@ export function Intelligence() {
           <div className="folders-list">
             {folders.map((folder) => {
               const progress = progressMap.get(folder.path);
+              console.log('[Intelligence] Checking progress for folder.path:', folder.path, 'found:', progress ? 'YES' : 'NO', progress?.status);
               const isIndexing = progress?.status === 'indexing';
               const isQueued = progress?.status === 'queued';
               const isCompleted = progress?.status === 'completed';
