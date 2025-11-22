@@ -20,8 +20,7 @@ Complete documentation for the Mimir MCP Server - TODO Tracker, External Memory,
 
 ### Core Features
 - **[MEMORY_GUIDE.md](guides/MEMORY_GUIDE.md)** - External memory system for AI agents
-- **[knowledge-graph.md](guides/knowledge-graph.md)** - Associative memory networks and graph operations
-- **[PERSISTENCE.md](guides/PERSISTENCE.md)** - Memory persistence, decay, and storage
+- **[KNOWLEDGE_GRAPH.md](guides/KNOWLEDGE_GRAPH.md)** - Associative memory networks and graph operations
 
 ### Docker & Deployment
 - **[DOCKER_DEPLOYMENT_GUIDE.md](guides/DOCKER_DEPLOYMENT_GUIDE.md)** - Complete Docker deployment guide
@@ -60,8 +59,8 @@ Complete documentation for the Mimir MCP Server - TODO Tracker, External Memory,
 - **[MULTI_AGENT_ROADMAP.md](architecture/MULTI_AGENT_ROADMAP.md)** - **⭐ Implementation roadmap with deployment & enterprise features**
 - **[NAMING.md](architecture/NAMING.md)** - Why "Mimir"? Norse mythology connections
 - **[HISTORICAL_TRACKING_SYSTEM.md](architecture/HISTORICAL_TRACKING_SYSTEM.md)** - Task execution history and analysis
-- **[CONVERSATION_ANALYSIS.md](architecture/CONVERSATION_ANALYSIS.md)** - Architecture validation against research
-- **[GRAPH_RAG_RESEARCH.md](architecture/GRAPH_RAG_RESEARCH.md)** - Research backing and Graph-RAG methodology
+- **[CONVERSATION_ANALYSIS.md](research/CONVERSATION_ANALYSIS.md)** - Architecture validation against research
+- **[GRAPH_RAG_RESEARCH.md](research/GRAPH_RAG_RESEARCH.md)** - Research backing and Graph-RAG methodology
 - **[ANALYSIS_MCP_MEMORY.md](architecture/ANALYSIS_MCP_MEMORY.md)** - Memory system patterns and analysis
 - **[MEMORY_VS_KG.md](architecture/MEMORY_VS_KG.md)** - TODO vs Knowledge Graph comparison
 
@@ -73,8 +72,8 @@ Complete documentation for the Mimir MCP Server - TODO Tracker, External Memory,
 
 **Test suite documentation and results:**
 
-- **[TESTING_GUIDE.md](testing/TESTING_GUIDE.md)** - Test suite overview and guidelines
-- **[MEMORY_PERSISTENCE_TEST_SUMMARY.md](testing/MEMORY_PERSISTENCE_TEST_SUMMARY.md)** - 30 passing tests for persistence
+- **[TESTING_GUIDE.md](guides/TESTING_GUIDE.md)** - Test suite overview and guidelines
+- **[MEMORY_PERSISTENCE_TEST_SUMMARY.md](results/MEMORY_PERSISTENCE_TEST_SUMMARY.md)** - 30 passing tests for persistence
 
 ## 🤖 Agent Configurations
 

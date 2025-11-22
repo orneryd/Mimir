@@ -420,12 +420,14 @@ describe('Workflow Executor', () => {
           estimatedDuration: '15 min',
           parallelGroup: 'group-1',
           qcRole: 'Complex QC',
-          verificationCriteria: 'Criterion 1\nCriterion 2',
+          verificationCriteria: 'Criterion 1, Criterion 2', // Keep as comma-separated
           maxRetries: 3,
           estimatedToolCalls: 10,
         }),
         expect.any(String),
-        expect.any(String)
+        expect.any(String),
+        expect.any(String),
+        expect.any(Function)
       );
     });
   });

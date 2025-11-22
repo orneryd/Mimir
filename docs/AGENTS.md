@@ -84,8 +84,8 @@ This repository contains **Mimir** - a production-ready MCP (Model Context Proto
 ### 📖 User Guides (`docs/guides/`)
 
 - **[MEMORY_GUIDE.md](docs/guides/MEMORY_GUIDE.md)** - **START HERE:** External memory system guide
-- **[KNOWLEDGE_GRAPH_GUIDE.md](docs/guides/knowledge-graph.md)** - Associative memory networks guide
-- **[TESTING_GUIDE.md](docs/testing/TESTING_GUIDE.md)** - Test suite guide
+- **[KNOWLEDGE_GRAPH.md](docs/guides/KNOWLEDGE_GRAPH.md)** - Associative memory networks guide
+- **[TESTING_GUIDE.md](docs/guides/TESTING_GUIDE.md)** - Test suite guide
 - **[DOCKER_DEPLOYMENT_GUIDE.md](docs/guides/DOCKER_DEPLOYMENT_GUIDE.md)** - Docker deployment
 
 ### 🏗️ Architecture (`docs/architecture/`)
@@ -93,11 +93,8 @@ This repository contains **Mimir** - a production-ready MCP (Model Context Proto
 - **[MULTI_AGENT_GRAPH_RAG.md](docs/architecture/MULTI_AGENT_GRAPH_RAG.md)** - Complete architecture spec (v3.1)
 - **[MULTI_AGENT_ROADMAP.md](docs/architecture/MULTI_AGENT_ROADMAP.md)** - Implementation plan (Q4 2025-Q1 2026)
 - **[AGENT_CHAINING.md](docs/architecture/AGENT_CHAINING.md)** - PM → Ecko → Worker flow
-- **[PARALLEL_EXECUTION_SUMMARY.md](docs/PARALLEL_EXECUTION_SUMMARY.md)** - ⚡ **NEW:** Parallel task execution
 - **[PROMPTING_SPECIALIST_ARCHITECTURE.md](docs/architecture/PROMPTING_SPECIALIST_ARCHITECTURE.md)** - Ecko agent design
-- **[NEO4J_MIGRATION_PLAN.md](docs/architecture/NEO4J_MIGRATION_PLAN.md)** - Neo4j migration plan (in-memory → persistent)
 - **[FILE_INDEXING_SYSTEM.md](docs/architecture/FILE_INDEXING_SYSTEM.md)** - Automatic file indexing & RAG enrichment
-- **[PERSISTENCE.md](docs/architecture/PERSISTENCE.md)** - Memory persistence & decay
 - **[VALIDATION_TOOL_DESIGN.md](docs/architecture/VALIDATION_TOOL_DESIGN.md)** - Agent validation system
 - **[HTTP_TRANSPORT_REQUIREMENTS.md](docs/architecture/HTTP_TRANSPORT_REQUIREMENTS.md)** - HTTP transport layer
 - **[DOCKER_VOLUME_STRATEGY.md](docs/architecture/DOCKER_VOLUME_STRATEGY.md)** - Docker volumes

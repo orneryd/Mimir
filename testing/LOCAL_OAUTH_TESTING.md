@@ -2,6 +2,25 @@
 
 This guide explains how to test the full OAuth 2.0 Authorization Code flow using a local OAuth provider.
 
+## 🎯 Quick Reference
+
+| Task | Command |
+|------|---------|
+| Start OAuth provider | `npx tsx testing/local-oauth-provider.ts` |
+| Run automated tests | `npm run test:oauth` |
+| Check provider health | `curl http://localhost:8888/health` |
+| View discovery metadata | `curl http://localhost:8888/.well-known/oauth-authorization-server` |
+| Test login flow | Navigate to `http://localhost:9042` and click "Login" |
+
+**Default Test Users:**
+- `admin` / `admin123` - Full admin access
+- `developer` / `dev123` - Developer access
+- `viewer` / `view123` - Read-only access
+
+**Ports:**
+- OAuth Provider: `8888`
+- Mimir Server: `9042`
+
 ## Why Use This?
 
 - **No external dependencies**: Test OAuth without registering apps with Google, GitHub, etc.
@@ -196,6 +215,146 @@ const CLIENT_ID = 'your-client-id';
 const CLIENT_SECRET = 'your-client-secret';
 ```
 
+## Validating OAuth Flows
+
+### Manual Flow Validation
+
+**Step 1: Test Authorization Endpoint**
+```bash
+# Open in browser or use curl
+curl "http://localhost:8888/oauth2/v1/authorize?response_type=code&client_id=mimir-local-test&redirect_uri=http://localhost:9042/auth/oauth/callback&state=test123"
+```
+
+Expected: HTML login form with test users
+
+**Step 2: Test Discovery Endpoint**
+```bash
+curl http://localhost:8888/.well-known/oauth-authorization-server | jq
+```
+
+Expected:
+```json
+{
+  "issuer": "http://localhost:8888",
+  "authorization_endpoint": "http://localhost:8888/oauth2/v1/authorize",
+  "token_endpoint": "http://localhost:8888/oauth2/v1/token",
+  "userinfo_endpoint": "http://localhost:8888/oauth2/v1/userinfo",
+  "response_types_supported": ["code"],
+  "grant_types_supported": ["authorization_code"]
+}
+```
+
+**Step 3: Test Token Exchange (requires auth code from Step 1)**
+```bash
+# After completing Step 1, you'll get an auth code in the redirect
+curl -X POST http://localhost:8888/oauth2/v1/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=authorization_code" \
+  -d "code=YOUR_AUTH_CODE_HERE" \
+  -d "redirect_uri=http://localhost:9042/auth/oauth/callback" \
+  -d "client_id=mimir-local-test" \
+  -d "client_secret=local-test-secret-123"
+```
+
+Expected:
+```json
+{
+  "access_token": "...",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "scope": "openid profile email"
+}
+```
+
+**Step 4: Test Userinfo Endpoint**
+```bash
+# Use access_token from Step 3
+curl http://localhost:8888/oauth2/v1/userinfo \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN_HERE"
+```
+
+Expected:
+```json
+{
+  "sub": "user-001",
+  "email": "admin@localhost",
+  "preferred_username": "admin",
+  "roles": ["admin", "developer"]
+}
+```
+
+### Automated Testing
+
+Run the OAuth flow test script:
+
+```bash
+npm run test:oauth
+```
+
+This script validates:
+- ✅ Authorization endpoint accessibility
+- ✅ Token exchange with valid credentials
+- ✅ Userinfo retrieval with access token
+- ✅ Error handling for invalid credentials
+- ✅ Token expiration behavior
+
+### Debugging OAuth Issues
+
+**Enable verbose logging:**
+
+In `testing/local-oauth-provider.ts`, all requests are logged with `[OAuth Provider]` prefix. Watch the console output:
+
+```bash
+npx tsx testing/local-oauth-provider.ts
+```
+
+**Common validation failures:**
+
+1. **State mismatch**: Check that `state` parameter is preserved through redirect
+2. **Code reuse**: Authorization codes are single-use only
+3. **Redirect URI mismatch**: Must match exactly (including trailing slashes)
+4. **Token expiration**: Auth codes expire in 10 minutes, access tokens in 1 hour
+5. **Client credentials**: Verify `CLIENT_ID` and `CLIENT_SECRET` match
+
+**Network debugging:**
+
+```bash
+# Check OAuth provider is running
+curl http://localhost:8888/health
+
+# Check Mimir is running
+curl http://localhost:9042/health
+
+# Test full redirect flow
+curl -v "http://localhost:8888/oauth2/v1/authorize?response_type=code&client_id=mimir-local-test&redirect_uri=http://localhost:9042/auth/oauth/callback&state=test"
+```
+
+### Testing Different Scenarios
+
+**Test invalid client:**
+```bash
+curl "http://localhost:8888/oauth2/v1/authorize?response_type=code&client_id=invalid-client&redirect_uri=http://localhost:9042/auth/oauth/callback"
+```
+Expected: 400 error "Invalid client_id"
+
+**Test expired code:**
+1. Get an auth code
+2. Wait 11 minutes
+3. Try to exchange it
+Expected: 400 error "Authorization code expired"
+
+**Test invalid token:**
+```bash
+curl http://localhost:8888/oauth2/v1/userinfo \
+  -H "Authorization: Bearer invalid-token"
+```
+Expected: 401 error "Invalid access token"
+
+**Test role-based access:**
+1. Login as `viewer` (roles: ["viewer"])
+2. Verify user profile in response
+3. Test that Mimir enforces role restrictions
+
 ## Production Notes
 
 ⚠️ **This is for TESTING ONLY!**
@@ -205,6 +364,9 @@ const CLIENT_SECRET = 'your-client-secret';
 - No rate limiting
 - No HTTPS support
 - Minimal security checks
+- Hardcoded credentials
+- No PKCE support
+- No refresh tokens
 
 For production, use a real OAuth provider like:
 - Okta
@@ -212,3 +374,4 @@ For production, use a real OAuth provider like:
 - Azure AD
 - Google OAuth
 - GitHub OAuth
+- Keycloak

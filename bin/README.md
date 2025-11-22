@@ -1,15 +1,15 @@
 # Mimir Global Commands
 
-These scripts allow you to run the Mimir agent chain and executor from any directory without having to be inside the GRAPH-RAG-TODO-main folder.
+These scripts allow you to run the Mimir agent chain and executor from any directory without having to be inside the Mimir project folder.
 
 ## Installation
 
 ### Option 1: npm link (Recommended for Development)
 
-From the GRAPH-RAG-TODO-main directory:
+From the Mimir project directory:
 
 ```bash
-cd /Users/timothysweet/src/GRAPH-RAG-TODO-main
+cd /path/to/Mimir
 npm link
 ```
 
@@ -22,7 +22,7 @@ This creates global symlinks for:
 Add the bin directory to your PATH in `~/.zshrc` or `~/.bashrc`:
 
 ```bash
-export PATH="/Users/timothysweet/src/GRAPH-RAG-TODO-main/bin:$PATH"
+export PATH="/path/to/Mimir/bin:$PATH"
 ```
 
 Then reload your shell:
@@ -35,8 +35,8 @@ source ~/.zshrc
 Add to `~/.zshrc` or `~/.bashrc`:
 
 ```bash
-alias mimir-chain="/Users/timothysweet/src/GRAPH-RAG-TODO-main/bin/mimir-chain"
-alias mimir-execute="/Users/timothysweet/src/GRAPH-RAG-TODO-main/bin/mimir-execute"
+alias mimir-chain="/path/to/Mimir/bin/mimir-chain"
+alias mimir-execute="/path/to/Mimir/bin/mimir-execute"
 ```
 
 ## Usage
@@ -68,7 +68,7 @@ mimir-execute chain-output.md
 cd ~/my-project
 
 # Start the MCP server (in another terminal)
-cd /Users/timothysweet/src/GRAPH-RAG-TODO-main
+cd /path/to/Mimir
 npm start
 
 # Back in your project directory
@@ -115,9 +115,9 @@ Both commands respect these environment variables:
 
 ### "command not found: mimir-chain"
 
-Run `npm link` from the GRAPH-RAG-TODO-main directory:
+Run `npm link` from the Mimir project directory:
 ```bash
-cd /Users/timothysweet/src/GRAPH-RAG-TODO-main
+cd /path/to/Mimir
 npm link
 ```
 
@@ -125,7 +125,7 @@ npm link
 
 Make sure the project is built:
 ```bash
-cd /Users/timothysweet/src/GRAPH-RAG-TODO-main
+cd /path/to/Mimir
 npm run build
 ```
 
@@ -133,13 +133,13 @@ npm run build
 
 Start the MCP server:
 ```bash
-cd /Users/timothysweet/src/GRAPH-RAG-TODO-main
+cd /path/to/Mimir
 npm start
 ```
 
 ## Uninstallation
 
 ```bash
-cd /Users/timothysweet/src/GRAPH-RAG-TODO-main
+cd /path/to/Mimir
 npm unlink
 ```

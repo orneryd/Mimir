@@ -1,6 +1,6 @@
 # Smart Startup Script
 
-The `start.sh` script automatically detects your platform (macOS ARM64, macOS x64, Linux ARM64, Linux x64, or Windows) and uses the appropriate docker-compose file.
+The `start.js` script automatically detects your platform (macOS ARM64, macOS x64, Linux ARM64, Linux x64, or Windows) and uses the appropriate docker-compose file.
 
 ## Quick Start
 
@@ -41,13 +41,13 @@ You can also call the script directly with additional arguments:
 
 ```bash
 # Start specific services
-./scripts/start.sh up neo4j llama-server
+node ./scripts/start.js up neo4j llama-server
 
 # View logs for specific service
-./scripts/start.sh logs mimir-server
+node ./scripts/start.js logs mimir-server
 
 # Clean everything (with confirmation)
-./scripts/start.sh clean
+node ./scripts/start.js clean
 ```
 
 ## Platform Detection

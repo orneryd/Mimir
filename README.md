@@ -1,4 +1,4 @@
-﻿<img width="283" height="380" alt="image" src="https://github.com/user-attachments/assets/f4e3be80-79fe-4e10-b010-9a39b5f70584" />
+<img width="283" height="380" alt="image" src="https://github.com/user-attachments/assets/f4e3be80-79fe-4e10-b010-9a39b5f70584" />
 
 # M.I.M.I.R - Multi-agent Intelligent Memory & Insight Repository 
 
@@ -644,13 +644,11 @@ curl http://localhost:11434/api/tags
 docker exec -it ollama_server ollama list | grep mxbai
 
 # If Ollama is running but the embedding model isn't present (or you see
-# embedding errors at runtime), you can pull the model using the npm helper
-# script instead of calling Docker directly. Default model for code embeddings:
-# `nomic-embed-text`
-npm run ollama:pull nomic-embed-text
+# embedding errors at runtime), you can pull the model using the helper
+# script. Default model for code embeddings: `nomic-embed-text`
+./scripts/pull-model.sh nomic-embed-text
 
-# or Pull embedding model manually
-
+# Or pull embedding model manually
 docker exec -it ollama_server ollama pull nomic-embed-text
 ```
 ### Web UI

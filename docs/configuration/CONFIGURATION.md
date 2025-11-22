@@ -163,7 +163,7 @@ Used for LLM model selection and provider configuration. **Feature flags are now
   "mcpServers": {
     "knowledge-graph-todo": {
       "command": "node",
-      "args": ["/Users/you/src/GRAPH-RAG-TODO-main/build/index.js"]
+      "args": ["/path/to/Mimir/build/index.js"]
     }
   }
 }
@@ -176,7 +176,7 @@ Used for LLM model selection and provider configuration. **Feature flags are now
   "mcpServers": {
     "knowledge-graph-todo": {
       "command": "node",
-      "args": ["/Users/you/src/GRAPH-RAG-TODO-main/build/index.js"],
+      "args": ["/path/to/Mimir/build/index.js"],
       "env": {
         "MCP_MEMORY_STORE_PATH": "/Users/you/.mcp-memories/project-memories.json"
       }
@@ -192,7 +192,7 @@ Used for LLM model selection and provider configuration. **Feature flags are now
   "mcpServers": {
     "knowledge-graph-todo": {
       "command": "node",
-      "args": ["/Users/you/src/GRAPH-RAG-TODO-main/build/index.js"],
+      "args": ["/path/to/Mimir/build/index.js"],
       "env": {
         "MCP_MEMORY_SAVE_INTERVAL": "5"
       }
@@ -208,7 +208,7 @@ Used for LLM model selection and provider configuration. **Feature flags are now
   "mcpServers": {
     "knowledge-graph-todo": {
       "command": "node",
-      "args": ["/Users/you/src/GRAPH-RAG-TODO-main/build/index.js"],
+      "args": ["/path/to/Mimir/build/index.js"],
       "env": {
         "MCP_MEMORY_TODO_TTL": "172800000",
         "MCP_MEMORY_PHASE_TTL": "1209600000"
@@ -229,7 +229,7 @@ Used for LLM model selection and provider configuration. **Feature flags are now
   "mcpServers": {
     "knowledge-graph-todo": {
       "command": "node",
-      "args": ["/Users/you/src/GRAPH-RAG-TODO-main/build/index.js"],
+      "args": ["/path/to/Mimir/build/index.js"],
       "env": {
         "MCP_MEMORY_STORE_PATH": "~/.mcp-project-memories.json",
         "MCP_MEMORY_SAVE_INTERVAL": "5",
@@ -255,7 +255,7 @@ Used for LLM model selection and provider configuration. **Feature flags are now
   "mcpServers": {
     "knowledge-graph-todo": {
       "command": "node",
-      "args": ["/Users/you/src/GRAPH-RAG-TODO-main/build/index.js"],
+      "args": ["/path/to/Mimir/build/index.js"],
       "env": {
         "MCP_MEMORY_STORE_PATH": "/Users/you/.claude-memories.json",
         "MCP_MEMORY_SAVE_INTERVAL": "10"

@@ -9,6 +9,7 @@
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import os from 'os';
+import * as pathUtils from './path-utils.js';
 import {
   normalizeSlashes,
   expandTilde,
@@ -25,8 +26,8 @@ describe('Path Utilities', () => {
   const originalHomedir = os.homedir;
 
   beforeEach(() => {
-    // Reset environment
-    delete process.env.HOST_WORKSPACE_ROOT;
+    // Set HOST_WORKSPACE_ROOT for tests
+    process.env.HOST_WORKSPACE_ROOT = '/Users/testuser/src';
     
     // Mock os.homedir() for consistent tests
     vi.spyOn(os, 'homedir').mockReturnValue('/Users/testuser');
@@ -157,6 +158,9 @@ describe('Path Utilities', () => {
   describe('translateHostToContainer', () => {
     beforeEach(() => {
       process.env.HOST_WORKSPACE_ROOT = '/Users/testuser/src';
+      process.env.WORKSPACE_ROOT = '/workspace';
+      // Mock isRunningInDocker to return true for these tests
+      vi.spyOn(pathUtils, 'isRunningInDocker').mockReturnValue(true);
     });
 
     it('should translate host paths to container paths', () => {
@@ -200,6 +204,9 @@ describe('Path Utilities', () => {
   describe('translateContainerToHost', () => {
     beforeEach(() => {
       process.env.HOST_WORKSPACE_ROOT = '/Users/testuser/src';
+      process.env.WORKSPACE_ROOT = '/workspace';
+      // Mock isRunningInDocker to return true for these tests
+      vi.spyOn(pathUtils, 'isRunningInDocker').mockReturnValue(true);
     });
 
     it('should translate container paths to host paths', () => {
@@ -266,6 +273,9 @@ describe('Path Utilities', () => {
   describe('Round-trip translation', () => {
     beforeEach(() => {
       process.env.HOST_WORKSPACE_ROOT = '/Users/testuser/src';
+      process.env.WORKSPACE_ROOT = '/workspace';
+      // Mock isRunningInDocker to return true for these tests
+      vi.spyOn(pathUtils, 'isRunningInDocker').mockReturnValue(true);
     });
 
     it('should maintain path integrity through host->container->host', () => {
@@ -285,8 +295,10 @@ describe('Path Utilities', () => {
     });
 
     it('should handle tilde paths in round-trip', () => {
+      // In Docker, tilde paths are expanded and translated
       const original = '~/src/project/file.txt';
       const containerPath = translateHostToContainer(original);
+      // In Docker, path is translated to /workspace
       expect(containerPath).toBe('/workspace/project/file.txt');
       
       const hostPath = translateContainerToHost(containerPath);
@@ -295,10 +307,17 @@ describe('Path Utilities', () => {
   });
 
   describe('Cross-platform scenarios', () => {
+    beforeEach(() => {
+      process.env.WORKSPACE_ROOT = '/workspace';
+      // Mock isRunningInDocker to return true for these tests
+      vi.spyOn(pathUtils, 'isRunningInDocker').mockReturnValue(true);
+    });
+
     it('should handle Windows paths with HOST_WORKSPACE_ROOT on Windows', () => {
       process.env.HOST_WORKSPACE_ROOT = 'C:\\Users\\john\\workspace';
       
       const result = translateHostToContainer('C:\\Users\\john\\workspace\\project');
+      // In Docker, path is translated to /workspace
       expect(result).toBe('/workspace/project');
     });
 
