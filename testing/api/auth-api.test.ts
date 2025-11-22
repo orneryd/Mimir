@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { Request, Response, NextFunction } from 'express';
-import passport from 'passport';
 
 // Mock dependencies
 vi.mock('passport');
