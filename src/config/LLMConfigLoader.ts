@@ -6,6 +6,7 @@
  */
 
 // No file I/O needed - everything is dynamic from ENV + provider APIs
+import { createSecureFetchOptions } from '../utils/fetch-helper.js';
 
 export interface ModelConfig {
   name: string;
@@ -252,13 +253,44 @@ export class LLMConfigLoader {
       const modelsPath = process.env.MIMIR_LLM_API_MODELS_PATH || '/v1/models';
       const modelsUrl = `${baseUrl}${modelsPath}`;
       
-      const response = await fetch(modelsUrl);
+      console.log(`🔍 [${provider}] Attempting to connect to: ${modelsUrl}`);
+      console.log(`🔍 [${provider}] Base URL: ${baseUrl}`);
+      console.log(`🔍 [${provider}] Models Path: ${modelsPath}`);
+      console.log(`🔍 [${provider}] API Key configured: ${process.env.MIMIR_LLM_API_KEY ? 'YES (length: ' + process.env.MIMIR_LLM_API_KEY.length + ')' : 'NO'}`);
+      
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+      
+      // Add authorization header if API key is configured
+      if (process.env.MIMIR_LLM_API_KEY) {
+        headers['Authorization'] = `Bearer ${process.env.MIMIR_LLM_API_KEY}`;
+        console.log(`🔍 [${provider}] Authorization header added`);
+      } else {
+        console.warn(`⚠️  [${provider}] No API key found in MIMIR_LLM_API_KEY`);
+      }
+      
+      // Configure fetch options with SSL handling
+      const fetchOptions = createSecureFetchOptions(modelsUrl, { headers });
+      
+      if (modelsUrl.startsWith('https://') && process.env.NODE_TLS_REJECT_UNAUTHORIZED === '0') {
+        console.log(`🔍 [${provider}] SSL verification disabled (NODE_TLS_REJECT_UNAUTHORIZED=0)`);
+      }
+      
+      const response = await fetch(modelsUrl, fetchOptions);
+      
+      console.log(`🔍 [${provider}] Response status: ${response.status} ${response.statusText}`);
+      
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        const errorText = await response.text().catch(() => 'Unable to read error response');
+        console.error(`❌ [${provider}] API Error Response: ${errorText}`);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
       
       const data = await response.json();
       const models = data.data || [];
+      
+      console.log(`🔍 [${provider}] Received ${models.length} models from API`);
       
       // Build models dynamically from API response
       providerConfig.models = {};
@@ -286,7 +318,10 @@ export class LLMConfigLoader {
       
       console.log(`✅ Discovered ${models.length} ${provider} models from ${modelsUrl}`);
     } catch (error: any) {
-      console.warn(`⚠️  Failed to query ${provider} API: ${error.message}`);
+      console.error(`❌ [${provider}] Failed to query API:`);
+      console.error(`   Error type: ${error.name}`);
+      console.error(`   Error message: ${error.message}`);
+      console.error(`   Error stack: ${error.stack?.split('\n')[0]}`);
       throw error;
     }
   }

@@ -56,7 +56,9 @@ export function Studio() {
     setLoadingExecutions(true);
     
     try {
-      const response = await fetch('/api/executions?limit=20');
+      const response = await fetch('/api/executions?limit=20', {
+        credentials: 'include' // Send HTTP-only cookie
+      });
       if (response.ok) {
         const data = await response.json();
         setRecentExecutions(data.executions || []);

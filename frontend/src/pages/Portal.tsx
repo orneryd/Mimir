@@ -255,7 +255,9 @@ export function Portal() {
   useEffect(() => {
     const fetchModels = async () => {
       try {
-        const response = await fetch('/v1/models');
+        const response = await fetch('/v1/models', {
+          credentials: 'include' // Send HTTP-only cookie
+        });
         if (response.ok) {
           const data = await response.json();
           const models = data.data?.map((model: any) => ({
@@ -288,7 +290,9 @@ export function Portal() {
   useEffect(() => {
     const fetchPreambles = async () => {
       try {
-        const response = await fetch('/api/preambles');
+        const response = await fetch('/api/preambles', {
+          credentials: 'include' // Send HTTP-only cookie
+        });
         if (response.ok) {
           const data = await response.json();
           setAvailablePreambles(data.preambles || []);
@@ -323,7 +327,9 @@ export function Portal() {
     }
 
     try {
-      const response = await fetch(`/api/preambles/${preambleName}`);
+      const response = await fetch(`/api/preambles/${preambleName}`, {
+        credentials: 'include' // Send HTTP-only cookie
+      });
       if (!response.ok) {
         throw new Error(`Failed to fetch preamble: ${response.status}`);
       }
@@ -679,6 +685,7 @@ export function Portal() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include', // Send HTTP-only cookie
         body: JSON.stringify({
           messages: messagesPayload,
           model: selectedModel,
@@ -991,6 +998,7 @@ export function Portal() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include', // Send HTTP-only cookie
         body: JSON.stringify({
           messages: messagesPayload,
           model: selectedModel,

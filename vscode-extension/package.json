@@ -39,6 +39,16 @@
     ],
     "commands": [
       {
+        "command": "mimir.login",
+        "title": "Mimir: Login",
+        "icon": "$(sign-in)"
+      },
+      {
+        "command": "mimir.logout",
+        "title": "Mimir: Logout",
+        "icon": "$(sign-out)"
+      },
+      {
         "command": "mimir.askQuestion",
         "title": "Mimir: Ask a Question",
         "icon": "$(comment-discussion)"
@@ -90,6 +100,34 @@
           "description": "Mimir server endpoint URL (http://localhost:9042 for Docker, http://localhost:3000 for local dev)",
           "scope": "window",
           "order": 0
+        },
+        "mimir.auth.username": {
+          "type": "string",
+          "default": "",
+          "description": "Username for authentication (if security is enabled)",
+          "scope": "window",
+          "order": 1
+        },
+        "mimir.auth.password": {
+          "type": "password",
+          "default": "",
+          "description": "Password for authentication (if security is enabled). Stored in VSCode settings.",
+          "scope": "window",
+          "order": 2
+        },
+        "mimir.auth.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Cached API key (automatically managed, expires after 90 days)",
+          "scope": "application",
+          "order": 3
+        },
+        "mimir.auth.expiresAt": {
+          "type": "string",
+          "default": "",
+          "description": "API key expiration timestamp (automatically managed)",
+          "scope": "application",
+          "order": 4
         },
         "mimir.defaultPreamble": {
           "type": "string",

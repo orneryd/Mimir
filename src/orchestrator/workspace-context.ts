@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'async_hooks';
 import path from 'path';
 import os from 'os';
+import { getHostWorkspaceRoot } from '../utils/path-utils.js';
 
 /**
  * Workspace context for tool execution
@@ -33,15 +34,12 @@ const workspaceStorage = new AsyncLocalStorage<WorkspaceContext>();
  */
 function translatePathToContainer(hostPath: string): string {
   // Get environment variables for path mapping
-  const hostWorkspaceRoot = process.env.HOST_WORKSPACE_ROOT || path.join(os.homedir(), 'src');
+  const hostWorkspaceRoot = getHostWorkspaceRoot();
   const containerWorkspaceRoot = process.env.WORKSPACE_ROOT || '';
-  
-  // Expand ~ to home directory if present
-  const expandedHostRoot = hostWorkspaceRoot.replace(/^~/, os.homedir());
   
   // Normalize paths for comparison
   const normalizedHostPath = path.resolve(hostPath);
-  const normalizedHostRoot = path.resolve(expandedHostRoot);
+  const normalizedHostRoot = hostWorkspaceRoot;
   
   // Check if hostPath is under the mounted host root
   if (normalizedHostPath.startsWith(normalizedHostRoot)) {
@@ -52,7 +50,7 @@ function translatePathToContainer(hostPath: string): string {
     const containerPath = path.posix.join(containerWorkspaceRoot, relativePath);
     
     console.log(`📁 Path translation: ${hostPath} → ${containerPath}`);
-    console.log(`   Host root: ${expandedHostRoot} → Container root: ${containerWorkspaceRoot}`);
+    console.log(`   Host root: ${hostWorkspaceRoot} → Container root: ${containerWorkspaceRoot}`);
     
     return containerPath;
   }
@@ -60,7 +58,7 @@ function translatePathToContainer(hostPath: string): string {
   // Path is not under mounted root - might already be a container path or standalone
   // If we're in Docker (WORKSPACE_ROOT is set), warn about unmounted path
   if (process.env.WORKSPACE_ROOT && !hostPath.startsWith('/workspace')) {
-    console.warn(`⚠️  Path ${hostPath} is not under HOST_WORKSPACE_ROOT (${expandedHostRoot})`);
+    console.warn(`⚠️  Path ${hostPath} is not under HOST_WORKSPACE_ROOT (${hostWorkspaceRoot})`);
     console.warn(`   This path may not be accessible in the container!`);
   }
   

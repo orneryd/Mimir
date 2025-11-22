@@ -10,6 +10,7 @@
  */
 
 import { LLMConfigLoader } from '../config/LLMConfigLoader.js';
+import { createSecureFetchOptions } from '../utils/fetch-helper.js';
 
 export interface EmbeddingResult {
   embedding: number[];
@@ -393,7 +394,7 @@ export class EmbeddingsService {
           headers['Authorization'] = `Bearer ${apiKey}`;
         }
         
-        const response = await fetch(embeddingsUrl, {
+        const fetchOptions = createSecureFetchOptions(embeddingsUrl, {
           method: 'POST',
           headers,
           body: JSON.stringify({
@@ -401,6 +402,8 @@ export class EmbeddingsService {
             prompt: text,
           }),
         });
+        
+        const response = await fetch(embeddingsUrl, fetchOptions);
 
         if (!response.ok) {
           const errorText = await response.text();
@@ -454,11 +457,13 @@ export class EmbeddingsService {
         input: text,
       });
       
-      const response = await fetch(embeddingsUrl, {
+      const fetchOptions = createSecureFetchOptions(embeddingsUrl, {
         method: 'POST',
         headers,
         body: requestBody,
       });
+      
+      const response = await fetch(embeddingsUrl, fetchOptions);
 
       if (!response.ok) {
         const errorText = await response.text();

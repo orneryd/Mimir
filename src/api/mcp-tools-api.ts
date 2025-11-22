@@ -11,7 +11,9 @@ export function createMCPToolsRouter(graphManager: IGraphManager): Router {
    */
   router.post('/mcp/index-folder', async (req, res) => {
     try {
-      const { path, recursive = true, generate_embeddings = true, file_patterns, ignore_patterns } = req.body;
+      // Default generate_embeddings based on MIMIR_EMBEDDINGS_ENABLED env var
+      const embeddingsEnabledByDefault = process.env.MIMIR_EMBEDDINGS_ENABLED !== 'false';
+      const { path, recursive = true, generate_embeddings = embeddingsEnabledByDefault, file_patterns, ignore_patterns } = req.body;
 
       if (!path) {
         return res.status(400).json({
@@ -19,7 +21,7 @@ export function createMCPToolsRouter(graphManager: IGraphManager): Router {
         });
       }
 
-      console.log(`📁 API: Indexing folder ${path}`);
+      console.log(`📁 API: Indexing folder ${path} (embeddings: ${generate_embeddings})`);
 
       // Get FileWatchManager from the global state
       // Note: This assumes FileWatchManager is passed through or accessible

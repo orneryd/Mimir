@@ -10,6 +10,7 @@ dotenv.config();
 import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
+import cookieParser from 'cookie-parser';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -19,8 +20,12 @@ import { createChatRouter } from './api/chat-api.js';
 import { createMCPToolsRouter } from './api/mcp-tools-api.js';
 import indexRouter from './api/index-api.js';
 import nodesRouter from './api/nodes-api.js';
+import apiKeysRouter from './api/api-keys-api.js';
 import { FileWatchManager } from './indexing/FileWatchManager.js';
 import type { IGraphManager } from './types/index.js';
+import passport from './config/passport.js';
+import authRouter from './api/auth-api.js';
+import { apiKeyAuth } from './middleware/api-key-auth.js';
 
 // ES module equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -53,9 +58,10 @@ async function startHttpServer() {
     console.log(`   Edges: ${stats.edgeCount}`);
     console.log(`   Types: ${JSON.stringify(stats.types)}`);
 
-    // Initialize FileWatchManager
-    watchManager = new FileWatchManager(graphManager.getDriver());
-    console.log(`✅ FileWatchManager initialized`);
+    // Get FileWatchManager instance from index.ts (already initialized there)
+    const { fileWatchManager: indexWatchManager } = await import('./index.js');
+    watchManager = indexWatchManager;
+    console.log(`✅ Using FileWatchManager instance from index.ts`);
     
     // Make watchManager globally accessible for API routes
     (globalThis as any).fileWatchManager = watchManager;
@@ -86,14 +92,115 @@ async function startHttpServer() {
     }
   }));
   
+  // Add URL-encoded body parser for form submissions (needed for Passport login)
+  app.use(bodyParser.urlencoded({ extended: true }));
+  
   app.use(cors({ 
-    origin: process.env.MCP_ALLOWED_ORIGIN || '*', 
-    methods: ['POST','GET','DELETE'], 
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps, curl, Postman)
+      if (!origin) return callback(null, true);
+      
+      // Allow vscode-webview origins for the extension
+      if (origin.startsWith('vscode-webview://')) {
+        return callback(null, true);
+      }
+      
+      // Allow configured origin or all origins if not set
+      const allowedOrigin = process.env.MCP_ALLOWED_ORIGIN || '*';
+      if (allowedOrigin === '*') {
+        return callback(null, true);
+      }
+      
+      if (origin === allowedOrigin) {
+        return callback(null, true);
+      }
+      
+      callback(new Error('Not allowed by CORS'));
+    },
+    methods: ['POST','GET','DELETE','PATCH','PUT'], 
     exposedHeaders: ['Mcp-Session-Id'], 
-    // Allow Accept header, custom mcp-session-id header, and Cache-Control for SSE
-    allowedHeaders: ['Content-Type', 'Accept', 'mcp-session-id', 'Cache-Control'], 
+    // OAuth 2.0 RFC 6750: Allow Authorization header for Bearer tokens
+    allowedHeaders: ['Content-Type', 'Accept', 'Authorization', 'mcp-session-id', 'Cache-Control', 'X-API-Key'], 
     credentials: true 
   }));
+
+  // Initialize audit logging (if enabled)
+  let auditConfig: any = null;
+  if (process.env.MIMIR_ENABLE_AUDIT_LOGGING === 'true') {
+    const { loadAuditLoggerConfig, auditLogger } = await import('./middleware/audit-logger.js');
+    auditConfig = loadAuditLoggerConfig();
+    
+    console.log('📝 Audit logging enabled');
+    console.log(`   Destination: ${auditConfig.destination}`);
+    console.log(`   Format: ${auditConfig.format}`);
+    if (auditConfig.filePath) {
+      console.log(`   File: ${auditConfig.filePath}`);
+    }
+    if (auditConfig.webhookUrl) {
+      console.log(`   Webhook: ${auditConfig.webhookUrl}`);
+    }
+    
+    // Add audit logger middleware (before routes)
+    app.use(auditLogger(auditConfig));
+  }
+
+  // Security: Authentication & RBAC (Stateless with API keys)
+  if (process.env.MIMIR_ENABLE_SECURITY === 'true') {
+    console.log('🔐 Security enabled - stateless API key authentication');
+    
+    if (process.env.MIMIR_ENABLE_RBAC === 'true') {
+      console.log('🔒 RBAC enabled - role-based access control active');
+      
+      // Initialize RBAC config (supports remote URIs)
+      const { initRBACConfig } = await import('./config/rbac-config.js');
+      await initRBACConfig();
+    } else {
+      console.log('ℹ️  RBAC disabled - all authenticated users have full access');
+    }
+  }
+
+  // Cookie parser for HTTP-only cookie authentication
+  app.use(cookieParser());
+
+  // Initialize passport for OAuth (stateless, no sessions)
+  app.use(passport.initialize());
+
+  // Mount auth routes FIRST (must be public for login to work)
+  // Auth routes: /auth/login, /auth/logout, /auth/status, /auth/config, /auth/oauth/callback
+  app.use(authRouter);
+
+  // Protect API routes (only if security enabled)
+  if (process.env.MIMIR_ENABLE_SECURITY === 'true') {
+    console.log('🔐 Security ENABLED - API routes require authentication');
+    app.use('/api', async (req, res, next) => {
+      // Skip auth check for health endpoint
+      if (req.path === '/health') {
+        return next();
+      }
+      
+      // Check for any form of authentication:
+      // 1. Authorization: Bearer header (OAuth 2.0 RFC 6750)
+      // 2. X-API-Key header (common alternative)
+      // 3. Cookie (for browser/UI)
+      // 4. Query parameters (for SSE which can't send custom headers)
+      const authHeader = req.headers['authorization'] as string;
+      const hasAuth = authHeader || 
+                      req.headers['x-api-key'] || 
+                      req.cookies?.mimir_oauth_token ||
+                      req.query.access_token ||
+                      req.query.api_key;
+      
+      if (hasAuth) {
+        // Let apiKeyAuth middleware handle validation
+        return apiKeyAuth(req, res, next);
+      }
+      
+      // No authentication provided
+      res.status(401).json({ error: 'Unauthorized', message: 'Authentication required' });
+    });
+  } else {
+    console.log('🔓 Security DISABLED - all API requests allowed (auth headers ignored)');
+  }
 
   // Mount chat API routes (OpenAI-compatible, at root level)
   app.use('/', createChatRouter(graphManager));
@@ -109,11 +216,32 @@ async function startHttpServer() {
   
   // Mount nodes management API routes
   app.use('/api/nodes', nodesRouter);
+  
+  // Mount API keys management routes
+  app.use('/api/keys', apiKeysRouter);
 
-  // Serve static frontend files
+  // Mount RBAC config management routes (admin only)
+  const rbacConfigRouter = (await import('./api/rbac-config-api.js')).default;
+  app.use('/api/rbac', rbacConfigRouter);
+
+  // Debug middleware - log ALL requests
+  app.use((req, res, next) => {
+    console.log(`[REQUEST] ${req.method} ${req.path}`);
+    next();
+  });
+
+  // Serve static frontend files (assets only, not HTML)
   const frontendDistPath = path.join(__dirname, '../frontend/dist');
   console.log(`📁 Serving frontend from: ${frontendDistPath}`);
-  app.use(express.static(frontendDistPath));
+  app.use(express.static(frontendDistPath, {
+    index: false, // Don't serve index.html automatically
+    setHeaders: (res, filepath) => {
+      // Only serve actual asset files, not HTML
+      if (filepath.endsWith('.html')) {
+        res.status(404).end();
+      }
+    }
+  }));
 
   // SSE endpoint for PCTX and other clients that need event streams
   app.get('/mcp', async (req, res) => {
@@ -130,7 +258,7 @@ async function startHttpServer() {
         } as any);
 
         // Connect server to shared transport
-        await server.connect(sharedTransport);
+        await (server as any).connect(sharedTransport);
         console.warn(`[HTTP] Server connected to shared session`);
       }
       
@@ -167,6 +295,33 @@ async function startHttpServer() {
 
   app.post('/mcp', async (req, res) => {
     try {
+      // CENTRALIZED AUTH CHECK: If security enabled, require authentication (stateless JWT/OAuth)
+      if (process.env.MIMIR_ENABLE_SECURITY === 'true') {
+        const authHeader = req.headers['authorization'] as string;
+        const hasAuth = authHeader || 
+                        req.headers['x-api-key'] || 
+                        req.cookies?.mimir_oauth_token ||
+                        req.query.access_token ||
+                        req.query.api_key;
+        
+        if (!hasAuth) {
+          return res.status(401).json({
+            jsonrpc: '2.0',
+            error: { code: -32001, message: 'Unauthorized: Authentication required' },
+            id: req.body?.id || null
+          });
+        }
+        
+        // Validate token using stateless apiKeyAuth (JWT/OAuth - NO SESSIONS)
+        await new Promise<void>((resolve, reject) => {
+          apiKeyAuth(req, res, (err?: any) => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+      }
+      // If security disabled: BYPASS ALL AUTH CHECKS
+      
       let method = req.body?.method || 'unknown';
       console.warn(`[HTTP] Request method: ${method} (shared session mode)`);
       
@@ -185,7 +340,7 @@ async function startHttpServer() {
         } as any);
 
         // Connect server to shared transport
-        await server.connect(sharedTransport);
+        await (server as any).connect(sharedTransport);
         console.warn(`[HTTP] Server connected to shared session`);
       }
       
@@ -294,8 +449,9 @@ async function startHttpServer() {
   // SPA catch-all route - serve index.html for all non-API routes
   // This must come AFTER all API routes but BEFORE error handlers
   // Use a regex pattern instead of '*' to avoid path-to-regexp errors
-  app.get(/^\/(?!api|v1|mcp|health|models).*$/, (req, res) => {
-    // Serve index.html for all routes except API endpoints
+  // Note: With stateless API key auth, the frontend handles routing/auth checks
+  app.get(/^\/(?!api|v1|mcp|health|models|auth).*$/, (req, res) => {
+    // Always serve the SPA - frontend will handle auth checks via API key
     res.sendFile(path.join(frontendDistPath, 'index.html'));
   });
   
@@ -329,13 +485,40 @@ async function startHttpServer() {
   });
 
   const port = parseInt(process.env.PORT || process.env.MCP_HTTP_PORT || '3000', 10);
-  app.listen(port, () => {
+  const httpServer = app.listen(port, () => {
     console.error(`✅ HTTP server listening on http://localhost:${port}/mcp`);
     console.error(`✅ Health check: http://localhost:${port}/health`);
     console.error(`🎨 Mimir Portal UI: http://localhost:${port}/portal`);
     console.error(`🎭 Orchestration Studio: http://localhost:${port}/studio`);
     console.error(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
   });
+
+  // Graceful shutdown handler
+  const shutdown = async (signal: string) => {
+    console.log(`\n${signal} received - starting graceful shutdown...`);
+    
+    // Flush audit logs if enabled
+    if (auditConfig && auditConfig.enabled) {
+      const { shutdownAuditLogger } = await import('./middleware/audit-logger.js');
+      await shutdownAuditLogger(auditConfig);
+      console.log('✅ Audit logs flushed');
+    }
+    
+    // Close server
+    httpServer.close(() => {
+      console.log('✅ HTTP server closed');
+      process.exit(0);
+    });
+    
+    // Force exit after 10 seconds
+    setTimeout(() => {
+      console.error('⚠️  Forced shutdown after timeout');
+      process.exit(1);
+    }, 10000);
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 startHttpServer().catch(error => {

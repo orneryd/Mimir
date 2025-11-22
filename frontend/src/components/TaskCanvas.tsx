@@ -261,6 +261,7 @@ export function TaskCanvas() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include', // Send HTTP-only cookie
         body: JSON.stringify(workflowData),
       });
 
@@ -293,7 +294,9 @@ export function TaskCanvas() {
     
     try {
       // Fetch the zip archive
-      const response = await fetch(`/api/deliverables/${execId}/download`);
+      const response = await fetch(`/api/deliverables/${execId}/download`, {
+        credentials: 'include' // Send HTTP-only cookie
+      });
       if (!response.ok) {
         throw new Error('Failed to download deliverables archive');
       }
@@ -337,6 +340,7 @@ export function TaskCanvas() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include', // Send HTTP-only cookie
       });
       
       if (!response.ok) {

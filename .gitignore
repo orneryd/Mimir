@@ -22,3 +22,7 @@ test-results-claudette-quantized/
 copilot-data/github_token
 pipelines\__pycache__
 ollama_models/
+# Custom RBAC configurations (user-specific, not checked in)
+config/rbac.local.json
+config/rbac.*.json
+!config/rbac.json

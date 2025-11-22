@@ -16,6 +16,7 @@
 import path from 'path';
 import os from 'os';
 import { promises as fs } from 'fs';
+import * as fsSync from 'fs';
 
 /**
  * Normalize a path to Unix-style forward slashes
@@ -142,8 +143,7 @@ export function isRunningInDocker(): boolean {
   
   try {
     // Check for .dockerenv file
-    const fs = require('fs');
-    if (fs.existsSync('/.dockerenv')) {
+    if (fsSync.existsSync('/.dockerenv')) {
       return true;
     }
   } catch (e) {
@@ -169,9 +169,31 @@ export function getHostWorkspaceRoot(): string {
     return defaultRoot;
   }
   
-  // Normalize and resolve the configured root
+  // When running in Docker with tilde in HOST_WORKSPACE_ROOT:
+  // Docker Compose already expanded ~ in the volume mount, so we just need to expand it here too
+  // Note: /proc/mounts doesn't work on Docker Desktop (shows VM paths like /run/host_mark)
+  if (isRunningInDocker() && hostRoot.startsWith('~')) {
+    // Expand tilde manually (can't use os.homedir() in Docker - it returns container's home)
+    // Standard Unix tilde expansion: ~ -> /home/username or /Users/username
+    // Since we're in Docker, we need to infer the actual home directory from the env var itself
+    // The user likely set HOST_WORKSPACE_ROOT=~/src in .env, which means their home + /src
+    
+    // CRITICAL: Just use the value as-is and let file queries match against it
+    // Files are stored with host paths, and queries should use the same format
+    // console.log(`🏠 Host workspace root (Docker with tilde): keeping as ${hostRoot} for path matching`);
+    return normalizeSlashes(hostRoot);
+  }
+  
+  // When running in Docker without tilde, use as-is
+  if (isRunningInDocker()) {
+    const normalized = normalizeSlashes(hostRoot);
+    // console.log(`🏠 Host workspace root (Docker): ${hostRoot} -> ${normalized}`);
+    return normalized;
+  }
+  
+  // When running locally (not in Docker), expand tilde and resolve normally
   const normalizedRoot = normalizeAndResolve(hostRoot);
-  console.log(`🏠 Host workspace root (from env): ${hostRoot} -> ${normalizedRoot}`);
+  // console.log(`🏠 Host workspace root (local): ${hostRoot} -> ${normalizedRoot}`);
   return normalizedRoot;
 }
 
@@ -210,7 +232,43 @@ export function translateHostToContainer(hostPath: string): string {
   const normalizedPath = normalizeAndResolve(hostPath);
   
   // Get normalized host root
-  const hostRoot = getHostWorkspaceRoot();
+  const hostRootEnv = process.env.HOST_WORKSPACE_ROOT;
+  
+  if (!hostRootEnv) {
+    console.warn('⚠️  HOST_WORKSPACE_ROOT not set, cannot translate path');
+    return normalizedPath;
+  }
+  
+  // If HOST_WORKSPACE_ROOT contains tilde, we can't use it for string matching
+  // Instead, we need to figure out the actual host path from the mounted workspace
+  // Docker mounts host path to /workspace, so we can infer the mapping
+  let hostRoot: string;
+  
+  if (hostRootEnv.startsWith('~')) {
+    // We can't expand ~ reliably in Docker (os.homedir() returns container's home)
+    // So we need to infer from the normalized path itself
+    // If the path starts with common patterns, extract the workspace root
+    const pathParts = normalizedPath.split('/');
+    
+    // For paths like /Users/username/src/project, extract /Users/username/src
+    // For paths like /home/username/workspace/project, extract /home/username/workspace
+    if (pathParts.length >= 4) {
+      // Try to find a common workspace pattern
+      const possibleRoots = [
+        pathParts.slice(0, 4).join('/'),  // /Users/username/src
+        pathParts.slice(0, 5).join('/'),  // /Users/username/Documents/workspace
+      ];
+      
+      // Use the first one that makes sense (we'll verify later)
+      hostRoot = possibleRoots[0];
+      console.log(`📍 Inferred host root from path: ${hostRoot} (env has unexpanded tilde: ${hostRootEnv})`);
+    } else {
+      console.warn(`⚠️  Cannot infer host root from short path: ${normalizedPath}`);
+      hostRoot = hostRootEnv;  // Fallback
+    }
+  } else {
+    hostRoot = normalizeSlashes(hostRootEnv);
+  }
   
   // If already a container path, return as-is (idempotent)
   if (normalizedPath.startsWith('/workspace')) {

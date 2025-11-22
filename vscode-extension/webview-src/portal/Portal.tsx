@@ -31,6 +31,8 @@ export function Portal() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [apiUrl, setApiUrl] = useState('http://localhost:9042');
+  const [authHeaders, setAuthHeaders] = useState<Record<string, string>>({});
+  const authHeadersRef = React.useRef<Record<string, string>>({});
   const [model, setModel] = useState('gpt-4.1');
   const [attachments, setAttachments] = useState<AttachedFile[]>([]);
   const [showVectorModal, setShowVectorModal] = useState(false);
@@ -51,6 +53,11 @@ export function Portal() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length]);
 
+  // Sync authHeaders to ref
+  React.useEffect(() => {
+    authHeadersRef.current = authHeaders;
+  }, [authHeaders]);
+
   // Listen for messages from extension
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -58,7 +65,7 @@ export function Portal() {
       switch (message.command) {
         case 'config':
           setApiUrl(message.apiUrl || 'http://localhost:9042');
-          setModel(message.model || 'gpt-4.1');
+          setAuthHeaders(message.authHeaders || {});
           break;
       }
     };
@@ -138,7 +145,7 @@ export function Portal() {
 
       const response = await fetch(`${apiUrl}/v1/chat/completions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeadersRef.current },
         body: JSON.stringify(requestBody)
       });
 

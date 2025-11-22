@@ -47,15 +47,52 @@ export class NodeManagerPanel {
     this._panel.webview.onDidReceiveMessage(
       async (message) => {
         switch (message.command) {
-          case 'ready':
+          case 'ready': {
+            // Webview is loaded and ready - check security status first
+            let authHeaders = {};
+            const workspaceConfig = vscode.workspace.getConfiguration('mimir');
+            const apiUrl = workspaceConfig.get<string>('apiUrl', 'http://localhost:9042');
+            
+            try {
+              // Check if server has security enabled
+              console.log('[NodeManagerPanel] Checking server security status...');
+              const configResponse = await fetch(`${apiUrl}/auth/config`);
+              const serverConfig: any = await configResponse.json();
+              
+              const securityEnabled = serverConfig.devLoginEnabled || (serverConfig.oauthProviders && serverConfig.oauthProviders.length > 0);
+              console.log('[NodeManagerPanel] Server security enabled:', securityEnabled);
+              
+              if (securityEnabled) {
+                // Use the global authManager instance (has OAuth resolver)
+                const authManager = (global as any).mimirAuthManager;
+                
+                if (authManager) {
+                  console.log('[NodeManagerPanel] Authenticating...');
+                  const authenticated = await authManager.authenticate();
+                  console.log('[NodeManagerPanel] Authentication result:', authenticated);
+                  
+                  authHeaders = await authManager.getAuthHeaders();
+                  console.log('[NodeManagerPanel] Auth headers:', Object.keys(authHeaders).length > 0 ? 'Present' : 'Empty');
+                } else {
+                  console.error('[NodeManagerPanel] No authManager available');
+                }
+              } else {
+                console.log('[NodeManagerPanel] Security disabled - no auth needed');
+              }
+            } catch (error) {
+              console.error('[NodeManagerPanel] Failed to check security status:', error);
+            }
+            
             // Send configuration when webview is ready
             this._panel.webview.postMessage({
               command: 'config',
               config: {
                 apiUrl: vscode.workspace.getConfiguration('mimir').get('apiUrl', 'http://localhost:9042')
-              }
+              },
+              authHeaders: authHeaders
             });
             break;
+          }
 
           case 'confirmDelete': {
             // Show native confirmation dialog
@@ -142,7 +179,7 @@ export class NodeManagerPanel {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; connect-src http://localhost:* http://127.0.0.1:*;">
+      <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; connect-src ${webview.cspSource} http://localhost:* http://127.0.0.1:*;">
       <title>Node Manager</title>
     </head>
     <body>

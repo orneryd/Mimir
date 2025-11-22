@@ -5,6 +5,7 @@
 
 import { Router, Request, Response } from 'express';
 import neo4j from 'neo4j-driver';
+import { requirePermission } from '../middleware/rbac.js';
 
 const router = Router();
 
@@ -12,7 +13,7 @@ const router = Router();
  * GET /api/nodes/types
  * Get all node types (excluding file/chunk types)
  */
-router.get('/types', async (req: Request, res: Response) => {
+router.get('/types', requirePermission('nodes:read'), async (req: Request, res: Response) => {
   const driver = neo4j.driver(
     process.env.NEO4J_URI || 'bolt://localhost:7687',
     neo4j.auth.basic(
@@ -60,7 +61,7 @@ router.get('/types', async (req: Request, res: Response) => {
  * GET /api/nodes/vector-search
  * Vector search across nodes (excluding files and chunks)
  */
-router.get('/vector-search', async (req: Request, res: Response) => {
+router.get('/vector-search', requirePermission('search:execute'), async (req: Request, res: Response) => {
   try {
     const query = req.query.query as string;
     const limit = parseInt(req.query.limit as string, 10) || 50;
@@ -134,7 +135,7 @@ router.get('/vector-search', async (req: Request, res: Response) => {
  * GET /api/nodes/types/:type
  * Get paginated list of nodes of a specific type
  */
-router.get('/types/:type', async (req: Request, res: Response) => {
+router.get('/types/:type', requirePermission('nodes:read'), async (req: Request, res: Response) => {
   const { type } = req.params;
   const page = Math.floor(parseInt(req.query.page as string, 10)) || 1;
   const limit = Math.floor(parseInt(req.query.limit as string, 10)) || 20;
@@ -231,7 +232,7 @@ router.get('/types/:type', async (req: Request, res: Response) => {
  * GET /api/nodes/types/:type/:id/details
  * Get detailed information about a specific node including edges
  */
-router.get('/types/:type/:id/details', async (req: Request, res: Response) => {
+router.get('/types/:type/:id/details', requirePermission('nodes:read'), async (req: Request, res: Response) => {
   const { type, id } = req.params;
 
   const driver = neo4j.driver(
@@ -336,7 +337,7 @@ router.get('/types/:type/:id/details', async (req: Request, res: Response) => {
  * DELETE /api/nodes/:id
  * Delete a node and all its edges
  */
-router.delete('/:id', async (req: Request, res: Response) => {
+router.delete('/:id', requirePermission('nodes:delete'), async (req: Request, res: Response) => {
   const { id } = req.params;
 
   const driver = neo4j.driver(
@@ -410,7 +411,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
  * POST /api/nodes/:id/embeddings
  * Generate or regenerate embeddings for a specific node
  */
-router.post('/:id/embeddings', async (req: Request, res: Response) => {
+router.post('/:id/embeddings', requirePermission('nodes:write'), async (req: Request, res: Response) => {
   const { id } = req.params;
 
   const driver = neo4j.driver(
@@ -585,7 +586,7 @@ router.post('/:id/embeddings', async (req: Request, res: Response) => {
  * POST /api/nodes
  * Create a new node
  */
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', requirePermission('nodes:write'), async (req: Request, res: Response) => {
   const { type, properties } = req.body;
 
   if (!type) {
@@ -617,7 +618,7 @@ router.post('/', async (req: Request, res: Response) => {
  * PUT /api/nodes/:id
  * Update a node (full update)
  */
-router.put('/:id', async (req: Request, res: Response) => {
+router.put('/:id', requirePermission('nodes:write'), async (req: Request, res: Response) => {
   const { id } = req.params;
   const { properties } = req.body;
 
@@ -658,7 +659,7 @@ router.put('/:id', async (req: Request, res: Response) => {
  * PATCH /api/nodes/:id
  * Partially update a node
  */
-router.patch('/:id', async (req: Request, res: Response) => {
+router.patch('/:id', requirePermission('nodes:write'), async (req: Request, res: Response) => {
   const { id } = req.params;
   const properties = req.body;
 
@@ -699,7 +700,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
  * GET /api/nodes/:id
  * Get a single node by ID (catch-all route - must be last)
  */
-router.get('/:id', async (req: Request, res: Response) => {
+router.get('/:id', requirePermission('nodes:read'), async (req: Request, res: Response) => {
   const { id } = req.params;
 
   try {

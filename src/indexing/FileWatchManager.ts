@@ -33,6 +33,7 @@ export class FileWatchManager {
   private indexingQueue: Array<() => Promise<void>> = [];
   private progressTrackers: Map<string, IndexingProgress> = new Map();
   private indexingPromises: Map<string, Promise<void>> = new Map();
+  private progressCallbacks: Array<(progress: IndexingProgress) => void> = [];
 
   constructor(private driver: Driver) {
     this.indexer = new FileIndexer(driver);
@@ -40,6 +41,36 @@ export class FileWatchManager {
     // Read max concurrent indexing from env, default to 1 (embeddings hit single Ollama instance)
     this.maxConcurrentIndexing = parseInt(process.env.MIMIR_INDEXING_THREADS || '1', 10);
     console.log(`📊 FileWatchManager initialized with max ${this.maxConcurrentIndexing} concurrent indexing threads`);
+  }
+  
+  /**
+   * Register a callback for real-time progress updates
+   */
+  onProgress(callback: (progress: IndexingProgress) => void): () => void {
+    this.progressCallbacks.push(callback);
+    console.log(`[FileWatchManager] Registered progress callback. Total callbacks: ${this.progressCallbacks.length}`);
+    // Return unsubscribe function
+    return () => {
+      const index = this.progressCallbacks.indexOf(callback);
+      if (index > -1) {
+        this.progressCallbacks.splice(index, 1);
+        console.log(`[FileWatchManager] Unregistered progress callback. Total callbacks: ${this.progressCallbacks.length}`);
+      }
+    };
+  }
+  
+  /**
+   * Emit progress update to all registered callbacks
+   */
+  private emitProgress(progress: IndexingProgress): void {
+    console.log(`[FileWatchManager] Emitting progress for ${progress.path} to ${this.progressCallbacks.length} callbacks`);
+    for (const callback of this.progressCallbacks) {
+      try {
+        callback(progress);
+      } catch (error) {
+        console.error('Error in progress callback:', error);
+      }
+    }
   }
 
   /**
@@ -121,14 +152,16 @@ export class FileWatchManager {
     this.abortControllers.set(config.path, abortController);
 
     // Initialize progress tracker
-    this.progressTrackers.set(config.path, {
+    const initialProgress = {
       path: config.path,
       totalFiles: 0,
       indexed: 0,
       skipped: 0,
       errored: 0,
-      status: 'queued'
-    });
+      status: 'queued' as const
+    };
+    this.progressTrackers.set(config.path, initialProgress);
+    this.emitProgress(initialProgress);
 
     try {
       // Wait for an available slot
@@ -141,6 +174,7 @@ export class FileWatchManager {
         if (progress) {
           progress.status = 'cancelled';
           progress.endTime = Date.now();
+          this.emitProgress(progress);
         }
         return;
       }
@@ -150,6 +184,7 @@ export class FileWatchManager {
       if (progress) {
         progress.status = 'indexing';
         progress.startTime = Date.now();
+        this.emitProgress(progress);
       }
 
       console.log(`🔄 Starting indexing for: ${config.path}`);
@@ -160,6 +195,7 @@ export class FileWatchManager {
       if (finalProgress) {
         finalProgress.status = 'completed';
         finalProgress.endTime = Date.now();
+        this.emitProgress(finalProgress);
       }
       
     } catch (error: any) {
@@ -169,12 +205,14 @@ export class FileWatchManager {
         if (progress) {
           progress.status = 'cancelled';
           progress.endTime = Date.now();
+          this.emitProgress(progress);
         }
       } else {
         console.error(`❌ Error indexing ${config.path}:`, error);
         if (progress) {
           progress.status = 'error';
           progress.endTime = Date.now();
+          this.emitProgress(progress);
         }
         throw error;
       }
@@ -257,17 +295,20 @@ export class FileWatchManager {
    * Index all files in a folder (one-time operation)
    */
   async indexFolder(folderPath: string, config: WatchConfig, signal?: AbortSignal): Promise<number> {
-    console.log(`📂 Indexing folder: ${folderPath}`);
+    // Translate host path to container path for file operations
+    const { translateHostToContainer } = await import('../utils/path-utils.js');
+    const containerPath = translateHostToContainer(folderPath);
+    console.log(`📂 Indexing folder: ${folderPath} (container: ${containerPath})`);
     
     const gitignoreHandler = new GitignoreHandler();
-    await gitignoreHandler.loadIgnoreFile(folderPath);
+    await gitignoreHandler.loadIgnoreFile(containerPath);
     
     if (config.ignore_patterns.length > 0) {
       gitignoreHandler.addPatterns(config.ignore_patterns);
     }
 
     const files = await this.walkDirectory(
-      folderPath,
+      containerPath,
       gitignoreHandler,
       config.file_patterns,
       config.recursive
@@ -277,6 +318,7 @@ export class FileWatchManager {
     const progress = this.progressTrackers.get(config.path);
     if (progress) {
       progress.totalFiles = files.length;
+      this.emitProgress(progress);
     }
 
     let indexed = 0;
@@ -291,22 +333,25 @@ export class FileWatchManager {
     for (const file of files) {
       // Check if indexing has been cancelled
       if (signal?.aborted) {
-        console.log(`🛑 Indexing cancelled for ${folderPath} (indexed ${indexed}/${files.length} files before cancellation)`);
+        console.log(`🛑 Indexing cancelled for ${config.path} (indexed ${indexed}/${files.length} files before cancellation)`);
         throw new Error('Indexing cancelled');
       }
 
-      // Update current file in progress
+      // Update current file in progress and emit BEFORE indexing
       if (progress) {
         progress.currentFile = path.basename(file);
+        this.emitProgress(progress);
       }
 
       try {
-        await this.indexer.indexFile(file, folderPath, generateEmbeddings);
+        await this.indexer.indexFile(file, containerPath, generateEmbeddings);
         indexed++;
         
-        // Update progress
+        // Update progress and emit event after indexing
         if (progress) {
           progress.indexed = indexed;
+          progress.currentFile = undefined; // Clear current file after completion
+          this.emitProgress(progress);
         }
         
         // Add delay when generating embeddings to avoid overwhelming Ollama
@@ -316,26 +361,32 @@ export class FileWatchManager {
           await new Promise(resolve => setTimeout(resolve, delay));
         }
         
-        if (indexed % 10 === 0) {
-          console.log(`  Indexed ${indexed}/${files.length} files...`);
+        if ((indexed + skipped) % 10 === 0) {
+          const processed = indexed + skipped + errored;
+          console.log(`  Processed ${processed}/${files.length} files (✅ ${indexed} indexed, ⏭️  ${skipped} skipped, ❌ ${errored} errors)...`);
         }
       } catch (error: any) {
         if (error.message === 'Binary file') {
           skipped++;
           if (progress) {
             progress.skipped = skipped;
+            this.emitProgress(progress);
           }
         } else {
           console.error(`Failed to index ${file}:`, error.message);
           errored++;
           if (progress) {
             progress.errored = errored;
+            this.emitProgress(progress);
           }
         }
       }
     }
 
-    console.log(`✅ Indexed ${indexed} files from ${folderPath} (skipped: ${skipped}, errors: ${errored})`);
+    const totalProcessed = indexed + skipped + errored;
+    console.log(`✅ Indexing complete for ${config.path}`);
+    console.log(`   📊 Processed: ${totalProcessed}/${files.length} files`);
+    console.log(`   ✅ Indexed: ${indexed} | ⏭️  Skipped: ${skipped} | ❌ Errors: ${errored}`);
     
     // Update stats in Neo4j
     await this.configManager.updateStats(config.id, indexed);

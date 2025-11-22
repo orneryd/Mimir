@@ -29,6 +29,7 @@ import type { AgentType } from "./types/context.types.js";
 // File Indexing
 import { FileWatchManager } from "./indexing/FileWatchManager.js";
 import { WatchConfigManager } from "./indexing/WatchConfigManager.js";
+import { translateHostToContainer } from "./utils/path-utils.js";
 import {
   createFileIndexingTools,
   handleIndexFolder,
@@ -62,7 +63,7 @@ import {
 // ============================================================================
 
 let graphManager: IGraphManager;
-let fileWatchManager: FileWatchManager;
+export let fileWatchManager: FileWatchManager;
 export let allTools: any[] = [];
 
 // ============================================================================
@@ -86,6 +87,7 @@ export const server = new Server(
 // ============================================================================
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
+  console.error(`[MCP] tools/list called, returning ${allTools.length} tools`);
   return { tools: allTools };
 });
 
@@ -403,21 +405,31 @@ async function restoreFileWatchers() {
   console.error('🔄 Loading watch configurations from Neo4j...');
   
   const configManager = new WatchConfigManager(graphManager.getDriver());
-  const configs = await configManager.listActive();
+  const configs = await configManager.listAll();
   
-  console.error(`Found ${configs.length} active watch configurations`);
+  // Filter to only active watches
+  const activeConfigs = configs.filter(c => c.status === 'active');
+  const inactiveCount = configs.length - activeConfigs.length;
   
-  for (const config of configs) {
+  console.error(`Found ${configs.length} watch configurations (${activeConfigs.length} active, ${inactiveCount} inactive)`);
+  
+  for (const config of activeConfigs) {
     try {
+      // Translate host path to container path for existence check AND indexing
+      const containerPath = translateHostToContainer(config.path);
+      console.error(`🔍 Checking path: ${config.path} -> ${containerPath}`);
+      
       const pathExists = await import('fs').then(fs => 
-        fs.promises.access(config.path).then(() => true).catch(() => false)
+        fs.promises.access(containerPath).then(() => true).catch(() => false)
       );
       
       if (pathExists) {
+        // Use original config (path is host path for UI/SSE matching)
+        // FileWatchManager will translate to container internally when needed
         await fileWatchManager.startWatch(config);
-        console.error(`✅ Restored watcher: ${config.path}`);
-      } else {
-        console.error(`⚠️  Path no longer exists: ${config.path}`);
+        console.error(`✅ Restored watcher: ${config.path} (container: ${containerPath})`);
+      } else{
+        console.error(`⚠️  Path no longer exists: ${containerPath} (from ${config.path})`);
         await configManager.markInactive(config.id, 'path_not_found');
       }
     } catch (error: any) {

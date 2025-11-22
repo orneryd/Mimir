@@ -12,18 +12,18 @@ export class PortalPanel {
 
     this._panel.webview.html = this._getHtmlForWebview(this._panel.webview, extensionUri);
     
-    // Send initial config
-    this._panel.webview.postMessage({
-      command: 'config',
-      apiUrl: this._apiUrl,
-      model: vscode.workspace.getConfiguration('mimir').get('model', 'gpt-4.1')
-    });
+    // Send initial config with auth headers
+    this._sendConfig();
 
     this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
 
     this._panel.webview.onDidReceiveMessage(
       async (message) => {
         switch (message.command) {
+          case 'ready': {
+            this._sendConfig();
+            break;
+          }
           case 'saveVectorSettings':
             // Save to workspace configuration
             await vscode.workspace.getConfiguration('mimir').update(
@@ -38,6 +38,35 @@ export class PortalPanel {
       null,
       this._disposables
     );
+  }
+
+  private async _sendConfig() {
+    let authHeaders = {};
+    try {
+      // Check if server has security enabled
+      const configResponse = await fetch(`${this._apiUrl}/auth/config`);
+      const serverConfig: any = await configResponse.json();
+      
+      const securityEnabled = serverConfig.devLoginEnabled || (serverConfig.oauthProviders && serverConfig.oauthProviders.length > 0);
+      
+      if (securityEnabled) {
+        // Use the global authManager instance (has OAuth resolver)
+        const authManager = (global as any).mimirAuthManager;
+        if (authManager) {
+          await authManager.authenticate();
+          authHeaders = await authManager.getAuthHeaders();
+        }
+      }
+    } catch (error) {
+      console.error('[PortalPanel] Failed to check security status:', error);
+    }
+
+    this._panel.webview.postMessage({
+      command: 'config',
+      apiUrl: this._apiUrl,
+      model: vscode.workspace.getConfiguration('mimir').get('model', 'gpt-4.1'),
+      authHeaders: authHeaders
+    });
   }
 
   public static createOrShow(extensionUri: vscode.Uri, apiUrl: string) {
@@ -71,11 +100,7 @@ export class PortalPanel {
   public static updateAllPanels(config: { apiUrl: string }) {
     if (PortalPanel.currentPanel) {
       PortalPanel.currentPanel._apiUrl = config.apiUrl;
-      PortalPanel.currentPanel._panel.webview.postMessage({
-        command: 'config',
-        apiUrl: config.apiUrl,
-        model: vscode.workspace.getConfiguration('mimir').get('model', 'gpt-4.1')
-      });
+      PortalPanel.currentPanel._sendConfig();
     }
   }
 
@@ -93,7 +118,7 @@ export class PortalPanel {
         <meta http-equiv="Content-Security-Policy" content="default-src 'none'; 
           script-src 'nonce-${nonce}' 'unsafe-eval'; 
           style-src ${webview.cspSource} 'unsafe-inline'; 
-          connect-src http: https:;
+          connect-src ${webview.cspSource} http://localhost:* http://127.0.0.1:*;
           font-src ${webview.cspSource};">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Mimir Chat</title>

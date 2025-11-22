@@ -10,6 +10,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { EmbeddingsService, ChunkEmbeddingResult } from './EmbeddingsService.js';
 import { DocumentParser } from './DocumentParser.js';
+import { getHostWorkspaceRoot } from '../utils/path-utils.js';
 
 export interface IndexResult {
   file_node_id: string;
@@ -58,9 +59,13 @@ export class FileIndexer {
       return containerPath;
     }
     
-    // Replace container workspace root with host workspace root
+    // Expand tilde in HOST_WORKSPACE_ROOT for consistent storage
+    // Use getHostWorkspaceRoot() which properly expands tilde
+    const expandedHostRoot = getHostWorkspaceRoot();
+    
+    // Replace container workspace root with expanded host workspace root
     if (containerPath.startsWith(workspaceRoot)) {
-      return containerPath.replace(workspaceRoot, hostWorkspaceRoot);
+      return containerPath.replace(workspaceRoot, expandedHostRoot);
     }
     
     return containerPath;
@@ -347,7 +352,7 @@ export class FileIndexer {
   }
 
   /**
-   * Check if file should be skipped (binary, images, archives, etc.)
+   * Check if file should be skipped (binary, images, archives, sensitive files, etc.)
    * Note: PDF and DOCX are in this list but handled separately via DocumentParser
    */
   private shouldSkipFile(filePath: string, extension: string): boolean {
@@ -376,7 +381,13 @@ export class FileIndexer {
       // Lock files (often auto-generated)
       '.lock',
       // Other binary formats
-      '.pkl', '.pickle', '.parquet', '.avro', '.protobuf', '.pb'
+      '.pkl', '.pickle', '.parquet', '.avro', '.protobuf', '.pb',
+      // Sensitive file extensions (Industry Standard Security)
+      '.pem', '.key', '.p12', '.pfx', '.cer', '.crt', '.der', // Certificates & Private Keys
+      '.keystore', '.jks', '.bks', // Java keystores
+      '.ppk', '.pub', // SSH keys
+      '.credentials', '.secret', // Credential files
+      '.log' // Logs (may contain sensitive data)
     ]);
     
     // Check extension
@@ -384,7 +395,7 @@ export class FileIndexer {
       return true;
     }
     
-    // Skip files without extension that are likely binary
+    // Skip files without extension that are likely binary or auto-generated
     const fileName = path.basename(filePath);
     const binaryFileNames = new Set([
       'package-lock.json', // Too large and auto-generated
@@ -397,6 +408,32 @@ export class FileIndexer {
     
     if (binaryFileNames.has(fileName)) {
       return true;
+    }
+    
+    // Skip sensitive files by name (Industry Standard Security)
+    const sensitiveFileNames = new Set([
+      '.env', '.env.local', '.env.development', '.env.production', '.env.test', '.env.staging',
+      '.npmrc', '.yarnrc', '.pypirc', // Package manager configs with tokens
+      '.netrc', '_netrc', // FTP/HTTP credentials
+      'id_rsa', 'id_dsa', 'id_ecdsa', 'id_ed25519', // SSH private keys
+      'credentials', 'secrets.yml', 'secrets.yaml', 'secrets.json',
+      'master.key', 'production.key' // Rails secrets
+    ]);
+    
+    if (sensitiveFileNames.has(fileName)) {
+      return true;
+    }
+    
+    // Skip files with sensitive patterns in name
+    const lowerFileName = fileName.toLowerCase();
+    const sensitivePatterns = [
+      'password', 'passwd', 'secret', 'credential', 'token', 'apikey', 'api_key', 'private_key'
+    ];
+    
+    for (const pattern of sensitivePatterns) {
+      if (lowerFileName.includes(pattern)) {
+        return true;
+      }
     }
     
     return false;

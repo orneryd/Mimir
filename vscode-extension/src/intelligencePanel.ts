@@ -18,13 +18,51 @@ export class IntelligencePanel {
     this._panel.webview.onDidReceiveMessage(
       async (message) => {
         switch (message.command) {
-          case 'ready':
-            // Webview is loaded and ready - send config
+          case 'ready': {
+            // Webview is loaded and ready - check security status first
+            let authHeaders = {};
+            
+            try {
+              // Check if server has security enabled
+              console.log('[IntelligencePanel] Checking server security status...');
+              const configResponse = await fetch(`${this._apiUrl}/auth/config`);
+              const serverConfig: any = await configResponse.json();
+              
+              const securityEnabled = serverConfig.devLoginEnabled || (serverConfig.oauthProviders && serverConfig.oauthProviders.length > 0);
+              console.log('[IntelligencePanel] Server security enabled:', securityEnabled);
+              
+              if (securityEnabled) {
+                // Use the global authManager instance (has OAuth resolver)
+                const authManager = (global as any).mimirAuthManager;
+                
+                if (authManager) {
+                  // First authenticate (will use cached credentials if available)
+                  console.log('[IntelligencePanel] Authenticating...');
+                  const authenticated = await authManager.authenticate();
+                  console.log('[IntelligencePanel] Authentication result:', authenticated);
+                  
+                  // Then get auth headers
+                  authHeaders = await authManager.getAuthHeaders();
+                  console.log('[IntelligencePanel] Auth headers:', Object.keys(authHeaders).length > 0 ? 'Present' : 'Empty');
+                } else {
+                  console.error('[IntelligencePanel] No authManager available');
+                }
+              } else {
+                console.log('[IntelligencePanel] Security disabled - no auth needed');
+              }
+            } catch (error) {
+              console.error('[IntelligencePanel] Failed to check security status:', error);
+              // On error, fall back to trying auth
+            }
+            
+            console.log('[IntelligencePanel] Sending config to webview');
             this._panel.webview.postMessage({
               command: 'config',
-              apiUrl: this._apiUrl
+              apiUrl: this._apiUrl,
+              authHeaders: authHeaders
             });
             break;
+          }
           case 'selectFolder':
             await this._handleSelectFolder();
             break;
@@ -32,7 +70,7 @@ export class IntelligencePanel {
             this._showMessage(message.type, message.message);
             break;
           case 'confirmRemoveFolder':
-            await this._handleConfirmRemoveFolder(message.path);
+            await this._handleConfirmRemoveFolder(message.id, message.path);
             break;
         }
       },
@@ -89,7 +127,7 @@ export class IntelligencePanel {
       canSelectFolders: true,
       canSelectMany: false,
       openLabel: 'Select Folder to Index',
-      defaultUri: workspaceFolders[0].uri
+      defaultUri: workspaceFolders.length > 0 ? workspaceFolders[0].uri : undefined
     });
 
     if (!folderUri || folderUri.length === 0) {
@@ -97,29 +135,6 @@ export class IntelligencePanel {
     }
 
     const selectedPath = folderUri[0].fsPath;
-
-    // Fetch environment config from Mimir server
-    let serverConfig: { hostWorkspaceRoot: string; workspaceRoot: string; home: string } | null = null;
-    try {
-      const response = await fetch(`${this._apiUrl}/api/index-config`);
-      if (response.ok) {
-        serverConfig = await response.json() as { hostWorkspaceRoot: string; workspaceRoot: string; home: string };
-        console.log('[IntelligencePanel] Fetched server config:', serverConfig);
-      }
-    } catch (error) {
-      console.error('[IntelligencePanel] Failed to fetch server config:', error);
-    }
-
-    // Validate path is within workspace
-    const validation = this._validateAndTranslatePath(selectedPath, workspaceFolders, serverConfig);
-    
-    if (!validation.isValid) {
-      vscode.window.showErrorMessage(
-        `❌ Cannot index folder: ${validation.error}\n\nFolder: ${selectedPath}\n\nOnly folders within your mounted workspace can be indexed.`,
-        { modal: true }
-      );
-      return;
-    }
 
     // Show progress indicator
     await vscode.window.withProgress({
@@ -130,15 +145,23 @@ export class IntelligencePanel {
       progress.report({ message: 'Sending request to Mimir server...' });
 
       try {
-        // Call API to add folder
+        // Get auth headers
+        const { AuthManager } = require('./authManager');
+        const context = (global as any).mimirExtensionContext;
+        let authHeaders = {};
+        if (context) {
+          const authManager = new AuthManager(context, this._apiUrl);
+          await authManager.authenticate();
+          authHeaders = await authManager.getAuthHeaders();
+        }
+
+        // Call API to add folder - server handles ALL validation and translation
         const response = await fetch(`${this._apiUrl}/api/index-folder`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
           body: JSON.stringify({
-            path: validation.containerPath, // Use translated container path
-            hostPath: selectedPath, // Also send original host path for reference
-            recursive: true,
-            generate_embeddings: true
+            path: selectedPath, // Send path as-is, server will handle everything
+            recursive: true
           })
         });
 
@@ -150,7 +173,7 @@ export class IntelligencePanel {
         progress.report({ message: 'Folder added successfully!' });
 
         vscode.window.showInformationMessage(
-          `✅ Folder added to indexing:\n\nHost: ${selectedPath}\nContainer: ${validation.containerPath}\n\nIndexing will begin shortly.`
+          `✅ Folder added to indexing:\n\n${selectedPath}\n\nIndexing will begin shortly.`
         );
 
         // Refresh the webview
@@ -162,115 +185,7 @@ export class IntelligencePanel {
     });
   }
 
-  private _validateAndTranslatePath(
-    hostPath: string, 
-    workspaceFolders: readonly vscode.WorkspaceFolder[],
-    serverConfig: { hostWorkspaceRoot: string; workspaceRoot: string; home: string } | null = null
-  ): {
-    isValid: boolean;
-    error?: string;
-    containerPath?: string;
-  } {
-    // Get environment variables for path translation
-    // Use server's HOST_WORKSPACE_ROOT value, but LOCAL HOME for expansion
-    let hostWorkspaceRoot = serverConfig?.hostWorkspaceRoot || process.env.HOST_WORKSPACE_ROOT || '';
-    const containerWorkspaceRoot = serverConfig?.workspaceRoot || process.env.WORKSPACE_ROOT || '/workspace';
-    // ALWAYS use local HOME directory (VSCode runs on host, not in container)
-    const homeDir = process.env.HOME || process.env.USERPROFILE || '';
-
-    console.log('[IntelligencePanel] HOST_WORKSPACE_ROOT:', hostWorkspaceRoot || '(not set)');
-    console.log('[IntelligencePanel] HOME (local):', homeDir || '(not set)');
-    console.log('[IntelligencePanel] HOME (server):', serverConfig?.home || '(not set)');
-    console.log('[IntelligencePanel] Selected path:', hostPath);
-    console.log('[IntelligencePanel] Using server config:', serverConfig ? 'yes' : 'no');
-
-    // Expand tilde (~) in HOST_WORKSPACE_ROOT if present
-    // Use LOCAL HOME directory for expansion (not container's)
-    if (hostWorkspaceRoot.startsWith('~/') || hostWorkspaceRoot === '~') {
-      if (homeDir) {
-        hostWorkspaceRoot = hostWorkspaceRoot.replace(/^~/, homeDir);
-        console.log('[IntelligencePanel] Expanded HOST_WORKSPACE_ROOT to:', hostWorkspaceRoot);
-      }
-    }
-
-    // Normalize paths
-    const normalizedHostPath = path.normalize(hostPath);
-    console.log('[IntelligencePanel] Normalized path:', normalizedHostPath);
-
-    // Detect Windows (case-insensitive filesystem)
-    const isWindows = process.platform === 'win32';
-
-    // If HOST_WORKSPACE_ROOT is set, validate against it (Docker/container scenario)
-    if (hostWorkspaceRoot) {
-      const normalizedHostRoot = path.normalize(hostWorkspaceRoot);
-      
-      // Ensure root ends with separator to avoid false matches (e.g., /src matching /src-other)
-      const rootWithSep = normalizedHostRoot.endsWith(path.sep) ? normalizedHostRoot : normalizedHostRoot + path.sep;
-      
-      // Check if the selected path is within the mounted workspace (case-insensitive on Windows)
-      const pathToCheck = isWindows ? normalizedHostPath.toLowerCase() : normalizedHostPath;
-      const rootToCheck = isWindows ? rootWithSep.toLowerCase() : rootWithSep;
-      
-      // Also allow exact match (root itself)
-      if (!pathToCheck.startsWith(rootToCheck) && pathToCheck !== (isWindows ? normalizedHostRoot.toLowerCase() : normalizedHostRoot)) {
-        return {
-          isValid: false,
-          error: `Folder is outside the mounted workspace.\n\nMounted workspace: ${hostWorkspaceRoot} (expanded)\nSelected folder: ${hostPath}\n\nOnly folders within the mounted workspace can be indexed.`
-        };
-      }
-
-      // Translate path from host to container
-      const relativePath = path.relative(normalizedHostRoot, normalizedHostPath);
-      const containerPath = path.posix.join(containerWorkspaceRoot, relativePath.split(path.sep).join(path.posix.sep));
-
-      return {
-        isValid: true,
-        containerPath
-      };
-    }
-
-    // No HOST_WORKSPACE_ROOT set - validate against VSCode workspace folders (local development)
-    if (workspaceFolders.length === 0) {
-      return {
-        isValid: false,
-        error: 'No workspace folder is open and HOST_WORKSPACE_ROOT is not set.\n\nPlease either:\n1. Open a folder in VSCode (File → Open Folder)\n2. Set HOST_WORKSPACE_ROOT environment variable for Docker'
-      };
-    }
-
-    let isWithinWorkspace = false;
-
-    for (const folder of workspaceFolders) {
-      const folderPath = path.normalize(folder.uri.fsPath);
-      
-      // Ensure workspace path ends with separator to avoid false matches
-      const workspacePathWithSep = folderPath.endsWith(path.sep) ? folderPath : folderPath + path.sep;
-      
-      // Case-insensitive comparison on Windows
-      const pathToCheck = isWindows ? normalizedHostPath.toLowerCase() : normalizedHostPath;
-      const workspacePathToCheck = isWindows ? workspacePathWithSep.toLowerCase() : workspacePathWithSep;
-      
-      // Check if path starts with workspace path OR is exact match
-      if (pathToCheck.startsWith(workspacePathToCheck) || pathToCheck === (isWindows ? folderPath.toLowerCase() : folderPath)) {
-        isWithinWorkspace = true;
-        break;
-      }
-    }
-
-    if (!isWithinWorkspace) {
-      return {
-        isValid: false,
-        error: 'Selected folder is not within the current workspace'
-      };
-    }
-
-    // No translation needed (local development, no Docker)
-    return {
-      isValid: true,
-      containerPath: normalizedHostPath
-    };
-  }
-
-  private async _handleConfirmRemoveFolder(path: string) {
+  private async _handleConfirmRemoveFolder(id: string, path: string) {
     const confirmed = await vscode.window.showWarningMessage(
       `Remove folder from indexing?`,
       {
@@ -284,6 +199,7 @@ export class IntelligencePanel {
       // Send confirmation back to webview to proceed with deletion
       this._panel.webview.postMessage({
         command: 'removeFolderConfirmed',
+        id: id,
         path: path
       });
     }
@@ -317,7 +233,7 @@ export class IntelligencePanel {
         <meta http-equiv="Content-Security-Policy" content="default-src 'none'; 
           script-src 'nonce-${nonce}' 'unsafe-eval'; 
           style-src ${webview.cspSource} 'unsafe-inline'; 
-          connect-src http: https:;
+          connect-src ${this._apiUrl} http://localhost:* http://127.0.0.1:*;
           font-src ${webview.cspSource};">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Mimir Code Intelligence</title>

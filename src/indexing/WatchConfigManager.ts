@@ -105,17 +105,16 @@ export class WatchConfigManager {
   }
 
   /**
-   * List all active watch configurations
+   * List all watch configurations (active and inactive)
    */
-  async listActive(): Promise<WatchConfig[]> {
+  async listAll(): Promise<WatchConfig[]> {
     const session = this.driver.session();
     
     try {
       const result = await session.run(`
         MATCH (w:WatchConfig)
-        WHERE w.status = 'active'
         RETURN w
-        ORDER BY w.added_date ASC
+        ORDER BY w.status DESC, w.added_date ASC
       `);
       
       // Ensure records is an array before mapping
@@ -128,6 +127,32 @@ export class WatchConfigManager {
         return this.mapToWatchConfig(node.properties);
       });
       
+    } finally {
+      await session.close();
+    }
+  }
+
+  /**
+   * Reactivate an inactive watch configuration
+   */
+  async reactivate(id: string): Promise<void> {
+    const session = this.driver.session();
+    
+    try {
+      const result = await session.run(`
+        MATCH (w:WatchConfig {id: $id})
+        SET 
+          w.status = 'active',
+          w.error = null,
+          w.last_updated = datetime()
+        RETURN w
+      `, { id });
+      
+      if (result.records.length === 0) {
+        throw new Error(`Watch configuration with ID ${id} not found`);
+      }
+      
+      console.log(`✅ Reactivated watch config ${id} in database`);
     } finally {
       await session.close();
     }

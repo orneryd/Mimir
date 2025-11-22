@@ -1,0 +1,46 @@
+{
+  "version": "1.0",
+  "claimPath": "roles",
+  "defaultRole": "viewer",
+  "roleMappings": {
+    "admin": {
+      "description": "Full system access - can manage all resources",
+      "permissions": ["*"]
+    },
+    "developer": {
+      "description": "Read/write access for development work",
+      "permissions": [
+        "nodes:read",
+        "nodes:write",
+        "nodes:delete",
+        "search:execute",
+        "orchestration:read",
+        "orchestration:write",
+        "orchestration:execute",
+        "files:index",
+        "files:read",
+        "chat:use",
+        "mcp:*"
+      ]
+    },
+    "analyst": {
+      "description": "Read and query access for data analysis",
+      "permissions": [
+        "nodes:read",
+        "search:execute",
+        "orchestration:read",
+        "files:read",
+        "chat:use"
+      ]
+    },
+    "viewer": {
+      "description": "Read-only access to public resources",
+      "permissions": [
+        "nodes:read",
+        "search:execute",
+        "orchestration:read",
+        "files:read"
+      ]
+    }
+  }
+}

@@ -11,11 +11,13 @@ export class StudioPanel {
   private readonly _extensionUri: vscode.Uri;
   private _apiUrl: string; // Not readonly - can be updated via config changes
   private _disposables: vscode.Disposable[] = [];
+  private _getAuthHeaders: () => Promise<Record<string, string>>;
 
-  private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, apiUrl: string) {
+  private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, apiUrl: string, getAuthHeaders: () => Promise<Record<string, string>>) {
     this._panel = panel;
     this._extensionUri = extensionUri;
     this._apiUrl = apiUrl;
+    this._getAuthHeaders = getAuthHeaders;
 
     // Set HTML content
     this._panel.webview.html = this._getHtmlForWebview(this._panel.webview);
@@ -36,7 +38,7 @@ export class StudioPanel {
   /**
    * Create or show the Studio panel
    */
-  public static createOrShow(extensionUri: vscode.Uri, apiUrl: string) {
+  public static createOrShow(extensionUri: vscode.Uri, apiUrl: string, getAuthHeaders: () => Promise<Record<string, string>>) {
     const column = vscode.window.activeTextEditor
       ? vscode.window.activeTextEditor.viewColumn
       : undefined;
@@ -61,14 +63,14 @@ export class StudioPanel {
       }
     );
 
-    StudioPanel.currentPanel = new StudioPanel(panel, extensionUri, apiUrl);
+    StudioPanel.currentPanel = new StudioPanel(panel, extensionUri, apiUrl, getAuthHeaders);
   }
 
   /**
    * Revive panel from serialization (after VSCode restart)
    */
-  public static revive(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, state: any, apiUrl: string) {
-    StudioPanel.currentPanel = new StudioPanel(panel, extensionUri, apiUrl);
+  public static revive(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, state: any, apiUrl: string, getAuthHeaders: () => Promise<Record<string, string>>) {
+    StudioPanel.currentPanel = new StudioPanel(panel, extensionUri, apiUrl, getAuthHeaders);
   }
 
   /**
@@ -304,9 +306,10 @@ export class StudioPanel {
     try {
       vscode.window.showInformationMessage('🤖 PM Agent generating task plan...');
       
+      const authHeaders = await this._getAuthHeaders();
       const response = await fetch(`${this._apiUrl}/api/generate-plan`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({ prompt })
       });
 
@@ -350,9 +353,10 @@ export class StudioPanel {
       const workingDirectory = workspaceFolder?.uri.fsPath;
       
       // Call the orchestration API
+      const authHeaders = await this._getAuthHeaders();
       const response = await fetch(`${this._apiUrl}/api/execute-workflow`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({
           tasks: workflow.tasks || [],
           working_directory: workingDirectory
@@ -425,8 +429,10 @@ export class StudioPanel {
 
       for (const deliverable of deliverables) {
         try {
+          const authHeaders = await this._getAuthHeaders();
           const response = await fetch(
-            `${this._apiUrl}/api/execution-deliverable/${executionId}/${encodeURIComponent(deliverable.filename)}`
+            `${this._apiUrl}/api/execution-deliverable/${executionId}/${encodeURIComponent(deliverable.filename)}`,
+            { headers: authHeaders }
           );
 
           if (!response.ok) {
@@ -465,13 +471,24 @@ export class StudioPanel {
   }
 
   /**
-   * Connect to SSE stream for real-time execution updates
+   * Connect to the execution SSE stream for real-time updates
    */
-  private _connectToExecutionStream(executionId: string) {
+  private async _connectToExecutionStream(executionId: string) {
     console.log(`🔌 Connecting to SSE stream: ${this._apiUrl}/api/execution-stream/${executionId}`);
     
+    // Get auth headers
+    const authHeaders = await this._getAuthHeaders();
+    const authHeader = authHeaders['Authorization'];
+    let streamUrl = `${this._apiUrl}/api/execution-stream/${executionId}`;
+    
+    // For SSE, we need to pass the token as a query parameter since EventSource doesn't support custom headers
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      streamUrl += `?access_token=${encodeURIComponent(token)}`;
+    }
+    
     // Use fetch to get the response stream
-    fetch(`${this._apiUrl}/api/execution-stream/${executionId}`)
+    fetch(streamUrl)
       .then(response => {
         if (!response.ok) {
           throw new Error(`SSE connection failed: ${response.status}`);
@@ -652,7 +669,8 @@ export class StudioPanel {
   private async _loadPreambles() {
     try {
       console.log(`🔍 Fetching agents from: ${this._apiUrl}/api/agents?limit=100&offset=0`);
-      const response = await fetch(`${this._apiUrl}/api/agents?limit=100&offset=0`);
+      const authHeaders = await this._getAuthHeaders();
+      const response = await fetch(`${this._apiUrl}/api/agents?limit=100&offset=0`, { headers: authHeaders });
       
       console.log(`📡 Response status: ${response.status} ${response.statusText}`);
       
@@ -697,10 +715,12 @@ export class StudioPanel {
       console.log(`🤖 Creating ${agentType} agent: ${roleDescription.substring(0, 50)}...`);
       vscode.window.showInformationMessage(`🤖 Creating ${agentType} agent...`);
       
+      const authHeaders = await this._getAuthHeaders();
       const response = await fetch(`${this._apiUrl}/api/agents`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          ...authHeaders
         },
         body: JSON.stringify({
           roleDescription,

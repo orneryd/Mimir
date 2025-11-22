@@ -54,6 +54,8 @@ interface Pagination {
 
 export function NodeManager() {
   const [apiUrl, setApiUrl] = useState<string>('');
+  const [authHeaders, setAuthHeaders] = useState<Record<string, string>>({});
+  const authHeadersRef = React.useRef<Record<string, string>>({});
   const [types, setTypes] = useState<NodeType[]>([]);
   const [expandedType, setExpandedType] = useState<string | null>(null);
   const [nodes, setNodes] = useState<Record<string, Node[]>>({});
@@ -75,11 +77,19 @@ export function NodeManager() {
   });
 
   const loadTypes = useCallback(async () => {
+    if (!apiUrl) {
+      console.warn('[NodeManager] Cannot load types - apiUrl not set');
+      return;
+    }
+    
     setLoading(true);
     setError('');
     
     try {
-      const response = await fetch(`${apiUrl}/api/nodes/types`);
+      console.log('[NodeManager] Loading types with auth headers:', Object.keys(authHeadersRef.current).length > 0 ? 'Present' : 'Empty');
+      const response = await fetch(`${apiUrl}/api/nodes/types`, {
+        headers: authHeadersRef.current
+      });
       const data = await response.json();
       
       if (response.ok) {
@@ -88,22 +98,22 @@ export function NodeManager() {
         setError(data.error || 'Failed to load node types');
       }
     } catch (err: any) {
-      setError('Failed to connect to Mimir server');
-      console.error('Error loading types:', err);
+      setError(`Failed to load types: ${err.message}`);
     } finally {
       setLoading(false);
     }
   }, [apiUrl]);
 
-  // Load types when API URL is available
-  useEffect(() => {
-    if (apiUrl) {
-      loadTypes();
-    }
-  }, [apiUrl, loadTypes]);
+  // Don't auto-load types - wait for config message with auth headers
+  // loadTypes will be called from the config message handler after both apiUrl and authHeaders are set
 
 
   const loadNodesForType = useCallback(async (type: string, page: number = 1) => {
+    if (!apiUrl) {
+      console.warn('[NodeManager] Cannot load nodes - apiUrl not set');
+      return;
+    }
+    
     setLoading(true);
     setError('');
     
@@ -111,7 +121,9 @@ export function NodeManager() {
       const url = `${apiUrl}/api/nodes/types/${encodeURIComponent(type)}?page=${page}&limit=20`;
       console.log(`[NodeManager] Fetching nodes for type "${type}" from:`, url);
       
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        headers: authHeadersRef.current
+      });
       const data = await response.json();
       
       console.log(`[NodeManager] Response for type "${type}":`, { status: response.status, data });
@@ -139,7 +151,8 @@ export function NodeManager() {
     
     try {
       const response = await fetch(`${apiUrl}/api/nodes/${encodeURIComponent(nodeId)}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: authHeadersRef.current
       });
       const data = await response.json();
       
@@ -176,7 +189,24 @@ export function NodeManager() {
       const message = event.data;
       
       if (message.command === 'config') {
-        setApiUrl(message.config.apiUrl);
+        console.log('[NodeManager] Received config:', message.config.apiUrl, 'Auth headers:', Object.keys(message.authHeaders || {}).length > 0 ? 'Present' : 'Empty');
+        if (message.authHeaders && Object.keys(message.authHeaders).length > 0) {
+          console.log('[NodeManager] Auth header keys:', Object.keys(message.authHeaders));
+        }
+        const newApiUrl = message.config.apiUrl;
+        setApiUrl(newApiUrl);
+        setAuthHeaders(message.authHeaders || {});
+        
+        // Manually trigger loadTypes after setting both apiUrl and authHeaders
+        // This ensures authHeadersRef is updated before the fetch call
+        setTimeout(() => {
+          if (newApiUrl) {
+            console.log('[NodeManager] Triggering loadTypes with URL:', newApiUrl);
+            loadTypes();
+          } else {
+            console.warn('[NodeManager] No apiUrl provided, skipping loadTypes');
+          }
+        }, 0);
       } else if (message.command === 'deleteConfirmed') {
         handleDeleteNode(message.nodeId);
       }
@@ -190,13 +220,20 @@ export function NodeManager() {
     return () => window.removeEventListener('message', handleMessage);
   }, [handleDeleteNode]);
 
+  // Sync authHeaders to ref
+  React.useEffect(() => {
+    authHeadersRef.current = authHeaders;
+  }, [authHeaders]);
+
 
   const loadNodeDetails = async (type: string, id: string) => {
     setLoading(true);
     setError('');
     
     try {
-      const response = await fetch(`${apiUrl}/api/nodes/types/${encodeURIComponent(type)}/${encodeURIComponent(id)}/details`);
+      const response = await fetch(`${apiUrl}/api/nodes/types/${encodeURIComponent(type)}/${encodeURIComponent(id)}/details`, {
+        headers: authHeadersRef.current
+      });
       const data = await response.json();
       
       if (response.ok) {
@@ -255,7 +292,8 @@ export function NodeManager() {
     
     try {
       const response = await fetch(`${apiUrl}/api/nodes/${encodeURIComponent(node.id)}/embeddings`, {
-        method: 'POST'
+        method: 'POST',
+        headers: authHeadersRef.current
       });
       const data = await response.json();
       
@@ -300,6 +338,8 @@ export function NodeManager() {
   };
 
   const handleSearch = async () => {
+    console.log('[NodeManager] handleSearch called, query:', searchQuery);
+    
     if (!searchQuery.trim()) {
       // Clear search - show all nodes
       setSearchResults([]);
@@ -311,6 +351,8 @@ export function NodeManager() {
     setError('');
 
     try {
+      console.log('[NodeManager] Starting vector search with auth headers:', Object.keys(authHeadersRef.current).length > 0 ? 'Present' : 'Empty');
+      
       const params = new URLSearchParams({
         query: searchQuery,
         limit: searchSettings.limit.toString(),
@@ -333,7 +375,13 @@ export function NodeManager() {
         params.append('types', typesToSearch.join(','));
       }
 
-      const response = await fetch(`${apiUrl}/api/nodes/vector-search?${params}`);
+      console.log('[NodeManager] Fetching:', `${apiUrl}/api/nodes/vector-search?${params}`);
+      
+      const response = await fetch(`${apiUrl}/api/nodes/vector-search?${params}`, {
+        headers: authHeadersRef.current
+      });
+      
+      console.log('[NodeManager] Response status:', response.status);
       const data = await response.json();
 
       if (response.ok) {
@@ -484,7 +532,7 @@ export function NodeManager() {
             <div className="setting-item">
               <label htmlFor="min-similarity">Min Similarity:</label>
               <input
-                id="min-similarity"
+                id={`min-similarity-${Math.random()}`}
                 type="number"
                 min="0"
                 max="1"
@@ -500,7 +548,7 @@ export function NodeManager() {
             <div className="setting-item">
               <label htmlFor="search-limit">Max Results:</label>
               <input
-                id="search-limit"
+                id={`search-limit-${Math.random()}`}
                 type="number"
                 min="1"
                 max="100"
@@ -515,7 +563,7 @@ export function NodeManager() {
             <div className="setting-item">
               <label htmlFor="node-types">Node Types:</label>
               <select
-                id="node-types"
+                id={`node-types-${Math.random()}`}
                 multiple
                 value={searchSettings.types}
                 onChange={(e) => {

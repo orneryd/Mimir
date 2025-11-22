@@ -16,6 +16,7 @@ import { handleVectorSearchNodes } from '../tools/vectorSearch.tools.js';
 import { CopilotAgentClient, LLMProvider } from '../orchestrator/llm-client.js';
 import { normalizeProvider, fetchAvailableModels } from '../orchestrator/types.js';
 import { consolidatedTools } from '../orchestrator/tools.js';
+import { createSecureFetchOptions } from '../utils/fetch-helper.js';
 
 // ES module equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -626,16 +627,26 @@ ${relevantContext}
       const embeddings: number[][] = [];
 
       for (const text of inputs) {
-        const response = await fetch(embeddingsUrl, {
+        // Configure fetch options with SSL handling and authentication
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        };
+        
+        // Add authorization header if API key is configured
+        if (process.env.MIMIR_EMBEDDINGS_API_KEY) {
+          headers['Authorization'] = `Bearer ${process.env.MIMIR_EMBEDDINGS_API_KEY}`;
+        }
+        
+        const fetchOptions = createSecureFetchOptions(embeddingsUrl, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers,
           body: JSON.stringify({
             model,
             input: text, // OpenAI-compatible format
           }),
         });
+        
+        const response = await fetch(embeddingsUrl, fetchOptions);
 
         if (!response.ok) {
           const errorText = await response.text();
@@ -705,12 +716,26 @@ ${relevantContext}
       
       console.log(`🔗 Proxying ${req.path} request to chat provider: ${modelsUrl}`);
       
-      const response = await fetch(modelsUrl, {
+      // Configure fetch options with SSL handling and authentication
+      const headers: Record<string, string> = {
+        'Accept': 'application/json',
+      };
+      
+      // Add authorization header if API key is configured
+      if (process.env.MIMIR_LLM_API_KEY) {
+        headers['Authorization'] = `Bearer ${process.env.MIMIR_LLM_API_KEY}`;
+      }
+      
+      const fetchOptions = createSecureFetchOptions(modelsUrl, {
         method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-        },
+        headers,
       });
+      
+      if (modelsUrl.startsWith('https://') && process.env.NODE_TLS_REJECT_UNAUTHORIZED === '0') {
+        console.log(`🔍 SSL verification disabled for proxy request (NODE_TLS_REJECT_UNAUTHORIZED=0)`);
+      }
+      
+      const response = await fetch(modelsUrl, fetchOptions);
 
       if (!response.ok) {
         throw new Error(`Provider returned ${response.status}: ${response.statusText}`);

@@ -66,6 +66,7 @@ class ApiClient {
     try {
       const response = await fetch(`${this.baseUrl}${endpoint}`, {
         ...options,
+        credentials: 'include', // Send HTTP-only cookies
         headers: {
           'Content-Type': 'application/json',
           ...options.headers,

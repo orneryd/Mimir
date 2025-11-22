@@ -288,7 +288,7 @@ export async function handleListWatchedFolders(
 ): Promise<ListWatchedFoldersResponse> {
   const configManager = new WatchConfigManager(driver);
   
-  const configs = await configManager.listActive();
+  const configs = await configManager.listAll();
 
   // Ensure configs is an array
   const configArray = Array.isArray(configs) ? configs : [];

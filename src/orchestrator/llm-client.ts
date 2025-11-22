@@ -22,8 +22,8 @@ import neo4j, { Driver } from "neo4j-driver";
 import { loadRateLimitConfig } from "../config/rate-limit-config.js";
 import { runWithWorkspaceContext } from "./workspace-context.js";
 
-// Dummy API key for copilot-api proxy (required by LangChain OpenAI client but not used)
-const DUMMY_OPENAI_KEY = process.env.OPENAI_API_KEY || 'dummy-key-for-proxy';
+// API key for LLM provider - use MIMIR_LLM_API_KEY (generic) or fallback to dummy for local proxy
+const LLM_API_KEY = process.env.MIMIR_LLM_API_KEY || 'dummy-key-for-proxy';
 
 export interface AgentConfig {
   preamblePath: string;
@@ -113,7 +113,7 @@ export class CopilotAgentClient {
       !config.openAIApiKey &&
       !process.env.OPENAI_API_KEY
     ) {
-      process.env.OPENAI_API_KEY = DUMMY_OPENAI_KEY;
+      process.env.OPENAI_API_KEY = LLM_API_KEY;
     }
 
     // Load config loader (synchronous singleton access)
@@ -433,15 +433,10 @@ export class CopilotAgentClient {
       LLMProvider.COPILOT,
       model
     );
-    const contextWindow = await this.configLoader.getContextWindow(
-      LLMProvider.COPILOT,
-      model
-    );
 
-    this.baseURL =
-      config.copilotBaseUrl ||
-      llmConfig.providers.copilot?.baseUrl ||
-      "http://localhost:4141/v1";
+    // Use MIMIR_LLM_API directly - no manipulation
+    this.baseURL = process.env.MIMIR_LLM_API || "http://localhost:4141/v1";
+    
     this.llmConfig = {
       maxTokens: config.maxTokens ?? modelConfig?.config?.maxTokens ?? -1,
       temperature:
@@ -454,7 +449,7 @@ export class CopilotAgentClient {
     );
 
     this.llm = new ChatOpenAI({
-      apiKey: DUMMY_OPENAI_KEY, // Required by OpenAI client but not used by proxy
+      apiKey: LLM_API_KEY,
       model: model,
       configuration: {
         baseURL: this.baseURL,
@@ -462,7 +457,7 @@ export class CopilotAgentClient {
       temperature: this.llmConfig.temperature,
       maxTokens: this.llmConfig.maxTokens,
       streaming: false,
-      timeout: 120000, // 2 minute timeout for long-running requests
+      timeout: 120000,
     });
 
     console.log(`✅ Copilot ChatOpenAI client created successfully`);
@@ -472,18 +467,14 @@ export class CopilotAgentClient {
     config: AgentConfig,
     model: string
   ): Promise<void> {
-    // Use copilot-api proxy for all OpenAI requests
     const llmConfig = await this.configLoader.load();
     const modelConfig = await this.configLoader.getModelConfig(
       LLMProvider.OPENAI,
       model
     );
 
-    // Get baseURL from config or environment, default to localhost copilot-api
-    this.baseURL =
-      config.copilotBaseUrl ||
-      llmConfig.providers.copilot?.baseUrl ||
-      "http://localhost:4141/v1";
+    // Use MIMIR_LLM_API directly - no manipulation
+    this.baseURL = process.env.MIMIR_LLM_API || "http://localhost:4141/v1";
     
     this.llmConfig = {
       maxTokens: config.maxTokens ?? modelConfig?.config?.maxTokens ?? -1,
@@ -491,24 +482,24 @@ export class CopilotAgentClient {
         config.temperature ?? modelConfig?.config?.temperature ?? 0.0,
     };
 
-    console.log(`🔍 Initializing OpenAI client with copilot-api proxy: ${this.baseURL}`);
+    console.log(`🔍 Initializing OpenAI client with baseURL: ${this.baseURL}`);
     console.log(
       `🔍 Model: ${model}, maxTokens: ${this.maxCompletionTokens} (reduced to prevent overflow), temperature: ${this.llmConfig.temperature}`
     );
 
     this.llm = new ChatOpenAI({
-      apiKey: DUMMY_OPENAI_KEY, // Required by OpenAI client but not used by proxy
+      apiKey: LLM_API_KEY,
       model: model,
       configuration: {
         baseURL: this.baseURL,
       },
       temperature: this.llmConfig.temperature,
-      maxTokens: this.maxCompletionTokens, // Use reduced token limit (4096) to prevent overflow
+      maxTokens: this.maxCompletionTokens,
       streaming: false,
-      timeout: 120000, // 2 minute timeout for long-running requests
+      timeout: 120000,
     });
 
-    console.log(`✅ OpenAI ChatOpenAI client created successfully (via copilot-api proxy)`);
+    console.log(`✅ OpenAI ChatOpenAI client created successfully`);
   }
 
   /**

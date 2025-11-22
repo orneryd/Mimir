@@ -7,9 +7,11 @@ export class PreambleManager {
   private cache: Map<string, string> = new Map();
   private availablePreambles: Preamble[] = [];
   private baseUrl: string;
+  private getAuthHeaders: () => Promise<Record<string, string>>;
 
-  constructor(baseUrl: string) {
+  constructor(baseUrl: string, getAuthHeaders: () => Promise<Record<string, string>>) {
     this.baseUrl = baseUrl;
+    this.getAuthHeaders = getAuthHeaders;
   }
 
   /**
@@ -26,7 +28,8 @@ export class PreambleManager {
    */
   async loadAvailablePreambles(): Promise<Preamble[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/preambles`);
+      const headers = await this.getAuthHeaders();
+      const response = await fetch(`${this.baseUrl}/api/preambles`, { headers });
       
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -63,7 +66,8 @@ export class PreambleManager {
 
     try {
       console.log(`🌐 Fetching preamble from server: ${preambleName}`);
-      const response = await fetch(`${this.baseUrl}/api/preambles/${preambleName}`);
+      const headers = await this.getAuthHeaders();
+      const response = await fetch(`${this.baseUrl}/api/preambles/${preambleName}`, { headers });
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
