@@ -64,12 +64,24 @@ if (process.env.MIMIR_ENABLE_SECURITY === 'true' &&
   
   console.log(`[Auth] OAuth enabled with provider: ${process.env.MIMIR_AUTH_PROVIDER}`);
   
-  // Use public issuer for browser-facing URLs, internal issuer for server-to-server
-  const publicIssuer = process.env.MIMIR_OAUTH_ISSUER_PUBLIC || process.env.MIMIR_OAUTH_ISSUER;
-  const internalIssuer = process.env.MIMIR_OAUTH_ISSUER;
+  // OAuth endpoint URLs - MUST be explicitly configured (no hardcoded paths)
+  const authorizationURL = process.env.MIMIR_OAUTH_AUTHORIZATION_URL;
+  const tokenURL = process.env.MIMIR_OAUTH_TOKEN_URL;
   
-  console.log(`[Auth] Public issuer (browser): ${publicIssuer}`);
-  console.log(`[Auth] Internal issuer (server): ${internalIssuer}`);
+  if (!authorizationURL || !tokenURL) {
+    throw new Error(
+      'OAuth configuration incomplete: MIMIR_OAUTH_AUTHORIZATION_URL and MIMIR_OAUTH_TOKEN_URL are required. ' +
+      'Do not use hardcoded paths - each provider has different endpoints:\n' +
+      '  - Okta: /oauth2/v1/authorize, /oauth2/v1/token\n' +
+      '  - Auth0: /authorize, /oauth/token\n' +
+      '  - Azure AD: /oauth2/v2.0/authorize, /oauth2/v2.0/token\n' +
+      '  - Google: /o/oauth2/v2/auth, /token\n' +
+      'See docs/security/README.md for provider-specific examples.'
+    );
+  }
+  
+  console.log(`[Auth] Authorization URL: ${authorizationURL}`);
+  console.log(`[Auth] Token URL: ${tokenURL}`);
   
   // Custom state store for OAuth with proper CSRF protection
   // Stores state parameters in memory with expiration for validation
@@ -150,8 +162,8 @@ if (process.env.MIMIR_ENABLE_SECURITY === 'true' &&
   }
   
   passport.use('oauth', new OAuth2Strategy({
-    authorizationURL: `${publicIssuer}/oauth2/v1/authorize`,
-    tokenURL: `${internalIssuer}/oauth2/v1/token`,
+    authorizationURL: authorizationURL,
+    tokenURL: tokenURL,
     clientID: process.env.MIMIR_OAUTH_CLIENT_ID!,
     clientSecret: process.env.MIMIR_OAUTH_CLIENT_SECRET!,
     callbackURL: process.env.MIMIR_OAUTH_CALLBACK_URL!,
@@ -159,8 +171,18 @@ if (process.env.MIMIR_ENABLE_SECURITY === 'true' &&
     passReqToCallback: false,
   }, async (accessToken: string, refreshToken: string, profile: any, done: any) => {
     try {
-      // Fetch user profile from userinfo endpoint (use internal issuer for server-to-server)
-      const userinfoURL = process.env.MIMIR_OAUTH_USERINFO_URL || `${internalIssuer}/oauth2/v1/userinfo`;
+      // Fetch user profile from userinfo endpoint - MUST be explicitly configured
+      const userinfoURL = process.env.MIMIR_OAUTH_USERINFO_URL;
+      
+      if (!userinfoURL) {
+        return done(new Error(
+          'MIMIR_OAUTH_USERINFO_URL is required. Each provider has different userinfo endpoints:\n' +
+          '  - Okta: https://your-domain.okta.com/oauth2/v1/userinfo\n' +
+          '  - Auth0: https://your-domain.auth0.com/userinfo\n' +
+          '  - Azure AD: https://graph.microsoft.com/oidc/userinfo\n' +
+          '  - Google: https://openidconnect.googleapis.com/v1/userinfo'
+        ));
+      }
       
       // SECURITY: Validate access token format to prevent SSRF and injection attacks
       try {

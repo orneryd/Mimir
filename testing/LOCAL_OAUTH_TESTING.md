@@ -44,9 +44,11 @@ Add to your `.env` file:
 # Enable security
 MIMIR_ENABLE_SECURITY=true
 
-# Local OAuth Provider
+# Local OAuth Provider (explicit endpoint URLs - no hardcoded paths!)
 MIMIR_AUTH_PROVIDER=oauth
-MIMIR_OAUTH_ISSUER=http://localhost:8888
+MIMIR_OAUTH_AUTHORIZATION_URL=http://localhost:8888/oauth2/v1/authorize
+MIMIR_OAUTH_TOKEN_URL=http://localhost:8888/oauth2/v1/token
+MIMIR_OAUTH_USERINFO_URL=http://localhost:8888/oauth2/v1/userinfo
 MIMIR_OAUTH_CLIENT_ID=mimir-local-test
 MIMIR_OAUTH_CLIENT_SECRET=local-test-secret-123
 MIMIR_OAUTH_CALLBACK_URL=http://localhost:9042/auth/oauth/callback

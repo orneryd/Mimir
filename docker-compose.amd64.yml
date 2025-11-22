@@ -188,10 +188,11 @@ services:
       - MIMIR_DEV_USER_ANALYST=${MIMIR_DEV_USER_ANALYST}
       - MIMIR_DEV_USER_VIEWER=${MIMIR_DEV_USER_VIEWER}
       - MIMIR_JWT_SECRET=${MIMIR_JWT_SECRET}
-      # OAuth Configuration
+      # OAuth Configuration (explicit endpoint URLs - provider-specific)
       - MIMIR_AUTH_PROVIDER=${MIMIR_AUTH_PROVIDER}
-      - MIMIR_OAUTH_ISSUER=${MIMIR_OAUTH_ISSUER}    # Internal URL for server-to-server
-      - MIMIR_OAUTH_ISSUER_PUBLIC=${MIMIR_OAUTH_ISSUER_PUBLIC}  # Public URL for browser redirects
+      - MIMIR_OAUTH_AUTHORIZATION_URL=${MIMIR_OAUTH_AUTHORIZATION_URL}  # Full authorization endpoint URL
+      - MIMIR_OAUTH_TOKEN_URL=${MIMIR_OAUTH_TOKEN_URL}                  # Full token endpoint URL
+      - MIMIR_OAUTH_USERINFO_URL=${MIMIR_OAUTH_USERINFO_URL}            # Full userinfo endpoint URL
       - MIMIR_OAUTH_CLIENT_ID=${MIMIR_OAUTH_CLIENT_ID}
       - MIMIR_OAUTH_CLIENT_SECRET=${MIMIR_OAUTH_CLIENT_SECRET}
       - MIMIR_OAUTH_CALLBACK_URL=${MIMIR_OAUTH_CALLBACK_URL}
