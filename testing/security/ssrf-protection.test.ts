@@ -11,12 +11,27 @@ describe('SSRF Protection - OAuth Token and URL Validation', () => {
   let originalEnv: NodeJS.ProcessEnv;
 
   beforeEach(() => {
-    originalEnv = { ...process.env };
+    // Deep copy relevant env vars
+    originalEnv = {
+      NODE_ENV: process.env.NODE_ENV,
+      MIMIR_OAUTH_ALLOW_HTTP: process.env.MIMIR_OAUTH_ALLOW_HTTP,
+    };
     vi.clearAllMocks();
   });
 
   afterEach(() => {
-    process.env = originalEnv;
+    // Properly restore environment variables
+    if (originalEnv.NODE_ENV !== undefined) {
+      process.env.NODE_ENV = originalEnv.NODE_ENV;
+    } else {
+      delete process.env.NODE_ENV;
+    }
+    
+    if (originalEnv.MIMIR_OAUTH_ALLOW_HTTP !== undefined) {
+      process.env.MIMIR_OAUTH_ALLOW_HTTP = originalEnv.MIMIR_OAUTH_ALLOW_HTTP;
+    } else {
+      delete process.env.MIMIR_OAUTH_ALLOW_HTTP;
+    }
   });
 
   describe('OAuth Token Format Validation', () => {

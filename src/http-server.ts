@@ -5,6 +5,7 @@
 
 // Load environment variables from .env file
 import dotenv from 'dotenv';
+import {hasAuthCredentials} from './utils/auth-helper.js';
 dotenv.config();
 
 // Set fallback environment variables
@@ -193,14 +194,7 @@ async function startHttpServer() {
       // 2. X-API-Key header (common alternative)
       // 3. Cookie (for browser/UI)
       // 4. Query parameters (for SSE which can't send custom headers)
-      const authHeader = req.headers['authorization'] as string;
-      const hasAuth = authHeader || 
-                      req.headers['x-api-key'] || 
-                      req.cookies?.mimir_oauth_token ||
-                      req.query.access_token ||
-                      req.query.api_key;
-      
-      if (hasAuth) {
+      if (hasAuthCredentials(req)) {
         // Let apiKeyAuth middleware handle validation
         return apiKeyAuth(req, res, next);
       }
@@ -307,14 +301,7 @@ async function startHttpServer() {
     try {
       // CENTRALIZED AUTH CHECK: If security enabled, require authentication (stateless JWT/OAuth)
       if (process.env.MIMIR_ENABLE_SECURITY === 'true') {
-        const authHeader = req.headers['authorization'] as string;
-        const hasAuth = authHeader || 
-                        req.headers['x-api-key'] || 
-                        req.cookies?.mimir_oauth_token ||
-                        req.query.access_token ||
-                        req.query.api_key;
-        
-        if (!hasAuth) {
+        if (!hasAuthCredentials(req)) {
           return res.status(401).json({
             jsonrpc: '2.0',
             error: { code: -32001, message: 'Unauthorized: Authentication required' },

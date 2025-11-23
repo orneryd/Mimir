@@ -233,12 +233,15 @@ router.get('/auth/oauth/callback',
       const sameSiteValue: 'lax' | 'none' = isProduction ? 'lax' : 'none';
       const secureValue = isProduction || sameSiteValue === 'none'; // Safari requires secure=true when sameSite=none
       
+      // Use configurable token expiration (MIMIR_MAX_TOKEN_AGE_SECONDS)
+      const expiresInSeconds = getTokenExpiration();
+      
       res.cookie('mimir_oauth_token', accessToken, {
         httpOnly: true,
         secure: secureValue,
         sameSite: sameSiteValue,
         path: '/',
-        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+        maxAge: expiresInSeconds ? expiresInSeconds * 1000 : undefined // undefined = session cookie
       });
       
       // Check if this is a VSCode extension OAuth flow
