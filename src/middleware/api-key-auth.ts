@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { createSecureFetchOptions, validateOAuthTokenFormat, validateOAuthUserinfoUrl } from '../utils/fetch-helper.js';
 import { JWT_SECRET } from '../utils/jwt-secret.js';
+import { getOAuthTimeout } from '../config/oauth-constants.js';
 
 // OAuth userinfo endpoint for token validation (stateless)
 // Must be explicitly configured - different providers use different paths

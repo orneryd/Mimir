@@ -1,13 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send, Sparkles, User, Paperclip, X, Image as ImageIcon, RotateCcw, ChevronDown, Plus, Edit2, Copy, Check, ChevronRight, Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { EyeOfMimir } from '../components/EyeOfMimir';
 import { OrchestrationStudioIcon } from '../components/OrchestrationStudioIcon';
 import { FileIndexingSidebar } from '../components/FileIndexingSidebar';
 import { MemoryRuneIcon } from '../components/MemoryRuneIcon';
 import { apiClient } from '../utils/api';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { EyeOfMimirLogo } from '../components/EyeOfMimirLogo';
 
 /**
  * Represents a tool call during agent execution.
@@ -188,7 +188,7 @@ export function Portal() {
   const [availableModels, setAvailableModels] = useState<Array<{id: string; name: string}>>([]);
   const [selectedModel, setSelectedModel] = useState('');
   const [defaultModel, setDefaultModel] = useState<string | null>(null);
-  const [selectedPreamble, setSelectedPreamble] = useState('limerick');
+  const [selectedPreamble, setSelectedPreamble] = useState('mimir-v2');
   const [availablePreambles, setAvailablePreambles] = useState<Preamble[]>([]);
   const [preambleCache, setPreambleCache] = useState<Record<string, string>>({});
   const [showCustomPreambleModal, setShowCustomPreambleModal] = useState(false);
@@ -423,7 +423,7 @@ export function Portal() {
   const handleClearCustomPreamble = () => {
     localStorage.removeItem('mimir-custom-preamble');
     setCustomPreambleContent(null);
-    setSelectedPreamble(availablePreambles[0]?.name || 'limerick');
+    setSelectedPreamble(availablePreambles[0]?.name || 'mimir-v2');
   };
 
   /**
@@ -1233,8 +1233,8 @@ export function Portal() {
             className="h-10 w-auto"
           />
           <div>
-            <h1 className="text-xl font-bold text-valhalla-gold">Mimir</h1>
-            <p className="text-xs text-gray-400">AI Counsel</p>
+            <h1 className="text-xl font-bold text-valhalla-gold">M.I.M.I.R</h1>
+            <p className="text-xs text-gray-400">AI Insight Repository</p>
           </div>
         </div>
         <div className="flex items-center space-x-3">
@@ -1358,16 +1358,16 @@ export function Portal() {
               <div className="flex flex-col items-center space-y-6">
                 <div className="relative">
                   <div className="absolute inset-0 blur-3xl bg-valhalla-gold opacity-30 rounded-full"></div>
-                  <EyeOfMimir size={120} className="relative z-10" />
+                  <EyeOfMimirLogo size={120} className="relative z-10" />
                 </div>
                 
                 <div className="text-center space-y-2">
                   <h1 className="text-3xl font-bold bg-gradient-to-r from-valhalla-gold via-yellow-300 to-valhalla-gold bg-clip-text text-transparent">
-                   How may I give counsel?
+                   Find insights across your files and memories.
                   </h1>
-                  <p className="text-base text-gray-400 font-light">
+                  {/* <p className="text-base text-gray-400 font-light">
                     The All-Seeing Eye watches over the depths of knowledge
-                  </p>
+                  </p> */}
                 </div>
               </div>
 
@@ -1459,8 +1459,8 @@ export function Portal() {
                         onKeyDown={handleKeyDown}
                         onPaste={handlePaste}
                         onFocus={(e) => e.target.placeholder = ''}
-                        onBlur={(e) => e.target.placeholder = 'Ask the Well of Mímir for wisdom...'}
-                        placeholder="Ask the Well of Mímir for wisdom..."
+                        onBlur={(e) => e.target.placeholder = 'Type your cross-cutting questions...'}
+                        placeholder="Type your cross-cutting questions..."
                         className="flex-1 !bg-[#252d3d] text-gray-100 placeholder:text-gray-500 placeholder:opacity-50 outline-none border-none resize-none px-3 max-h-40 focus:!bg-[#252d3d] focus:outline-none focus:ring-0 focus:border-none active:!bg-[#252d3d]"
                         rows={1}
                         disabled={isLoading}
