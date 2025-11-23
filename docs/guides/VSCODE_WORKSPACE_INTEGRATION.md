@@ -89,6 +89,35 @@ docker-compose up -d
 
 This mounts `/Users/c815719/projects` → `/workspace` in the container.
 
+**⚠️ Windows Users - Critical Requirements:**
+
+Windows paths work with either forward slashes or backslashes, **BUT the drive letter MUST be lowercase**:
+
+```bash
+# ✅ CORRECT - lowercase drive letter
+HOST_WORKSPACE_ROOT=c:\Users\timot\Documents\GitHub
+HOST_WORKSPACE_ROOT=c:/Users/timot/Documents/GitHub
+
+# ❌ WRONG - uppercase drive letter (path translation will fail!)
+HOST_WORKSPACE_ROOT=C:\Users\timot\Documents\GitHub
+HOST_WORKSPACE_ROOT=C:/Users/timot/Documents/GitHub
+```
+
+**Why the lowercase requirement:**
+- Path translation uses string comparison after normalization
+- `path.resolve()` on Windows converts drive letters to lowercase internally
+- If you use `C:` it won't match the normalized `c:` and path translation fails
+- Symptoms: "ENOENT: no such file or directory" errors when indexing
+
+**Quick fix if you have uppercase:**
+```bash
+# Change this:
+HOST_WORKSPACE_ROOT=C:\Users\timot\Documents\GitHub
+
+# To this:
+HOST_WORKSPACE_ROOT=c:\Users\timot\Documents\GitHub
+```
+
 ### Option 2: Modify docker-compose.yml
 
 Edit the volume mount directly:
