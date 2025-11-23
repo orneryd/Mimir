@@ -97,11 +97,6 @@ export function validateOAuthTokenFormat(token: string): boolean {
     }
   }
   
-  // Check for null bytes separately (avoids linter warning)
-  if (token.includes('\0')) {
-    throw new Error('Token contains null bytes');
-  }
-  
   return true;
 }
 

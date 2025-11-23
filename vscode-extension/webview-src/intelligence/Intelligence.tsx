@@ -17,6 +17,26 @@ interface FolderInfo {
   error?: string | null;
 }
 
+/**
+ * Type guard to validate FolderInfo objects at runtime
+ * Ensures all required fields exist before attempting to use folder data
+ */
+function isFolderInfo(obj: any): obj is FolderInfo {
+  return (
+    obj &&
+    typeof obj === 'object' &&
+    typeof obj.id === 'string' &&
+    obj.id.length > 0 &&
+    typeof obj.path === 'string' &&
+    typeof obj.fileCount === 'number' &&
+    typeof obj.chunkCount === 'number' &&
+    typeof obj.embeddingCount === 'number' &&
+    typeof obj.status === 'string' &&
+    ['active', 'inactive', 'stopped', 'error'].includes(obj.status) &&
+    typeof obj.lastSync === 'string'
+  );
+}
+
 interface IndexingProgress {
   path: string;
   totalFiles: number;
@@ -99,6 +119,15 @@ export function Intelligence() {
       
       const foldersData = await foldersResponse.json() as any;
       let folders = foldersData.folders || [];
+      
+      // Validate folder data before processing
+      folders = folders.filter((folder: any) => {
+        if (!isFolderInfo(folder)) {
+          console.error('[Intelligence] Invalid folder data received, missing required fields:', folder);
+          return false;
+        }
+        return true;
+      });
       
       // Merge indexing status if available
       if (statusResponse && statusResponse.ok) {
@@ -294,6 +323,16 @@ export function Intelligence() {
   const handleRemoveFolder = (id: string, path: string) => {
     console.log('[Intelligence] Delete button clicked for ID:', id, 'path:', path);
     
+    if (!id || typeof id !== 'string' || id.trim().length === 0) {
+      console.error('[Intelligence] ERROR: Invalid or missing folder ID!');
+      vscode.postMessage({ 
+        command: 'showMessage', 
+        type: 'error',
+        message: `❌ Cannot remove folder: invalid ID` 
+      });
+      return;
+    }
+    
     // Request confirmation from extension host (webviews can't use confirm())
     vscode.postMessage({ 
       command: 'confirmRemoveFolder',
@@ -306,8 +345,8 @@ export function Intelligence() {
     console.log('[Intelligence] Reactivate button clicked for ID:', id, 'path:', path);
     console.log('[Intelligence] ID type:', typeof id, 'ID value:', id);
     
-    if (!id) {
-      console.error('[Intelligence] ERROR: id is undefined or empty!');
+    if (!id || typeof id !== 'string' || id.trim().length === 0) {
+      console.error('[Intelligence] ERROR: Invalid or missing folder ID!');
       vscode.postMessage({ 
         command: 'showMessage', 
         type: 'error',
