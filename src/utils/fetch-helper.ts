@@ -136,12 +136,12 @@ export function validateOAuthUserinfoUrl(url: string): boolean {
     throw new Error('Only HTTP/HTTPS protocols are allowed');
   }
   
-  // Block private IP ranges and localhost (except in development or when HTTP is explicitly allowed)
+  // Block private IP ranges and localhost (except in development)
   const hostname = parsedUrl.hostname.toLowerCase();
   
-  // Allow localhost and host.docker.internal in development OR when HTTP is explicitly allowed
+  // Allow localhost and host.docker.internal in development ONLY
   const isDevelopment = process.env.NODE_ENV !== 'production';
-  if (isDevelopment || allowHttp) {
+  if (isDevelopment) {
     const allowedDevHosts = ['localhost', '127.0.0.1', '::1', 'host.docker.internal'];
     if (allowedDevHosts.includes(hostname)) {
       return true;
