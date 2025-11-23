@@ -4,8 +4,8 @@ import { createSecureFetchOptions, validateOAuthTokenFormat, validateOAuthUserin
 import { JWT_SECRET } from '../utils/jwt-secret.js';
 
 // OAuth userinfo endpoint for token validation (stateless)
-const OAUTH_USERINFO_URL = process.env.MIMIR_OAUTH_USERINFO_URL || 
-  (process.env.MIMIR_OAUTH_ISSUER ? `${process.env.MIMIR_OAUTH_ISSUER}/oauth2/v1/userinfo` : null);
+// Must be explicitly configured - different providers use different paths
+const OAUTH_USERINFO_URL = process.env.MIMIR_OAUTH_USERINFO_URL;
 
 // Legacy helper functions removed - no longer needed with JWT stateless auth
 

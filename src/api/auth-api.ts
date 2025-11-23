@@ -380,11 +380,10 @@ router.get('/auth/status', async (req, res) => {
       console.log('[Auth] JWT validation failed:', jwtError.message);
       
       // Not a JWT, try OAuth token validation
-      const OAUTH_USERINFO_URL = process.env.MIMIR_OAUTH_USERINFO_URL || 
-        (process.env.MIMIR_OAUTH_ISSUER ? `${process.env.MIMIR_OAUTH_ISSUER}/oauth2/v1/userinfo` : null);
+      const OAUTH_USERINFO_URL = process.env.MIMIR_OAUTH_USERINFO_URL;
       
       if (!OAUTH_USERINFO_URL) {
-        console.log('[Auth] No OAuth userinfo URL configured, returning unauthenticated');
+        console.log('[Auth] No OAuth userinfo URL configured (MIMIR_OAUTH_USERINFO_URL required), returning unauthenticated');
         return res.json({ authenticated: false, error: 'Invalid token' });
       }
 
