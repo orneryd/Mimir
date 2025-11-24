@@ -1134,6 +1134,7 @@ services:
 - 🤖 [AGENTS.md](docs/AGENTS.md) - Complete agent workflow guide
 - 🔧 [Configuration Guide](docs/configuration/CONFIGURATION.md) - VSCode, Cursor, Claude Desktop setup
 - 🧪 [Testing Guide](docs/testing/TESTING_GUIDE.md) - Test suite overview
+- 📖 [Server API Documentation](docs/server/README.md) - Complete TypeScript API reference
 
 **Advanced Topics:**
 - 🏗️ [Multi-Agent Architecture](docs/architecture/MULTI_AGENT_GRAPH_RAG.md) - System architecture

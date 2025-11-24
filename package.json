@@ -73,7 +73,9 @@
     "test:oauth": "tsx testing/test-oauth-flow.ts",
     "oauth:provider": "tsx testing/local-oauth-provider.ts",
     "license:check": "npx license-checker --production --onlyAllow 'MIT;ISC;Apache-2.0;BSD-2-Clause;BSD-3-Clause;0BSD;BlueOak-1.0.0;LGPL-3.0-or-later;Python-2.0;(MIT OR GPL-3.0-or-later);(MIT AND Zlib)' --excludePackages 'duck@0.1.12;pause@0.0.1'",
-    "license:audit": "npx license-checker --json --production --excludePrivatePackages > license-audit-raw.json && echo '✅ License audit complete - see LICENSE_AUDIT_REPORT.md'"
+    "license:audit": "npx license-checker --json --production --excludePrivatePackages > license-audit-raw.json && echo '✅ License audit complete - see LICENSE_AUDIT_REPORT.md'",
+    "doc": "npx typedoc",
+    "doc:watch": "npx typedoc --watch"
   },
   "author": "",
   "license": "MIT",
@@ -127,6 +129,8 @@
     "node-cache": "^5.1.2",
     "node-fetch": "^3.3.2",
     "supertest": "^7.1.4",
+    "typedoc": "^0.28.4",
+    "typedoc-plugin-markdown": "^4.6.3",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
   },

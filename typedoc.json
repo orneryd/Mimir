@@ -1,0 +1,51 @@
+{
+  "$schema": "https://typedoc-plugin-markdown.org/schema.json",
+  "entryPointStrategy": "expand",
+  "entryPoints": [
+    "./src/**/*.ts"
+  ],
+  "exclude": [
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "**/*.example.ts",
+    "**/*.integration.ts",
+    "**/testing/**",
+    "**/scripts/**",
+    "**/build/**",
+    "**/node_modules/**"
+  ],
+  "tsconfig": "./tsconfig.json",
+  "plugin": ["typedoc-plugin-markdown"],
+  "out": "./docs/server",
+  "excludeScopesInPaths": true,
+  "flattenOutputFiles": false,
+  "readme": "none",
+  "githubPages": false,
+  "hideGenerator": true,
+  "sort": ["source-order"],
+  "kindSortOrder": [
+    "Class",
+    "Interface",
+    "TypeAlias",
+    "Function",
+    "Variable"
+  ],
+  "categorizeByGroup": true,
+  "categoryOrder": [
+    "Managers",
+    "Indexing",
+    "API Endpoints",
+    "Orchestration",
+    "Configuration",
+    "Middleware",
+    "Utilities",
+    "*"
+  ],
+  "navigation": {
+    "includeCategories": true,
+    "includeGroups": true
+  },
+  "outputFileStrategy": "modules",
+  "mergeReadme": false,
+  "includeVersion": true
+}
