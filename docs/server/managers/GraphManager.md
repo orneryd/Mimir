@@ -6,14 +6,60 @@
 
 # managers/GraphManager
 
+## Description
+
+Core graph database manager for Neo4j operations
+
 ## Classes
 
 ### GraphManager
 
-Defined in: src/managers/GraphManager.ts:24
+Defined in: src/managers/GraphManager.ts:69
 
-Unified Graph Manager Interface
-Supports both single and batch operations
+GraphManager - Core interface to Neo4j graph database
+
+#### Description
+
+Provides high-level interface for all graph database operations
+including CRUD for nodes and edges, search, transactions, and schema management.
+Automatically handles vector embeddings for semantic search and supports
+multi-agent coordination with optimistic locking.
+
+Features:
+- Unified node model (all nodes use Node label)
+- Automatic embedding generation for semantic search
+- Hybrid search (vector + BM25 full-text)
+- Optimistic locking for concurrent access
+- Batch operations for performance
+- Graph traversal and subgraph extraction
+
+#### Examples
+
+```typescript
+// Create and initialize
+const manager = new GraphManager(
+  'bolt://localhost:7687',
+  'neo4j',
+  'password'
+);
+await manager.initialize();
+```
+
+```typescript
+// Add a node with automatic embeddings
+const node = await manager.addNode('memory', {
+  title: 'Important Decision',
+  content: 'We decided to use PostgreSQL for better ACID compliance'
+});
+```
+
+```typescript
+// Search by meaning (semantic search)
+const results = await manager.searchNodes('database decisions', {
+  limit: 10,
+  types: ['memory']
+});
+```
 
 #### Implements
 
@@ -25,7 +71,7 @@ Supports both single and batch operations
 
 > **new GraphManager**(`uri`, `user`, `password`): [`GraphManager`](#graphmanager)
 
-Defined in: src/managers/GraphManager.ts:31
+Defined in: src/managers/GraphManager.ts:76
 
 ###### Parameters
 
@@ -51,7 +97,7 @@ Defined in: src/managers/GraphManager.ts:31
 
 > **getDriver**(): `Driver`
 
-Defined in: src/managers/GraphManager.ts:94
+Defined in: src/managers/GraphManager.ts:139
 
 Get the Neo4j driver instance for direct database access
 
@@ -106,7 +152,7 @@ try {
 
 > **initialize**(): `Promise`\<`void`\>
 
-Defined in: src/managers/GraphManager.ts:140
+Defined in: src/managers/GraphManager.ts:185
 
 Initialize database schema: create indexes, constraints, and vector indexes
 
@@ -165,7 +211,7 @@ await graphManager.initialize(); // Still safe
 
 > **testConnection**(): `Promise`\<`boolean`\>
 
-Defined in: src/managers/GraphManager.ts:238
+Defined in: src/managers/GraphManager.ts:283
 
 Test connection
 
@@ -177,7 +223,7 @@ Test connection
 
 > **addNode**(`type?`, `properties?`): `Promise`\<[`Node`](../types/graph.types.md#node)\>
 
-Defined in: src/managers/GraphManager.ts:459
+Defined in: src/managers/GraphManager.ts:504
 
 Add a new node to the knowledge graph with automatic embedding generation
 
@@ -279,7 +325,7 @@ const node = await graphManager.addNode({
 
 > **getNode**(`id`): `Promise`\<[`Node`](../types/graph.types.md#node) \| `null`\>
 
-Defined in: src/managers/GraphManager.ts:596
+Defined in: src/managers/GraphManager.ts:641
 
 Retrieve a node by its ID with full properties
 
@@ -343,7 +389,7 @@ if (file && file.properties.lastModified) {
 
 > **updateNode**(`id`, `properties`): `Promise`\<[`Node`](../types/graph.types.md#node)\>
 
-Defined in: src/managers/GraphManager.ts:673
+Defined in: src/managers/GraphManager.ts:718
 
 Update an existing node's properties with automatic embedding regeneration
 
@@ -436,7 +482,7 @@ try {
 
 > **deleteNode**(`id`): `Promise`\<`boolean`\>
 
-Defined in: src/managers/GraphManager.ts:777
+Defined in: src/managers/GraphManager.ts:822
 
 Delete a single node
 
@@ -458,7 +504,7 @@ Delete a single node
 
 > **addEdge**(`source`, `target`, `type`, `properties`): `Promise`\<[`Edge`](../types/graph.types.md#edge)\>
 
-Defined in: src/managers/GraphManager.ts:796
+Defined in: src/managers/GraphManager.ts:841
 
 Add a single edge between two nodes
 
@@ -492,7 +538,7 @@ Add a single edge between two nodes
 
 > **deleteEdge**(`edgeId`): `Promise`\<`boolean`\>
 
-Defined in: src/managers/GraphManager.ts:854
+Defined in: src/managers/GraphManager.ts:899
 
 Delete a single edge
 
@@ -514,7 +560,7 @@ Delete a single edge
 
 > **addNodes**(`nodes`): `Promise`\<[`Node`](../types/graph.types.md#node)[]\>
 
-Defined in: src/managers/GraphManager.ts:877
+Defined in: src/managers/GraphManager.ts:922
 
 Add multiple nodes in a single transaction
 Returns created nodes in same order as input
@@ -537,7 +583,7 @@ Returns created nodes in same order as input
 
 > **updateNodes**(`updates`): `Promise`\<[`Node`](../types/graph.types.md#node)[]\>
 
-Defined in: src/managers/GraphManager.ts:966
+Defined in: src/managers/GraphManager.ts:1011
 
 Update multiple nodes in a single transaction
 Returns updated nodes in same order as input
@@ -560,7 +606,7 @@ Returns updated nodes in same order as input
 
 > **deleteNodes**(`ids`): `Promise`\<[`BatchDeleteResult`](../types/graph.types.md#batchdeleteresult)\>
 
-Defined in: src/managers/GraphManager.ts:993
+Defined in: src/managers/GraphManager.ts:1038
 
 Delete multiple nodes in a single transaction
 Returns count of deleted nodes and any errors
@@ -583,7 +629,7 @@ Returns count of deleted nodes and any errors
 
 > **addEdges**(`edges`): `Promise`\<[`Edge`](../types/graph.types.md#edge)[]\>
 
-Defined in: src/managers/GraphManager.ts:1017
+Defined in: src/managers/GraphManager.ts:1062
 
 Add multiple edges in a single transaction
 Returns created edges in same order as input
@@ -606,7 +652,7 @@ Returns created edges in same order as input
 
 > **deleteEdges**(`edgeIds`): `Promise`\<[`BatchDeleteResult`](../types/graph.types.md#batchdeleteresult)\>
 
-Defined in: src/managers/GraphManager.ts:1056
+Defined in: src/managers/GraphManager.ts:1101
 
 Delete multiple edges in a single transaction
 Returns count of deleted edges and any errors
@@ -629,7 +675,7 @@ Returns count of deleted edges and any errors
 
 > **queryNodes**(`type?`, `filters?`): `Promise`\<[`Node`](../types/graph.types.md#node)[]\>
 
-Defined in: src/managers/GraphManager.ts:1084
+Defined in: src/managers/GraphManager.ts:1129
 
 Query nodes by type and/or properties
 Note: Large content fields (>10KB) are stripped to prevent massive responses.
@@ -657,7 +703,7 @@ Use getNode() for individual nodes to retrieve full content.
 
 > **searchNodes**(`query`, `options`): `Promise`\<[`Node`](../types/graph.types.md#node)[]\>
 
-Defined in: src/managers/GraphManager.ts:1137
+Defined in: src/managers/GraphManager.ts:1182
 
 Full-text search across node properties
 Note: Large content fields (>10KB) are stripped, but relevant line numbers
@@ -686,7 +732,7 @@ Use getNode() for individual nodes to retrieve full content.
 
 > **getEdges**(`nodeId`, `direction`): `Promise`\<[`Edge`](../types/graph.types.md#edge)[]\>
 
-Defined in: src/managers/GraphManager.ts:1204
+Defined in: src/managers/GraphManager.ts:1249
 
 Get all edges connected to a node
 
@@ -712,7 +758,7 @@ Get all edges connected to a node
 
 > **getNeighbors**(`nodeId`, `edgeType?`, `depth?`): `Promise`\<[`Node`](../types/graph.types.md#node)[]\>
 
-Defined in: src/managers/GraphManager.ts:1230
+Defined in: src/managers/GraphManager.ts:1275
 
 Get neighboring nodes
 
@@ -742,7 +788,7 @@ Get neighboring nodes
 
 > **getSubgraph**(`nodeId`, `depth`): `Promise`\<[`Subgraph`](../types/graph.types.md#subgraph)\>
 
-Defined in: src/managers/GraphManager.ts:1266
+Defined in: src/managers/GraphManager.ts:1311
 
 Get a subgraph starting from a node
 
@@ -768,7 +814,7 @@ Get a subgraph starting from a node
 
 > **getStats**(): `Promise`\<[`GraphStats`](../types/graph.types.md#graphstats)\>
 
-Defined in: src/managers/GraphManager.ts:1320
+Defined in: src/managers/GraphManager.ts:1365
 
 Get graph statistics
 
@@ -784,7 +830,7 @@ Get graph statistics
 
 > **clear**(`type?`): `Promise`\<\{ `deletedNodes`: `number`; `deletedEdges`: `number`; \}\>
 
-Defined in: src/managers/GraphManager.ts:1359
+Defined in: src/managers/GraphManager.ts:1404
 
 Clear all data or specific node type from the graph
 
@@ -810,7 +856,7 @@ Object with counts of deleted nodes and edges
 
 > **close**(): `Promise`\<`void`\>
 
-Defined in: src/managers/GraphManager.ts:1420
+Defined in: src/managers/GraphManager.ts:1465
 
 Close connections (cleanup)
 
@@ -826,7 +872,7 @@ Close connections (cleanup)
 
 > **lockNode**(`nodeId`, `agentId`, `timeoutMs`): `Promise`\<`boolean`\>
 
-Defined in: src/managers/GraphManager.ts:1481
+Defined in: src/managers/GraphManager.ts:1526
 
 Acquire exclusive lock on a node (typically a TODO) for multi-agent coordination
 Uses optimistic locking with automatic expiry
@@ -865,7 +911,7 @@ true if lock acquired, false if already locked by another agent
 
 > **unlockNode**(`nodeId`, `agentId`): `Promise`\<`boolean`\>
 
-Defined in: src/managers/GraphManager.ts:1522
+Defined in: src/managers/GraphManager.ts:1567
 
 Release lock on a node
 
@@ -897,7 +943,7 @@ true if lock released, false if not locked or locked by different agent
 
 > **queryNodesWithLockStatus**(`type?`, `filters?`, `includeAvailableOnly?`): `Promise`\<[`Node`](../types/graph.types.md#node)[]\>
 
-Defined in: src/managers/GraphManager.ts:1549
+Defined in: src/managers/GraphManager.ts:1594
 
 Query nodes filtered by lock status
 
@@ -935,7 +981,7 @@ Array of nodes
 
 > **cleanupExpiredLocks**(): `Promise`\<`number`\>
 
-Defined in: src/managers/GraphManager.ts:1616
+Defined in: src/managers/GraphManager.ts:1661
 
 Clean up expired locks across all nodes
 Should be called periodically by the server

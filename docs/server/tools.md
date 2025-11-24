@@ -16,31 +16,31 @@ Re-exports [GRAPH_TOOLS](tools/graph.tools.md#graph_tools)
 
 ### handleMemoryNode
 
-Re-exports [handleMemoryNode](tools/graph.handlers.md#handlememorynode)
+Re-exports [handleMemoryNode](graph.handlers.md#handlememorynode)
 
 ***
 
 ### handleMemoryEdge
 
-Re-exports [handleMemoryEdge](tools/graph.handlers.md#handlememoryedge)
+Re-exports [handleMemoryEdge](graph.handlers.md#handlememoryedge)
 
 ***
 
 ### handleMemoryBatch
 
-Re-exports [handleMemoryBatch](tools/graph.handlers.md#handlememorybatch)
+Re-exports [handleMemoryBatch](graph.handlers.md#handlememorybatch)
 
 ***
 
 ### handleMemoryLock
 
-Re-exports [handleMemoryLock](tools/graph.handlers.md#handlememorylock)
+Re-exports [handleMemoryLock](graph.handlers.md#handlememorylock)
 
 ***
 
 ### handleMemoryClear
 
-Re-exports [handleMemoryClear](tools/graph.handlers.md#handlememoryclear)
+Re-exports [handleMemoryClear](graph.handlers.md#handlememoryclear)
 
 ***
 

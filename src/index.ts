@@ -1,10 +1,37 @@
 #!/usr/bin/env node
 
-// ============================================================================
-// MCP Graph-RAG Server
-// Unified graph model with Neo4j backend
-// Version: 4.0.0 (Clean Architecture)
-// ============================================================================
+/**
+ * @module index
+ * @description Main MCP server entry point for Mimir Graph-RAG
+ * 
+ * Provides Model Context Protocol (MCP) server with 13 tools for:
+ * - Memory operations (6 tools): node, edge, batch, lock, clear, get_task_context
+ * - File indexing (3 tools): index_folder, remove_folder, list_folders
+ * - Vector search (2 tools): vector_search_nodes, get_embedding_stats
+ * - TODO management (2 tools): todo, todo_list
+ * 
+ * The server uses Neo4j as the graph database backend and supports:
+ * - Persistent memory with semantic embeddings
+ * - Multi-agent coordination with optimistic locking
+ * - Automatic file indexing with .gitignore support
+ * - Hybrid search (vector + BM25)
+ * - TODO tracking with hierarchical lists
+ * 
+ * @example
+ * ```typescript
+ * // Run as MCP server (stdio transport)
+ * import { server, initializeGraphManager } from './index.js';
+ * await initializeGraphManager();
+ * await server.connect(new StdioServerTransport());
+ * ```
+ * 
+ * @example
+ * ```typescript
+ * // Use in HTTP mode
+ * import { startHttpServer } from './http-server.js';
+ * await startHttpServer();
+ * ```
+ */
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";

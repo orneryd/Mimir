@@ -131,7 +131,57 @@ Examples:
 }
 
 /**
- * Handle todo tool calls (individual todo operations)
+ * Handle todo tool calls - Individual TODO operations
+ * 
+ * @description Manages individual TODO tasks with operations for creating,
+ * updating, completing, and querying todos. Todos automatically get semantic
+ * embeddings for vector search. Supports custom properties and list assignment.
+ * 
+ * @param params - TODO operation parameters
+ * @param params.operation - Operation type: 'create' | 'get' | 'update' | 'complete' | 'delete' | 'list'
+ * @param params.todo_id - TODO ID (required for get/update/complete/delete)
+ * @param params.list_id - Optional list ID to add TODO to
+ * @param params.title - TODO title (required for create)
+ * @param params.description - TODO description
+ * @param params.status - Status: 'pending' | 'in_progress' | 'completed'
+ * @param params.priority - Priority: 'low' | 'medium' | 'high'
+ * @param params.filters - Query filters for list operation
+ * @param params.properties - Additional custom properties
+ * @param graphManager - Graph manager instance
+ * 
+ * @returns Promise with operation result
+ * 
+ * @example
+ * ```typescript
+ * // Create a TODO
+ * const result = await handleTodo({
+ *   operation: 'create',
+ *   title: 'Implement authentication',
+ *   description: 'Add JWT-based auth with refresh tokens',
+ *   priority: 'high',
+ *   status: 'pending'
+ * }, graphManager);
+ * // Returns: { status: 'success', todo: { id: 'todo-123', ... } }
+ * ```
+ * 
+ * @example
+ * ```typescript
+ * // Complete a TODO
+ * const result = await handleTodo({
+ *   operation: 'complete',
+ *   todo_id: 'todo-123'
+ * }, graphManager);
+ * ```
+ * 
+ * @example
+ * ```typescript
+ * // List pending high-priority TODOs
+ * const result = await handleTodo({
+ *   operation: 'list',
+ *   filters: { status: 'pending', priority: 'high' }
+ * }, graphManager);
+ * // Returns: { status: 'success', todos: [...] }
+ * ```
  */
 export async function handleTodo(
   params: any,
@@ -302,7 +352,67 @@ export async function handleTodo(
 }
 
 /**
- * Handle todo_list tool calls (list management operations)
+ * Handle todo_list tool calls - TODO list management operations
+ * 
+ * @description Manages TODO lists (collections of todos) with operations for
+ * creating, updating, archiving lists, and managing list membership. Supports
+ * adding/removing todos from lists and getting list statistics.
+ * 
+ * @param params - TODO list operation parameters
+ * @param params.operation - Operation type: 'create' | 'get' | 'update' | 'archive' | 'delete' | 'list' | 'add_todo' | 'remove_todo' | 'get_stats'
+ * @param params.list_id - List ID (required for most operations)
+ * @param params.todo_id - TODO ID (required for add_todo/remove_todo)
+ * @param params.title - List title (required for create)
+ * @param params.description - List description
+ * @param params.priority - Priority: 'low' | 'medium' | 'high'
+ * @param params.filters - Query filters for list operation
+ * @param params.properties - Additional custom properties
+ * @param params.remove_completed - For archive: delete completed todos (default: false)
+ * @param graphManager - Graph manager instance
+ * 
+ * @returns Promise with operation result
+ * 
+ * @example
+ * ```typescript
+ * // Create a TODO list
+ * const result = await handleTodoList({
+ *   operation: 'create',
+ *   title: 'Sprint 1 Tasks',
+ *   description: 'Q1 2025 Sprint 1',
+ *   priority: 'high'
+ * }, graphManager);
+ * // Returns: { status: 'success', list: { id: 'todoList-123', ... } }
+ * ```
+ * 
+ * @example
+ * ```typescript
+ * // Add TODO to list
+ * const result = await handleTodoList({
+ *   operation: 'add_todo',
+ *   list_id: 'todoList-123',
+ *   todo_id: 'todo-456'
+ * }, graphManager);
+ * ```
+ * 
+ * @example
+ * ```typescript
+ * // Get list statistics
+ * const result = await handleTodoList({
+ *   operation: 'get_stats',
+ *   list_id: 'todoList-123'
+ * }, graphManager);
+ * // Returns: { total: 10, pending: 5, in_progress: 3, completed: 2 }
+ * ```
+ * 
+ * @example
+ * ```typescript
+ * // Archive list and remove completed todos
+ * const result = await handleTodoList({
+ *   operation: 'archive',
+ *   list_id: 'todoList-123',
+ *   remove_completed: true
+ * }, graphManager);
+ * ```
  */
 export async function handleTodoList(
   params: any,

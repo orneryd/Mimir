@@ -1,7 +1,7 @@
-// ============================================================================
-// GraphManager - Neo4j Implementation
-// Clean, simple, unified node model
-// ============================================================================
+/**
+ * @module managers/GraphManager
+ * @description Core graph database manager for Neo4j operations
+ */
 
 import neo4j, { Driver } from 'neo4j-driver';
 import type {
@@ -21,6 +21,51 @@ import { UnifiedSearchService } from './UnifiedSearchService.js';
 import { flattenForMCP } from '../tools/mcp/flattenForMCP.js';
 import { LLMConfigLoader } from '../config/LLMConfigLoader.js';
 
+/**
+ * GraphManager - Core interface to Neo4j graph database
+ * 
+ * @description Provides high-level interface for all graph database operations
+ * including CRUD for nodes and edges, search, transactions, and schema management.
+ * Automatically handles vector embeddings for semantic search and supports
+ * multi-agent coordination with optimistic locking.
+ * 
+ * Features:
+ * - Unified node model (all nodes use Node label)
+ * - Automatic embedding generation for semantic search
+ * - Hybrid search (vector + BM25 full-text)
+ * - Optimistic locking for concurrent access
+ * - Batch operations for performance
+ * - Graph traversal and subgraph extraction
+ * 
+ * @example
+ * ```typescript
+ * // Create and initialize
+ * const manager = new GraphManager(
+ *   'bolt://localhost:7687',
+ *   'neo4j',
+ *   'password'
+ * );
+ * await manager.initialize();
+ * ```
+ * 
+ * @example
+ * ```typescript
+ * // Add a node with automatic embeddings
+ * const node = await manager.addNode('memory', {
+ *   title: 'Important Decision',
+ *   content: 'We decided to use PostgreSQL for better ACID compliance'
+ * });
+ * ```
+ * 
+ * @example
+ * ```typescript
+ * // Search by meaning (semantic search)
+ * const results = await manager.searchNodes('database decisions', {
+ *   limit: 10,
+ *   types: ['memory']
+ * });
+ * ```
+ */
 export class GraphManager implements IGraphManager {
   private driver: Driver;
   private nodeCounter = 0;

@@ -66,9 +66,54 @@ export function createVectorSearchTools(driver: Driver): Tool[] {
 }
 
 /**
- * Handle vector_search_nodes tool call
- * Uses UnifiedSearchService for automatic fallback
- * Supports multi-hop graph traversal when depth > 1
+ * Handle vector_search_nodes tool call - Semantic search across all nodes
+ * 
+ * @description Performs semantic search using vector embeddings to find nodes
+ * by meaning rather than exact keywords. Automatically falls back to full-text
+ * search if embeddings are disabled or no results found. Supports multi-hop
+ * graph traversal to discover connected nodes at specified depth.
+ * 
+ * @param params - Search parameters
+ * @param params.query - Natural language search query
+ * @param params.types - Optional array of node types to filter (e.g., ['todo', 'memory', 'file'])
+ * @param params.limit - Maximum results to return (default: 10)
+ * @param params.min_similarity - Minimum cosine similarity 0-1 (default: 0.75)
+ * @param params.depth - Graph traversal depth 1-3 (default: 1)
+ * @param driver - Neo4j driver instance
+ * 
+ * @returns Promise with search results and metadata
+ * 
+ * @example
+ * ```typescript
+ * // Basic semantic search
+ * const result = await handleVectorSearchNodes({
+ *   query: 'authentication implementation',
+ *   limit: 10
+ * }, driver);
+ * // Returns: { results: [...], total_candidates: 10, search_method: 'vector' }
+ * ```
+ * 
+ * @example
+ * ```typescript
+ * // Search specific node types
+ * const result = await handleVectorSearchNodes({
+ *   query: 'database connection',
+ *   types: ['file', 'file_chunk'],
+ *   limit: 20,
+ *   min_similarity: 0.8
+ * }, driver);
+ * ```
+ * 
+ * @example
+ * ```typescript
+ * // Multi-hop search to find connected nodes
+ * const result = await handleVectorSearchNodes({
+ *   query: 'user authentication',
+ *   depth: 2,
+ *   limit: 15
+ * }, driver);
+ * // Returns direct matches + connected nodes within 2 hops
+ * ```
  */
 export async function handleVectorSearchNodes(
   params: any,
@@ -203,7 +248,42 @@ export async function handleVectorSearchNodes(
 }
 
 /**
- * Handle get_embedding_stats tool call
+ * Handle get_embedding_stats tool call - Get embedding statistics
+ * 
+ * @description Returns statistics about nodes with vector embeddings,
+ * broken down by node type. Useful for monitoring indexing progress
+ * and understanding what content is available for semantic search.
+ * 
+ * @param params - No parameters required
+ * @param driver - Neo4j driver instance
+ * 
+ * @returns Promise with embedding statistics
+ * 
+ * @example
+ * ```typescript
+ * // Get embedding statistics
+ * const result = await handleGetEmbeddingStats({}, driver);
+ * // Returns: {
+ * //   status: 'success',
+ * //   embeddings_enabled: true,
+ * //   total_nodes_with_embeddings: 1523,
+ * //   breakdown_by_type: {
+ * //     file_chunk: 1200,
+ * //     todo: 150,
+ * //     memory: 100,
+ * //     file: 73
+ * //   }
+ * // }
+ * ```
+ * 
+ * @example
+ * ```typescript
+ * // Check if embeddings are enabled
+ * const stats = await handleGetEmbeddingStats({}, driver);
+ * if (stats.embeddings_enabled) {
+ *   console.log(`${stats.total_nodes_with_embeddings} nodes indexed`);
+ * }
+ * ```
  */
 export async function handleGetEmbeddingStats(
   params: any,

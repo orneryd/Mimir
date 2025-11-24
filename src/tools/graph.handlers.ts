@@ -1,7 +1,9 @@
-// ============================================================================
-// Consolidated Graph Tool Handlers
-// Routes operations to GraphManager methods
-// ============================================================================
+/**
+ * @module graph.handlers
+ * @description Consolidated graph tool handlers for MCP memory operations.
+ * Routes operations to GraphManager methods and provides unified interface
+ * for node, edge, batch, lock, and clear operations.
+ */
 
 import type { IGraphManager } from "../managers/index.js";
 import type { NodeType, EdgeType, ClearType } from "../types/index.js";
@@ -14,6 +16,14 @@ import {
 
 /**
  * Check if an error is a Neo4j nested map property error
+ * 
+ * @description Neo4j doesn't support nested objects in properties.
+ * This function detects such errors so we can auto-flatten and retry.
+ * 
+ * @param error - Error object or message to check
+ * @returns True if error is related to nested map properties
+ * 
+ * @internal
  */
 function isNestedMapError(error: any): boolean {
   const message = error?.message || String(error);
@@ -21,9 +31,66 @@ function isNestedMapError(error: any): boolean {
          message.includes('Encountered: Map{');
 }
 
-// ============================================================================
-// memory_node handler - All node operations
-// ============================================================================
+/**
+ * Handle memory_node operations - CRUD for graph nodes
+ * 
+ * @description Provides unified interface for creating, reading, updating,
+ * and deleting nodes in the Neo4j graph database. Supports todos, memories,
+ * files, concepts, and custom node types. Automatically handles nested
+ * properties by flattening them if needed.
+ * 
+ * @param args - Operation arguments
+ * @param args.operation - Operation type: 'add' | 'get' | 'update' | 'delete' | 'query' | 'search'
+ * @param args.type - Node type (required for add, optional for query)
+ * @param args.id - Node ID (required for get/update/delete)
+ * @param args.properties - Node properties (for add/update)
+ * @param args.filters - Query filters (for query operation)
+ * @param args.query - Search query text (for search operation)
+ * @param args.options - Search options like limit, offset, types
+ * @param args.confirm - Confirmation flag for delete operations
+ * @param args.confirmationId - Confirmation token for delete operations
+ * @param graphManager - Graph manager instance
+ * 
+ * @returns Promise with operation result
+ * 
+ * @example
+ * ```typescript
+ * // Create a memory node
+ * const result = await handleMemoryNode({
+ *   operation: 'add',
+ *   type: 'memory',
+ *   properties: {
+ *     title: 'Important Decision',
+ *     content: 'We decided to use PostgreSQL for better ACID compliance'
+ *   }
+ * }, graphManager);
+ * // Returns: { success: true, operation: 'add', node: {...} }
+ * ```
+ * 
+ * @example
+ * ```typescript
+ * // Query pending todos
+ * const result = await handleMemoryNode({
+ *   operation: 'query',
+ *   type: 'todo',
+ *   filters: { status: 'pending' }
+ * }, graphManager);
+ * // Returns: { success: true, operation: 'query', count: 5, nodes: [...] }
+ * ```
+ * 
+ * @example
+ * ```typescript
+ * // Semantic search
+ * const result = await handleMemoryNode({
+ *   operation: 'search',
+ *   query: 'authentication implementation',
+ *   options: { limit: 10, types: ['memory', 'file'] }
+ * }, graphManager);
+ * // Returns: { success: true, operation: 'search', count: 3, nodes: [...] }
+ * ```
+ * 
+ * @throws {Error} If operation fails or invalid arguments provided
+ */
 export async function handleMemoryNode(args: any, graphManager: IGraphManager) {
   const { operation } = args;
 
@@ -159,9 +226,61 @@ export async function handleMemoryNode(args: any, graphManager: IGraphManager) {
   }
 }
 
-// ============================================================================
-// memory_edge handler - All edge operations
-// ============================================================================
+/**
+ * Handle memory_edge operations - Manage relationships between nodes
+ * 
+ * @description Build knowledge graphs by creating, deleting, and querying
+ * relationships between nodes. Supports operations like finding neighbors,
+ * extracting subgraphs, and traversing the graph structure.
+ * 
+ * @param args - Operation arguments
+ * @param args.operation - Operation type: 'add' | 'delete' | 'get' | 'neighbors' | 'subgraph'
+ * @param args.source - Source node ID (for add operation)
+ * @param args.target - Target node ID (for add operation)
+ * @param args.type - Edge type like 'depends_on', 'part_of', 'related_to'
+ * @param args.properties - Optional edge properties
+ * @param args.edge_id - Edge ID (for delete operation)
+ * @param args.node_id - Node ID (for get/neighbors/subgraph operations)
+ * @param args.direction - Edge direction: 'in' | 'out' | 'both' (default: 'both')
+ * @param args.edge_type - Filter by edge type (for neighbors operation)
+ * @param args.depth - Traversal depth (default: 1)
+ * @param graphManager - Graph manager instance
+ * 
+ * @returns Promise with operation result
+ * 
+ * @example
+ * ```typescript
+ * // Create a relationship
+ * const result = await handleMemoryEdge({
+ *   operation: 'add',
+ *   source: 'todo-1',
+ *   target: 'project-2',
+ *   type: 'part_of'
+ * }, graphManager);
+ * ```
+ * 
+ * @example
+ * ```typescript
+ * // Find all neighbors
+ * const result = await handleMemoryEdge({
+ *   operation: 'neighbors',
+ *   node_id: 'todo-1',
+ *   edge_type: 'depends_on',
+ *   depth: 2
+ * }, graphManager);
+ * ```
+ * 
+ * @example
+ * ```typescript
+ * // Extract subgraph
+ * const result = await handleMemoryEdge({
+ *   operation: 'subgraph',
+ *   node_id: 'project-1',
+ *   depth: 3
+ * }, graphManager);
+ * // Returns: { success: true, subgraph: { nodes: [...], edges: [...] } }
+ * ```
+ */
 export async function handleMemoryEdge(args: any, graphManager: IGraphManager) {
   const { operation } = args;
 
@@ -241,9 +360,62 @@ export async function handleMemoryEdge(args: any, graphManager: IGraphManager) {
   }
 }
 
-// ============================================================================
-// memory_batch handler - Bulk operations
-// ============================================================================
+/**
+ * Handle memory_batch operations - Bulk operations for nodes and edges
+ * 
+ * @description Perform bulk operations on multiple nodes or edges at once
+ * for better performance. Supports batch add, update, and delete operations
+ * with automatic property flattening and confirmation flows for destructive operations.
+ * 
+ * @param args - Operation arguments
+ * @param args.operation - Operation type: 'add_nodes' | 'update_nodes' | 'delete_nodes' | 'add_edges' | 'delete_edges'
+ * @param args.nodes - Array of nodes to create (for add_nodes)
+ * @param args.updates - Array of node updates with id and properties (for update_nodes)
+ * @param args.ids - Array of node/edge IDs to delete (for delete operations)
+ * @param args.edges - Array of edges to create (for add_edges)
+ * @param args.confirm - Confirmation flag for delete operations
+ * @param args.confirmationId - Confirmation token for delete operations
+ * @param graphManager - Graph manager instance
+ * 
+ * @returns Promise with operation result
+ * 
+ * @example
+ * ```typescript
+ * // Batch create nodes
+ * const result = await handleMemoryBatch({
+ *   operation: 'add_nodes',
+ *   nodes: [
+ *     { type: 'todo', properties: { title: 'Task 1' } },
+ *     { type: 'todo', properties: { title: 'Task 2' } }
+ *   ]
+ * }, graphManager);
+ * // Returns: { success: true, count: 2, nodes: [...] }
+ * ```
+ * 
+ * @example
+ * ```typescript
+ * // Batch update nodes
+ * const result = await handleMemoryBatch({
+ *   operation: 'update_nodes',
+ *   updates: [
+ *     { id: 'todo-1', properties: { status: 'completed' } },
+ *     { id: 'todo-2', properties: { status: 'completed' } }
+ *   ]
+ * }, graphManager);
+ * ```
+ * 
+ * @example
+ * ```typescript
+ * // Batch create edges
+ * const result = await handleMemoryBatch({
+ *   operation: 'add_edges',
+ *   edges: [
+ *     { source: 'todo-1', target: 'project-1', type: 'part_of' },
+ *     { source: 'todo-2', target: 'project-1', type: 'part_of' }
+ *   ]
+ * }, graphManager);
+ * ```
+ */
 export async function handleMemoryBatch(args: any, graphManager: IGraphManager) {
   const { operation } = args;
 
@@ -430,9 +602,57 @@ export async function handleMemoryBatch(args: any, graphManager: IGraphManager) 
   }
 }
 
-// ============================================================================
-// memory_lock handler - Multi-agent locking
-// ============================================================================
+/**
+ * Handle memory_lock operations - Multi-agent locking for concurrent access
+ * 
+ * @description Provides optimistic locking mechanism for multi-agent scenarios.
+ * Prevents race conditions when multiple agents try to modify the same node.
+ * Locks automatically expire after timeout to prevent deadlocks.
+ * 
+ * @param args - Operation arguments
+ * @param args.operation - Operation type: 'acquire' | 'release' | 'query_available' | 'cleanup'
+ * @param args.node_id - Node ID to lock/unlock
+ * @param args.agent_id - Agent identifier (e.g., 'pm-agent', 'worker-1')
+ * @param args.timeout_ms - Lock timeout in milliseconds (default: 300000 = 5 minutes)
+ * @param args.type - Node type filter (for query_available)
+ * @param args.filters - Property filters (for query_available)
+ * @param graphManager - Graph manager instance
+ * 
+ * @returns Promise with operation result
+ * 
+ * @example
+ * ```typescript
+ * // Acquire lock
+ * const result = await handleMemoryLock({
+ *   operation: 'acquire',
+ *   node_id: 'todo-1',
+ *   agent_id: 'worker-agent-1',
+ *   timeout_ms: 300000
+ * }, graphManager);
+ * // Returns: { success: true, locked: true, message: '...' }
+ * ```
+ * 
+ * @example
+ * ```typescript
+ * // Query available (unlocked) nodes
+ * const result = await handleMemoryLock({
+ *   operation: 'query_available',
+ *   type: 'todo',
+ *   filters: { status: 'pending' }
+ * }, graphManager);
+ * // Returns: { success: true, count: 5, nodes: [...] }
+ * ```
+ * 
+ * @example
+ * ```typescript
+ * // Release lock
+ * const result = await handleMemoryLock({
+ *   operation: 'release',
+ *   node_id: 'todo-1',
+ *   agent_id: 'worker-agent-1'
+ * }, graphManager);
+ * ```
+ */
 export async function handleMemoryLock(args: any, graphManager: IGraphManager) {
   const { operation } = args;
 
@@ -504,6 +724,53 @@ export async function handleMemoryLock(args: any, graphManager: IGraphManager) {
 // ============================================================================
 // memory_clear handler - Dangerous operation with confirmation flow
 // ============================================================================
+/**
+ * Handle memory_clear operations - Clear data from graph database
+ * 
+ * @description Provides safe deletion of data by type or complete database clear.
+ * Includes confirmation flow for destructive operations. Use with caution!
+ * 
+ * @param args - Operation arguments
+ * @param args.type - Clear type: 'ALL' | 'todo' | 'memory' | 'file' | etc.
+ * @param args.confirm - Confirmation flag (required for execution)
+ * @param args.confirmationId - Confirmation token from preview request
+ * @param graphManager - Graph manager instance
+ * 
+ * @returns Promise with operation result
+ * 
+ * @example
+ * ```typescript
+ * // Request preview for clearing all todos
+ * const preview = await handleMemoryClear({
+ *   type: 'todo'
+ * }, graphManager);
+ * // Returns: { needsConfirmation: true, confirmationId: '...', preview: {...} }
+ * 
+ * // Execute with confirmation
+ * const result = await handleMemoryClear({
+ *   type: 'todo',
+ *   confirm: true,
+ *   confirmationId: preview.confirmationId
+ * }, graphManager);
+ * // Returns: { success: true, confirmed: true, deleted: 42 }
+ * ```
+ * 
+ * @example
+ * ```typescript
+ * // Clear entire database (use with extreme caution!)
+ * const preview = await handleMemoryClear({
+ *   type: 'ALL'
+ * }, graphManager);
+ * 
+ * const result = await handleMemoryClear({
+ *   type: 'ALL',
+ *   confirm: true,
+ *   confirmationId: preview.confirmationId
+ * }, graphManager);
+ * ```
+ * 
+ * @throws {Error} If operation fails or invalid confirmation
+ */
 export async function handleMemoryClear(args: any, graphManager: IGraphManager) {
   const { type, confirm, confirmationId } = args as { 
     type?: ClearType; 

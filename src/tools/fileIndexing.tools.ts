@@ -105,14 +105,69 @@ export function createFileIndexingTools(
 }
 
 /**
- * Handle index_folder tool call - now combines watch and index
- * Returns immediately while indexing happens in the background
+ * Handle index_folder tool call - Index files and start watching for changes
+ * 
+ * @description Indexes all files in a directory into Neo4j and automatically
+ * starts watching for file changes. Files are parsed, content extracted, and
+ * optionally embedded with vector embeddings for semantic search. Respects
+ * .gitignore patterns and supports custom file/ignore patterns.
+ * 
+ * Returns immediately while indexing happens asynchronously in the background.
+ * Check logs or use list_folders to monitor progress.
+ * 
+ * @param params - Indexing parameters
+ * @param params.path - Absolute path to folder (e.g., '/workspace/src/my-project')
+ * @param params.recursive - Watch subdirectories recursively (default: true)
+ * @param params.debounce_ms - Debounce delay for file events in ms (default: 500)
+ * @param params.file_patterns - File patterns to watch (e.g., ['*.ts', '*.js'])
+ * @param params.ignore_patterns - Additional ignore patterns beyond .gitignore
+ * @param params.generate_embeddings - Generate vector embeddings (default: auto from config)
+ * @param driver - Neo4j driver instance
+ * @param watchManager - File watch manager instance
+ * @param configManager - Watch config manager (optional, for testing)
+ * 
+ * @returns Promise with indexing status and metadata
+ * 
+ * @example
+ * ```typescript
+ * // Index a TypeScript project
+ * const result = await handleIndexFolder({
+ *   path: '/workspace/src/my-app',
+ *   recursive: true,
+ *   file_patterns: ['*.ts', '*.tsx'],
+ *   ignore_patterns: ['*.test.ts', '*.spec.ts'],
+ *   generate_embeddings: true
+ * }, driver, watchManager);
+ * // Returns: { status: 'success', path: '...', message: 'Indexing started...' }
+ * ```
+ * 
+ * @example
+ * ```typescript
+ * // Index documentation files only
+ * const result = await handleIndexFolder({
+ *   path: '/workspace/docs',
+ *   file_patterns: ['*.md', '*.mdx'],
+ *   generate_embeddings: true
+ * }, driver, watchManager);
+ * ```
+ * 
+ * @example
+ * ```typescript
+ * // Index without embeddings (faster, no semantic search)
+ * const result = await handleIndexFolder({
+ *   path: '/workspace/config',
+ *   file_patterns: ['*.json', '*.yaml'],
+ *   generate_embeddings: false
+ * }, driver, watchManager);
+ * ```
+ * 
+ * @throws {Error} If path is invalid or doesn't exist
  */
 export async function handleIndexFolder(
   params: any,
   driver: Driver,
   watchManager: FileWatchManager,
-  configManager?: WatchConfigManager  // Optional parameter for testing
+  configManager?: WatchConfigManager
 ): Promise<IndexFolderResponse> {
   const manager = configManager || new WatchConfigManager(driver);
   const startTime = Date.now();
@@ -208,13 +263,44 @@ export async function handleIndexFolder(
 }
 
 /**
- * Handle remove_folder tool call (renamed from unwatch_folder)
+ * Handle remove_folder tool call - Stop watching and remove indexed files
+ * 
+ * @description Stops watching a directory for changes and removes all indexed
+ * files from the Neo4j database. This includes File nodes and their associated
+ * FileChunk nodes. Use this to clean up when you no longer need a folder indexed.
+ * 
+ * @param params - Removal parameters
+ * @param params.path - Path to folder to stop watching and remove
+ * @param driver - Neo4j driver instance
+ * @param watchManager - File watch manager instance
+ * @param configManager - Watch config manager (optional, for testing)
+ * 
+ * @returns Promise with removal status and count of deleted files
+ * 
+ * @example
+ * ```typescript
+ * // Remove a folder from indexing
+ * const result = await handleRemoveFolder({
+ *   path: '/workspace/old-project'
+ * }, driver, watchManager);
+ * // Returns: { status: 'success', files_deleted: 42, chunks_deleted: 156 }
+ * ```
+ * 
+ * @example
+ * ```typescript
+ * // Remove temporary files
+ * const result = await handleRemoveFolder({
+ *   path: '/workspace/temp'
+ * }, driver, watchManager);
+ * ```
+ * 
+ * @throws {Error} If path is invalid or not being watched
  */
 export async function handleRemoveFolder(
   params: any,
   driver: Driver,
   watchManager: FileWatchManager,
-  configManager?: WatchConfigManager  // Optional parameter for testing
+  configManager?: WatchConfigManager
 ): Promise<any> {
   const manager = configManager || new WatchConfigManager(driver);
   
@@ -289,11 +375,45 @@ export async function handleRemoveFolder(
 }
 
 /**
- * Handle list_folders tool call
+ * Handle list_folders tool call - List all watched folders
+ * 
+ * @description Returns a list of all folders currently being watched for file
+ * changes, along with their configuration (patterns, recursive, embeddings, etc.).
+ * Useful for checking what's being indexed and monitoring indexing progress.
+ * 
+ * @param driver - Neo4j driver instance
+ * @param configManager - Watch config manager (optional, for testing)
+ * 
+ * @returns Promise with list of watched folders and their configurations
+ * 
+ * @example
+ * ```typescript
+ * // List all watched folders
+ * const result = await handleListWatchedFolders(driver);
+ * // Returns: {
+ * //   status: 'success',
+ * //   folders: [
+ * //     {
+ * //       path: '/workspace/src',
+ * //       recursive: true,
+ * //       file_patterns: ['*.ts', '*.tsx'],
+ * //       generate_embeddings: true
+ * //     },
+ * //     ...
+ * //   ]
+ * // }
+ * ```
+ * 
+ * @example
+ * ```typescript
+ * // Check if a specific folder is being watched
+ * const result = await handleListWatchedFolders(driver);
+ * const isWatched = result.folders.some(f => f.path === '/workspace/src');
+ * ```
  */
 export async function handleListWatchedFolders(
   driver: Driver,
-  configManager?: WatchConfigManager  // Optional parameter for testing
+  configManager?: WatchConfigManager
 ): Promise<ListWatchedFoldersResponse> {
   const manager = configManager || new WatchConfigManager(driver);
   

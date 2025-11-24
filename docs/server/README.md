@@ -61,7 +61,7 @@
 - [orchestrator/workspace-context](orchestrator/workspace-context.md)
 - [tools/confirmation.utils](tools/confirmation.utils.md)
 - [tools/fileIndexing.tools](tools/fileIndexing.tools.md)
-- [tools/graph.handlers](tools/graph.handlers.md)
+- [graph.handlers](graph.handlers.md)
 - [tools/graph.tools](tools/graph.tools.md)
 - [tools](tools.md)
 - [tools/mcp/flattenForMCP](tools/mcp/flattenForMCP.md)
