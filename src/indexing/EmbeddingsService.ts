@@ -111,7 +111,36 @@ export class EmbeddingsService {
   }
 
   /**
-   * Initialize the embeddings service
+   * Initialize the embeddings service with provider configuration
+   * 
+   * Loads embeddings configuration from LLM config and sets up the provider
+   * (Ollama, OpenAI, or Copilot). If embeddings are disabled in config or
+   * initialization fails, the service gracefully falls back to disabled state.
+   * 
+   * @returns Promise that resolves when initialization is complete
+   * 
+   * @example
+   * // Initialize with Ollama (local embeddings)
+   * const embeddingsService = new EmbeddingsService();
+   * await embeddingsService.initialize();
+   * if (embeddingsService.isEnabled()) {
+   *   console.log('Using local Ollama embeddings');
+   * }
+   * 
+   * @example
+   * // Initialize with OpenAI embeddings
+   * // Set MIMIR_EMBEDDINGS_API_KEY=sk-... in environment
+   * const embeddingsService = new EmbeddingsService();
+   * await embeddingsService.initialize();
+   * console.log('Embeddings provider:', embeddingsService.isEnabled());
+   * 
+   * @example
+   * // Handle disabled embeddings gracefully
+   * const embeddingsService = new EmbeddingsService();
+   * await embeddingsService.initialize();
+   * if (!embeddingsService.isEnabled()) {
+   *   console.log('Embeddings disabled, using full-text search only');
+   * }
    */
   async initialize(): Promise<void> {
     const config = await this.configLoader.getEmbeddingsConfig();
@@ -152,7 +181,29 @@ export class EmbeddingsService {
   }
 
   /**
-   * Check if embeddings are enabled
+   * Check if vector embeddings are enabled and ready to use
+   * 
+   * Returns true if the service initialized successfully and embeddings
+   * are configured. Use this before calling embedding generation methods.
+   * 
+   * @returns True if embeddings enabled, false otherwise
+   * 
+   * @example
+   * // Check before generating embeddings
+   * if (embeddingsService.isEnabled()) {
+   *   const result = await embeddingsService.generateEmbedding('search query');
+   * } else {
+   *   console.log('Falling back to keyword search');
+   * }
+   * 
+   * @example
+   * // Conditional feature availability
+   * const features = {
+   *   semanticSearch: embeddingsService.isEnabled(),
+   *   keywordSearch: true,
+   *   hybridSearch: embeddingsService.isEnabled()
+   * };
+   * console.log('Available features:', features);
    */
   isEnabled(): boolean {
     return this.enabled;
@@ -205,9 +256,39 @@ export class EmbeddingsService {
   }
 
   /**
-   * Generate embedding for a single text
-   * Automatically chunks large texts and averages embeddings
-   * @deprecated Use generateChunkEmbeddings for industry-standard chunking
+   * Generate a single averaged embedding vector for text
+   * 
+   * For large texts, automatically chunks and averages embeddings.
+   * Returns a single vector representing the entire text.
+   * 
+   * @deprecated Use generateChunkEmbeddings() for better search accuracy.
+   * Industry standard is to store separate embeddings per chunk.
+   * 
+   * @param text - Text to generate embedding for
+   * @returns Embedding result with vector, dimensions, and model info
+   * @throws {Error} If embeddings disabled or text is empty
+   * 
+   * @example
+   * // Generate embedding for search query
+   * const result = await embeddingsService.generateEmbedding(
+   *   'How do I implement authentication?'
+   * );
+   * console.log(`Embedding dimensions: ${result.dimensions}`);
+   * console.log(`Model: ${result.model}`);
+   * // Use result.embedding for similarity search
+   * 
+   * @example
+   * // Generate embedding for short content
+   * const memory = await embeddingsService.generateEmbedding(
+   *   'Use JWT tokens with 15-minute expiry and refresh tokens'
+   * );
+   * // Store memory.embedding in database for semantic search
+   * 
+   * @example
+   * // Handle large text (auto-chunked and averaged)
+   * const longDoc = fs.readFileSync('documentation.md', 'utf-8');
+   * const result = await embeddingsService.generateEmbedding(longDoc);
+   * // Returns single averaged embedding for entire document
    */
   async generateEmbedding(text: string): Promise<EmbeddingResult> {
     if (!this.enabled) {
@@ -280,9 +361,65 @@ export class EmbeddingsService {
   }
 
   /**
-   * Generate separate embeddings for each chunk (Industry Standard)
-   * Returns array of chunk embeddings with text, offsets, and metadata
-   * Each chunk becomes a separate searchable unit
+   * Generate separate embeddings for each text chunk (Industry Standard)
+   * 
+   * Splits large text into overlapping chunks and generates individual embeddings.
+   * Each chunk becomes a separate searchable unit, enabling precise retrieval.
+   * This is the recommended approach for file indexing and RAG systems.
+   * 
+   * Chunking strategy:
+   * - Default chunk size: 768 characters (configurable via MIMIR_EMBEDDINGS_CHUNK_SIZE)
+   * - Overlap: 10 characters (configurable via MIMIR_EMBEDDINGS_CHUNK_OVERLAP)
+   * - Smart boundaries: Breaks at paragraphs, sentences, or words
+   * 
+   * @param text - Text to chunk and embed
+   * @returns Array of chunk embeddings with text, offsets, and metadata
+   * @throws {Error} If embeddings disabled or text is empty
+   * 
+   * @example
+   * // Index a source code file
+   * const fileContent = fs.readFileSync('src/auth.ts', 'utf-8');
+   * const chunks = await embeddingsService.generateChunkEmbeddings(fileContent);
+   * 
+   * for (const chunk of chunks) {
+   *   await db.createNode('file_chunk', {
+   *     text: chunk.text,
+   *     embedding: chunk.embedding,
+   *     chunkIndex: chunk.chunkIndex,
+   *     startOffset: chunk.startOffset,
+   *     endOffset: chunk.endOffset
+   *   });
+   * }
+   * console.log(`Indexed ${chunks.length} chunks`);
+   * 
+   * @example
+   * // Index documentation with metadata
+   * const docContent = fs.readFileSync('README.md', 'utf-8');
+   * const metadata = formatMetadataForEmbedding({
+   *   name: 'README.md',
+   *   relativePath: 'README.md',
+   *   language: 'markdown',
+   *   extension: '.md'
+   * });
+   * const enrichedContent = metadata + docContent;
+   * const chunks = await embeddingsService.generateChunkEmbeddings(enrichedContent);
+   * // Each chunk now includes file context for better search
+   * 
+   * @example
+   * // Search within specific chunks
+   * const query = 'authentication implementation';
+   * const queryEmbedding = await embeddingsService.generateEmbedding(query);
+   * 
+   * // Find most similar chunks
+   * const results = await vectorSearch(queryEmbedding.embedding, {
+   *   type: 'file_chunk',
+   *   limit: 5
+   * });
+   * 
+   * for (const result of results) {
+   *   console.log(`Chunk ${result.chunkIndex}: ${result.text.substring(0, 100)}...`);
+   *   console.log(`Similarity: ${result.similarity}`);
+   * }
    */
   async generateChunkEmbeddings(text: string): Promise<ChunkEmbeddingResult[]> {
     if (!this.enabled) {

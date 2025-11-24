@@ -47,6 +47,69 @@ export class FileIndexer {
   }
 
   /**
+   * Retry wrapper for Neo4j transactions with exponential backoff
+   * Handles deadlocks and other transient database errors
+   * 
+   * @param fn - Async function to execute with retry logic
+   * @param operation - Description of operation for logging
+   * @param maxRetries - Maximum number of retry attempts (default: 3)
+   * @returns Result of the function execution
+   * 
+   * @example
+   * await this.retryNeo4jTransaction(async () => {
+   *   return await session.run('MERGE (n:Node {id: $id})', {id: '123'});
+   * }, 'Create node', 3);
+   */
+  private async retryNeo4jTransaction<T>(
+    fn: () => Promise<T>,
+    operation: string,
+    maxRetries: number = 3
+  ): Promise<T> {
+    let lastError: any;
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await fn();
+      } catch (error: any) {
+        lastError = error;
+        
+        // Check for retryable Neo4j errors
+        const isDeadlock = error.message?.includes('DeadlockDetected') ||
+                          error.message?.includes('can\'t acquire') ||
+                          error.message?.includes('ForsetiClient') ||
+                          error.code === 'Neo.TransientError.Transaction.DeadlockDetected';
+        
+        const isLockTimeout = error.message?.includes('LockClient') ||
+                             error.code === 'Neo.TransientError.Transaction.LockClientStopped';
+        
+        const isTransient = error.code?.startsWith('Neo.TransientError');
+        
+        const isRetryable = isDeadlock || isLockTimeout || isTransient;
+        
+        // Don't retry on final attempt or non-retryable errors
+        if (!isRetryable || attempt === maxRetries) {
+          throw error;
+        }
+        
+        // Exponential backoff with jitter: 100ms, 200ms, 400ms, 800ms...
+        const baseDelay = 100 * Math.pow(2, attempt);
+        const jitter = Math.random() * 50; // Add 0-50ms random jitter
+        const delayMs = Math.min(baseDelay + jitter, 2000);
+        
+        const errorType = isDeadlock ? 'deadlock' : isLockTimeout ? 'lock timeout' : 'transient';
+        console.warn(
+          `⚠️  ${operation} failed with Neo4j ${errorType} error ` +
+          `(attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${Math.round(delayMs)}ms...`
+        );
+        
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
+    
+    throw lastError;
+  }
+
+  /**
    * Initialize image processing services (lazy loading)
    */
   private async initImageServices(): Promise<void> {
@@ -114,8 +177,81 @@ export class FileIndexer {
   }
 
   /**
-   * Index a single file with optional embeddings (Industry Standard: Separate Chunks)
-   * Creates File node + FileChunk nodes with individual embeddings
+   * Index a single file into Neo4j with optional vector embeddings
+   * 
+   * Creates a File node in the graph database with metadata and content.
+   * For large files with embeddings enabled, splits content into chunks
+   * with individual embeddings for precise semantic search (industry standard).
+   * 
+   * Indexing Strategy:
+   * - **Small files** (<1000 chars): Single embedding on File node
+   * - **Large files** (>1000 chars): Multiple FileChunk nodes with embeddings
+   * - **No embeddings**: Full content stored on File node for full-text search
+   * 
+   * Supported Formats:
+   * - Text files (.ts, .js, .py, .md, .json, etc.)
+   * - PDF documents (text extraction)
+   * - DOCX documents (text extraction)
+   * - Images (.png, .jpg, etc.) with VL description or multimodal embedding
+   * 
+   * @param filePath - Absolute path to file
+   * @param rootPath - Root directory path for calculating relative paths
+   * @param generateEmbeddings - Whether to generate vector embeddings
+   * @returns Index result with file node ID, path, size, and chunk count
+   * @throws {Error} If file is binary, non-indexable, or processing fails
+   * 
+   * @example
+   * // Index a TypeScript file without embeddings
+   * const result = await fileIndexer.indexFile(
+   *   '/Users/user/project/src/auth.ts',
+   *   '/Users/user/project',
+   *   false
+   * );
+   * console.log('Indexed:', result.path);
+   * console.log('Size:', result.size_bytes, 'bytes');
+   * // File content stored on File node for full-text search
+   * 
+   * @example
+   * // Index a large file with embeddings (chunked)
+   * const result = await fileIndexer.indexFile(
+   *   '/Users/user/project/docs/guide.md',
+   *   '/Users/user/project',
+   *   true
+   * );
+   * console.log('Created', result.chunks_created, 'chunks');
+   * // Each chunk has its own embedding for precise semantic search
+   * 
+   * @example
+   * // Index a PDF document with embeddings
+   * const result = await fileIndexer.indexFile(
+   *   '/Users/user/project/docs/manual.pdf',
+   *   '/Users/user/project',
+   *   true
+   * );
+   * console.log('Extracted and indexed PDF:', result.path);
+   * console.log('Chunks created:', result.chunks_created);
+   * 
+   * @example
+   * // Index an image with VL description
+   * const result = await fileIndexer.indexFile(
+   *   '/Users/user/project/images/diagram.png',
+   *   '/Users/user/project',
+   *   true
+   * );
+   * console.log('Image indexed with description:', result.path);
+   * // VL model generates text description, then embeds it
+   * 
+   * @example
+   * // Handle indexing errors
+   * try {
+   *   await fileIndexer.indexFile(filePath, rootPath, true);
+   * } catch (error) {
+   *   if (error.message === 'Binary or non-indexable file') {
+   *     console.log('Skipped binary file');
+   *   } else {
+   *     console.error('Indexing failed:', error.message);
+   *   }
+   * }
    */
   async indexFile(filePath: string, rootPath: string, generateEmbeddings: boolean = false): Promise<IndexResult> {
     const session = this.driver.session();
@@ -258,34 +394,37 @@ export class FileIndexer {
       // Use host path for logging (fall back to container path if not available)
       const displayPath = hostPath || filePath;
       
-      const fileResult = await session.run(`
-        MERGE (f:File:Node {path: $path})
-        ON CREATE SET f.id = 'file-' + toString(timestamp()) + '-' + substring(randomUUID(), 0, 8)
-        SET 
-          f.host_path = $host_path,
-          f.name = $name,
-          f.extension = $extension,
-          f.language = $language,
-          f.size_bytes = $size_bytes,
-          f.line_count = $line_count,
-          f.last_modified = $last_modified,
-          f.indexed_date = datetime(),
-          f.type = 'file',
-          f.has_chunks = $has_chunks,
-          f.content = $content
-        RETURN f.path AS path, f.size_bytes AS size_bytes, id(f) AS node_id
-      `, {
-        path: filePath,  // Now stores absolute container path
-        host_path: hostPath,
-        name: path.basename(filePath),
-        extension: extension,
-        language: language,
-        size_bytes: stats.size,
-        line_count: content.split('\n').length,
-        last_modified: stats.mtime.toISOString(),
-        has_chunks: needsChunking,
-        content: shouldStoreFullContent ? content : null // Store full content when embeddings disabled OR file is small
-      });
+      // Wrap File node creation with retry logic to handle deadlocks
+      const fileResult = await this.retryNeo4jTransaction(async () => {
+        return await session.run(`
+          MERGE (f:File:Node {path: $path})
+          ON CREATE SET f.id = 'file-' + toString(timestamp()) + '-' + substring(randomUUID(), 0, 8)
+          SET 
+            f.host_path = $host_path,
+            f.name = $name,
+            f.extension = $extension,
+            f.language = $language,
+            f.size_bytes = $size_bytes,
+            f.line_count = $line_count,
+            f.last_modified = $last_modified,
+            f.indexed_date = datetime(),
+            f.type = 'file',
+            f.has_chunks = $has_chunks,
+            f.content = $content
+          RETURN f.path AS path, f.size_bytes AS size_bytes, id(f) AS node_id
+        `, {
+          path: filePath,  // Now stores absolute container path
+          host_path: hostPath,
+          name: path.basename(filePath),
+          extension: extension,
+          language: language,
+          size_bytes: stats.size,
+          line_count: content.split('\n').length,
+          last_modified: stats.mtime.toISOString(),
+          has_chunks: needsChunking,
+          content: shouldStoreFullContent ? content : null // Store full content when embeddings disabled OR file is small
+        });
+      }, `Create/update File node for ${relativePath}`);
 
       const fileNodeId = fileResult.records[0].get('node_id');
       let chunksCreated = 0;
@@ -596,7 +735,32 @@ export class FileIndexer {
   }
 
   /**
-   * Delete file node and associated chunks from Neo4j
+   * Delete file node and all associated chunks from Neo4j
+   * 
+   * Removes the File node and cascades to delete all FileChunk nodes
+   * and their relationships. Use this when files are deleted from disk
+   * or need to be removed from the index.
+   * 
+   * @param relativePath - Relative path to file (from root directory)
+   * 
+   * @example
+   * // Delete a file from index when deleted from disk
+   * await fileIndexer.deleteFile('src/auth.ts');
+   * console.log('File removed from index');
+   * 
+   * @example
+   * // Clean up after file move/rename
+   * await fileIndexer.deleteFile('old/path/file.ts');
+   * await fileIndexer.indexFile('/new/path/file.ts', rootPath, true);
+   * console.log('File re-indexed at new location');
+   * 
+   * @example
+   * // Batch delete multiple files
+   * const deletedFiles = ['src/old1.ts', 'src/old2.ts', 'src/old3.ts'];
+   * for (const file of deletedFiles) {
+   *   await fileIndexer.deleteFile(file);
+   * }
+   * console.log('Cleaned up', deletedFiles.length, 'files');
    */
   async deleteFile(relativePath: string): Promise<void> {
     const session = this.driver.session();
@@ -615,7 +779,38 @@ export class FileIndexer {
   }
 
   /**
-   * Update file content (for file changes)
+   * Update file content and embeddings after file modification
+   * 
+   * Re-indexes the file to update content and regenerate embeddings.
+   * Automatically detects if file was modified and regenerates chunks
+   * if needed. This is the recommended way to handle file changes.
+   * 
+   * @param filePath - Absolute path to modified file
+   * @param rootPath - Root directory path
+   * 
+   * @example
+   * // Update file after modification
+   * await fileIndexer.updateFile(
+   *   '/Users/user/project/src/auth.ts',
+   *   '/Users/user/project'
+   * );
+   * console.log('File content and embeddings updated');
+   * 
+   * @example
+   * // Handle file watcher events
+   * watcher.on('change', async (filePath) => {
+   *   console.log('File changed:', filePath);
+   *   await fileIndexer.updateFile(filePath, rootPath);
+   *   console.log('Index updated');
+   * });
+   * 
+   * @example
+   * // Batch update multiple changed files
+   * const changedFiles = await getModifiedFiles();
+   * for (const file of changedFiles) {
+   *   await fileIndexer.updateFile(file, rootPath);
+   * }
+   * console.log('Updated', changedFiles.length, 'files');
    */
   async updateFile(filePath: string, rootPath: string): Promise<void> {
     // Just re-index the file

@@ -83,7 +83,32 @@ export class UnifiedSearchService {
   }
 
   /**
-   * Initialize embeddings service
+   * Initialize the embeddings service for semantic search
+   * 
+   * Sets up vector embeddings support for semantic search. If initialization fails,
+   * the service falls back to full-text search only. Safe to call multiple times.
+   * 
+   * @returns Promise that resolves when initialization is complete
+   * 
+   * @example
+   * // Initialize on service startup
+   * const searchService = new UnifiedSearchService(driver);
+   * await searchService.initialize();
+   * console.log('Search service ready');
+   * 
+   * @example
+   * // Automatic initialization on first search
+   * const searchService = new UnifiedSearchService(driver);
+   * // No need to call initialize() - happens automatically
+   * const results = await searchService.search('authentication');
+   * 
+   * @example
+   * // Handle initialization errors gracefully
+   * try {
+   *   await searchService.initialize();
+   * } catch (error) {
+   *   console.warn('Embeddings disabled, using full-text only');
+   * }
    */
   async initialize(): Promise<void> {
     if (this.initialized) return;
@@ -104,9 +129,68 @@ export class UnifiedSearchService {
   }
 
   /**
-   * Unified search with automatic fallback
-   * Tries vector search first (if enabled), falls back to full-text if needed
-   * Can optionally use advanced multi-stage hybrid search
+   * Unified search with automatic semantic and keyword search
+   * 
+   * Intelligently combines vector similarity search (semantic) with BM25 full-text
+   * search (keyword) using Reciprocal Rank Fusion (RRF). Automatically falls back
+   * to full-text only if embeddings are disabled.
+   * 
+   * Search Strategy:
+   * 1. If embeddings enabled: RRF hybrid search (vector + BM25)
+   * 2. If embeddings disabled: Full-text search only
+   * 
+   * @param query - Search query string
+   * @param options - Search options (types, limit, similarity threshold, RRF config)
+   * @returns Search response with results and metadata
+   * 
+   * @example
+   * // Basic semantic search
+   * const response = await searchService.search('user authentication');
+   * console.log(`Found ${response.returned} results`);
+   * for (const result of response.results) {
+   *   console.log(`${result.title}: ${result.similarity}`);
+   * }
+   * 
+   * @example
+   * // Search specific node types with limit
+   * const response = await searchService.search('API endpoint', {
+   *   types: ['file', 'memory'],
+   *   limit: 10,
+   *   minSimilarity: 0.7
+   * });
+   * console.log(`Method: ${response.search_method}`);
+   * 
+   * @example
+   * // Advanced RRF hybrid search configuration
+   * const response = await searchService.search('database query', {
+   *   types: ['file'],
+   *   limit: 20,
+   *   rrfK: 60,              // RRF constant (higher = less top-rank bias)
+   *   rrfVectorWeight: 1.5,  // Boost semantic results
+   *   rrfBm25Weight: 1.0,    // Standard keyword weight
+   *   rrfMinScore: 0.01      // Filter low-relevance results
+   * });
+   * 
+   * @example
+   * // Handle search with pagination
+   * const page1 = await searchService.search('React components', {
+   *   limit: 10,
+   *   offset: 0
+   * });
+   * const page2 = await searchService.search('React components', {
+   *   limit: 10,
+   *   offset: 10
+   * });
+   * 
+   * @example
+   * // Search with fallback detection
+   * const response = await searchService.search('error handling');
+   * if (response.fallback_triggered) {
+   *   console.log('Used full-text fallback');
+   * }
+   * if (response.search_method === 'rrf_hybrid') {
+   *   console.log('Used hybrid semantic + keyword search');
+   * }
    */
   async search(query: string, options: UnifiedSearchOptions = {}): Promise<UnifiedSearchResponse> {
     await this.initialize();
@@ -543,14 +627,58 @@ export class UnifiedSearchService {
   }
 
   /**
-   * Check if embeddings are enabled
+   * Check if vector embeddings are enabled for semantic search
+   * 
+   * Returns true if the embeddings service is initialized and functional.
+   * Use this to determine if semantic search is available.
+   * 
+   * @returns True if embeddings enabled, false otherwise
+   * 
+   * @example
+   * // Check before using vector-specific features
+   * if (searchService.isEmbeddingsEnabled()) {
+   *   console.log('Semantic search available');
+   * } else {
+   *   console.log('Using keyword search only');
+   * }
+   * 
+   * @example
+   * // Conditional search strategy
+   * const searchService = new UnifiedSearchService(driver);
+   * await searchService.initialize();
+   * 
+   * if (searchService.isEmbeddingsEnabled()) {
+   *   // Use semantic search for conceptual queries
+   *   const results = await searchService.search('authentication patterns');
+   * } else {
+   *   // Use exact keyword matching
+   *   const results = await searchService.search('AuthService.login');
+   * }
    */
   isEmbeddingsEnabled(): boolean {
     return this.embeddingsService.isEnabled();
   }
 
   /**
-   * Get embeddings service instance
+   * Get the underlying embeddings service instance
+   * 
+   * Provides direct access to the embeddings service for advanced use cases
+   * like generating custom embeddings or checking embedding statistics.
+   * 
+   * @returns EmbeddingsService instance
+   * 
+   * @example
+   * // Generate custom embedding
+   * const embeddingsService = searchService.getEmbeddingsService();
+   * const result = await embeddingsService.generateEmbedding('custom text');
+   * console.log(`Embedding dimensions: ${result.dimensions}`);
+   * 
+   * @example
+   * // Check embedding model info
+   * const embeddingsService = searchService.getEmbeddingsService();
+   * if (embeddingsService.isEnabled()) {
+   *   console.log('Using embeddings for semantic search');
+   * }
    */
   getEmbeddingsService(): EmbeddingsService {
     return this.embeddingsService;

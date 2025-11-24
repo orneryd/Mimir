@@ -34,6 +34,7 @@ export class FileWatchManager {
   private progressTrackers: Map<string, IndexingProgress> = new Map();
   private indexingPromises: Map<string, Promise<void>> = new Map();
   private progressCallbacks: Array<(progress: IndexingProgress) => void> = [];
+  private activeIndexingPaths: Set<string> = new Set(); // Track active indexing jobs to prevent duplicates
 
   constructor(private driver: Driver) {
     this.indexer = new FileIndexer(driver);
@@ -286,6 +287,15 @@ export class FileWatchManager {
    * Queue an indexing job with concurrency control
    */
   private async queueIndexing(config: WatchConfig): Promise<void> {
+    // Prevent duplicate indexing jobs for the same path
+    if (this.activeIndexingPaths.has(config.path)) {
+      console.log(`⏭️  Skipping duplicate indexing job for ${config.path} (already in progress)`);
+      return;
+    }
+    
+    // Mark path as being indexed
+    this.activeIndexingPaths.add(config.path);
+    
     // Create abort controller for this indexing job
     const abortController = new AbortController();
     this.abortControllers.set(config.path, abortController);
@@ -360,6 +370,7 @@ export class FileWatchManager {
       this.releaseIndexingSlot();
       this.abortControllers.delete(config.path);
       this.indexingPromises.delete(config.path);
+      this.activeIndexingPaths.delete(config.path); // Remove from active set to allow future indexing
       
       // Keep progress for 30 seconds after completion for SSE clients
       setTimeout(() => {

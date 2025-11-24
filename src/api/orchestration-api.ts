@@ -28,8 +28,56 @@ export function createOrchestrationRouter(graphManager: IGraphManager): Router {
   const router = Router();
 
   /**
-   * GET /api/agents
-   * List agent preambles with semantic search and pagination
+   * GET /api/agents - List agent preambles with search and pagination
+   * 
+   * Retrieves agent preambles from the knowledge graph with optional text search.
+   * Supports filtering by agent type (pm, worker, qc) and pagination.
+   * 
+   * Query Parameters:
+   * - search: Text search across name, role, and content
+   * - limit: Maximum results to return (default: 20)
+   * - offset: Number of results to skip (default: 0)
+   * - type: Filter by agent type ('pm', 'worker', 'qc', 'all')
+   * 
+   * @returns JSON with agents array, hasMore flag, and total count
+   * 
+   * @example
+   * // List all agents
+   * fetch('/api/agents')
+   *   .then(res => res.json())
+   *   .then(data => {
+   *     console.log('Found', data.agents.length, 'agents');
+   *     data.agents.forEach(agent => {
+   *       console.log('-', agent.name, '(' + agent.agentType + ')');
+   *     });
+   *   });
+   * 
+   * @example
+   * // Search for authentication-related agents
+   * fetch('/api/agents?search=authentication&type=worker')
+   *   .then(res => res.json())
+   *   .then(data => {
+   *     console.log('Auth workers:', data.agents);
+   *   });
+   * 
+   * @example
+   * // Paginate through agents
+   * async function loadAllAgents() {
+   *   let offset = 0;
+   *   const limit = 20;
+   *   const allAgents = [];
+   *   
+   *   while (true) {
+   *     const res = await fetch('/api/agents?limit=' + limit + '&offset=' + offset);
+   *     const data = await res.json();
+   *     allAgents.push(...data.agents);
+   *     
+   *     if (!data.hasMore) break;
+   *     offset += limit;
+   *   }
+   *   
+   *   return allAgents;
+   * }
    */
   router.get('/agents', async (req: any, res: any) => {
     try {
@@ -195,8 +243,58 @@ export function createOrchestrationRouter(graphManager: IGraphManager): Router {
   });
 
   /**
-   * POST /api/agents
-   * Create new agent preamble using Agentinator
+   * POST /api/agents - Create new agent preamble using Agentinator
+   * 
+   * Generates a specialized agent preamble from a role description.
+   * Uses the Agentinator LLM to create contextual, task-specific instructions.
+   * 
+   * Request Body:
+   * - roleDescription: Description of agent's role and responsibilities (required)
+   * - agentType: Type of agent ('worker', 'pm', 'qc') (default: 'worker')
+   * - useAgentinator: Whether to use LLM generation (default: true)
+   * 
+   * @returns JSON with created agent including id, name, role, content
+   * 
+   * @example
+   * // Create a worker agent for authentication
+   * fetch('/api/agents', {
+   *   method: 'POST',
+   *   headers: { 'Content-Type': 'application/json' },
+   *   body: JSON.stringify({
+   *     roleDescription: 'Implement JWT-based authentication with refresh tokens',
+   *     agentType: 'worker',
+   *     useAgentinator: true
+   *   })
+   * })
+   * .then(res => res.json())
+   * .then(agent => {
+   *   console.log('Created agent:', agent.id);
+   *   console.log('Preamble length:', agent.content.length, 'chars');
+   * });
+   * 
+   * @example
+   * // Create a QC agent for validation
+   * const qcAgent = await fetch('/api/agents', {
+   *   method: 'POST',
+   *   headers: { 'Content-Type': 'application/json' },
+   *   body: JSON.stringify({
+   *     roleDescription: 'Validate API responses match OpenAPI spec',
+   *     agentType: 'qc'
+   *   })
+   * }).then(r => r.json());
+   * 
+   * console.log('QC Agent:', qcAgent.name);
+   * 
+   * @example
+   * // Create minimal agent without Agentinator
+   * const simpleAgent = await fetch('/api/agents', {
+   *   method: 'POST',
+   *   headers: { 'Content-Type': 'application/json' },
+   *   body: JSON.stringify({
+   *     roleDescription: 'Simple task executor',
+   *     useAgentinator: false
+   *   })
+   * }).then(r => r.json());
    */
   router.post('/agents', async (req: any, res: any) => {
     try {
@@ -331,8 +429,52 @@ export function createOrchestrationRouter(graphManager: IGraphManager): Router {
   });
 
   /**
-   * POST /api/generate-plan
-   * Generate a task plan using the PM agent from a project prompt
+   * POST /api/generate-plan - Generate orchestration plan from project prompt
+   * 
+   * Uses PM agent to analyze project requirements and generate a structured
+   * task breakdown with agent assignments, dependencies, and deliverables.
+   * 
+   * Request Body:
+   * - prompt: Project description and requirements (required)
+   * 
+   * @returns JSON with generated plan including tasks, agents, and workflow
+   * 
+   * @example
+   * // Generate plan for authentication system
+   * fetch('/api/generate-plan', {
+   *   method: 'POST',
+   *   headers: { 'Content-Type': 'application/json' },
+   *   body: JSON.stringify({
+   *     prompt: 'Build a JWT authentication system with user registration, ' +
+   *             'login, token refresh, and password reset functionality'
+   *   })
+   * })
+   * .then(res => res.json())
+   * .then(plan => {
+   *   console.log('Project:', plan.name);
+   *   console.log('Tasks:', plan.tasks.length);
+   *   plan.tasks.forEach(task => {
+   *     console.log('-', task.title, '(' + task.agentType + ')');
+   *   });
+   * });
+   * 
+   * @example
+   * // Generate plan with specific requirements
+   * const plan = await fetch('/api/generate-plan', {
+   *   method: 'POST',
+   *   headers: { 'Content-Type': 'application/json' },
+   *   body: JSON.stringify({
+   *     prompt: `Create a REST API with:
+   *       - User CRUD operations
+   *       - PostgreSQL database
+   *       - OpenAPI documentation
+   *       - Unit and integration tests
+   *       - Docker deployment`
+   *   })
+   * }).then(r => r.json());
+   * 
+   * console.log('Generated', plan.tasks.length, 'tasks');
+   * console.log('Estimated duration:', plan.estimatedHours, 'hours');
    */
   router.post('/generate-plan', async (req: any, res: any) => {
     try {
@@ -1036,7 +1178,79 @@ Location: ${process.cwd()}
     }
   });
 
-  // POST /api/execute-workflow - Execute workflow from Task Canvas JSON
+  /**
+   * POST /api/execute-workflow - Execute multi-agent workflow from Task Canvas
+   * 
+   * Starts asynchronous execution of a task workflow with parallel agent execution.
+   * Each task is assigned to an agent (PM/Worker/QC) and executed with filtered context.
+   * Progress can be monitored via SSE stream at /api/execution-stream/:executionId.
+   * 
+   * Request Body:
+   * - tasks: Array of task objects with agent assignments and dependencies (required)
+   * 
+   * @returns JSON with executionId for tracking progress
+   * 
+   * @example
+   * // Execute a simple workflow
+   * fetch('/api/execute-workflow', {
+   *   method: 'POST',
+   *   headers: { 'Content-Type': 'application/json' },
+   *   body: JSON.stringify({
+   *     tasks: [
+   *       {
+   *         id: 'task-1',
+   *         title: 'Design API schema',
+   *         agentType: 'worker',
+   *         requirements: 'Create OpenAPI 3.0 spec for user API',
+   *         dependencies: []
+   *       },
+   *       {
+   *         id: 'task-2',
+   *         title: 'Implement endpoints',
+   *         agentType: 'worker',
+   *         requirements: 'Implement REST endpoints from spec',
+   *         dependencies: ['task-1']
+   *       },
+   *       {
+   *         id: 'task-3',
+   *         title: 'Validate implementation',
+   *         agentType: 'qc',
+   *         requirements: 'Verify endpoints match spec',
+   *         dependencies: ['task-2']
+   *       }
+   *     ]
+   *   })
+   * })
+   * .then(res => res.json())
+   * .then(data => {
+   *   console.log('Execution started:', data.executionId);
+   *   // Connect to SSE stream for progress
+   *   const eventSource = new EventSource('/api/execution-stream/' + data.executionId);
+   *   eventSource.onmessage = (e) => {
+   *     const update = JSON.parse(e.data);
+   *     console.log('Progress:', update.message);
+   *   };
+   * });
+   * 
+   * @example
+   * // Execute workflow with parallel tasks
+   * const workflow = {
+   *   tasks: [
+   *     { id: 't1', title: 'Task 1', agentType: 'worker', requirements: '...', dependencies: [] },
+   *     { id: 't2', title: 'Task 2', agentType: 'worker', requirements: '...', dependencies: [] },
+   *     { id: 't3', title: 'Task 3', agentType: 'worker', requirements: '...', dependencies: ['t1', 't2'] }
+   *   ]
+   * };
+   * 
+   * const response = await fetch('/api/execute-workflow', {
+   *   method: 'POST',
+   *   headers: { 'Content-Type': 'application/json' },
+   *   body: JSON.stringify(workflow)
+   * }).then(r => r.json());
+   * 
+   * console.log('Execution ID:', response.executionId);
+   * // t1 and t2 execute in parallel, t3 waits for both
+   */
   router.post('/execute-workflow', async (req: any, res: any) => {
     try {
       const { tasks } = req.body;

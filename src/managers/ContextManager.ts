@@ -21,8 +21,60 @@ export class ContextManager {
   constructor(private graphManager: IGraphManager) {}
 
   /**
-   * Filter context for a specific agent type
-   * Reduces context size by 90%+ for workers
+   * Filter context for a specific agent type with automatic scope reduction
+   * 
+   * Applies agent-specific filtering to reduce context size and prevent pollution.
+   * PM agents receive full context, while workers get 90%+ reduction for focused
+   * execution. QC agents receive worker context plus validation data.
+   * 
+   * Context Reduction Strategy:
+   * - **PM Agent**: Full context (0% reduction) - needs complete project view
+   * - **Worker Agent**: 90%+ reduction - only task essentials
+   * - **QC Agent**: Worker context + validation criteria
+   * 
+   * @param fullContext - Complete PM context with all project data
+   * @param agentType - Agent type ('pm', 'worker', 'qc')
+   * @param options - Optional filtering configuration
+   * @returns Filtered context appropriate for agent type
+   * 
+   * @example
+   * // Filter for worker agent (90%+ reduction)
+   * const pmContext: PMContext = {
+   *   taskId: 'task-123',
+   *   title: 'Implement authentication',
+   *   requirements: 'Add JWT-based auth',
+   *   description: 'Full implementation details...',
+   *   files: ['src/auth.ts', 'src/middleware.ts'],
+   *   research: '50 pages of OAuth research...',
+   *   planningNotes: 'Extensive planning docs...',
+   *   allFiles: ['100+ files in project...'],
+   *   status: 'in_progress',
+   *   priority: 'high'
+   * };
+   * 
+   * const workerContext = contextManager.filterForAgent(pmContext, 'worker');
+   * // Returns: { taskId, title, requirements, description, files (limited), status, priority }
+   * // Removes: research, planningNotes, allFiles, fullSubgraph
+   * 
+   * @example
+   * // PM agent gets full context
+   * const pmContext = contextManager.filterForAgent(fullContext, 'pm');
+   * // Returns: fullContext unchanged (0% reduction)
+   * console.log('PM has access to all project data');
+   * 
+   * @example
+   * // QC agent gets worker context + validation data
+   * const qcContext = contextManager.filterForAgent(pmContext, 'qc');
+   * // Returns: worker context + originalRequirements + verificationCriteria
+   * console.log('QC can validate against requirements');
+   * 
+   * @example
+   * // Custom filtering options
+   * const workerContext = contextManager.filterForAgent(pmContext, 'worker', {
+   *   maxFiles: 5,              // Limit to 5 files instead of default 10
+   *   maxDependencies: 3,       // Limit dependencies
+   *   includeErrorContext: true // Include error details for retry tasks
+   * });
    */
   filterForAgent(
     fullContext: PMContext,
@@ -119,8 +171,49 @@ export class ContextManager {
   }
 
   /**
-   * Calculate context size reduction metrics
-   * Used to verify we're achieving 90%+ reduction for workers
+   * Calculate context size reduction metrics for validation
+   * 
+   * Measures the effectiveness of context filtering by comparing byte sizes
+   * and tracking which fields were removed. Used to verify 90%+ reduction
+   * target for worker agents.
+   * 
+   * @param fullContext - Original PM context
+   * @param filteredContext - Filtered worker or QC context
+   * @returns Metrics including sizes, reduction percentage, and field changes
+   * 
+   * @example
+   * // Verify worker context reduction
+   * const pmContext = buildFullContext();
+   * const workerContext = contextManager.filterForAgent(pmContext, 'worker');
+   * const metrics = contextManager.calculateReduction(pmContext, workerContext);
+   * 
+   * console.log('Original:', metrics.originalSize, 'bytes');
+   * console.log('Filtered:', metrics.filteredSize, 'bytes');
+   * console.log('Reduction:', metrics.reductionPercent.toFixed(1) + '%');
+   * console.log('Removed fields:', metrics.fieldsRemoved.join(', '));
+   * // Output: "Reduction: 92.3%"
+   * // Removed fields: research, planningNotes, fullSubgraph, allFiles
+   * 
+   * @example
+   * // Monitor context efficiency in production
+   * const result = await contextManager.getFilteredTaskContext(
+   *   'task-123',
+   *   'worker'
+   * );
+   * 
+   * if (result.metrics.reductionPercent < 90) {
+   *   console.warn('Low reduction:', result.metrics.reductionPercent + '%');
+   *   console.warn('Consider removing:', result.metrics.fieldsRetained.join(', '));
+   * }
+   * 
+   * @example
+   * // Compare different agent types
+   * const workerMetrics = contextManager.calculateReduction(pmCtx, workerCtx);
+   * const qcMetrics = contextManager.calculateReduction(pmCtx, qcCtx);
+   * 
+   * console.log('Worker reduction:', workerMetrics.reductionPercent + '%');
+   * console.log('QC reduction:', qcMetrics.reductionPercent + '%');
+   * // QC typically has slightly less reduction due to validation data
    */
   calculateReduction(
     fullContext: PMContext,
@@ -155,9 +248,82 @@ export class ContextManager {
   }
 
   /**
-   * Get task context from graph and filter based on agent type
-   * This is the main entry point for retrieving filtered context
-   * Returns both the filtered context and metrics about the reduction
+   * Get task context from graph with automatic agent-specific filtering
+   * 
+   * Main entry point for multi-agent orchestration. Fetches task from Neo4j,
+   * builds complete PM context, filters for agent type, and returns both
+   * filtered context and reduction metrics.
+   * 
+   * Workflow:
+   * 1. Fetch task node from graph database
+   * 2. Build complete PM context from properties
+   * 3. Optionally fetch subgraph for PM agents
+   * 4. Filter context based on agent type
+   * 5. Calculate and return reduction metrics
+   * 
+   * @param taskId - Task node ID in graph database
+   * @param agentType - Agent type requesting context
+   * @param options - Optional filtering configuration
+   * @returns Filtered context and reduction metrics
+   * @throws {Error} If task not found in database
+   * 
+   * @example
+   * // Worker agent fetching task context
+   * const result = await contextManager.getFilteredTaskContext(
+   *   'task-auth-123',
+   *   'worker'
+   * );
+   * 
+   * console.log('Task:', result.context.title);
+   * console.log('Requirements:', result.context.requirements);
+   * console.log('Files:', result.context.files?.join(', '));
+   * console.log('Context reduced by', result.metrics.reductionPercent.toFixed(1) + '%');
+   * 
+   * // Worker executes with minimal context
+   * await executeTask(result.context);
+   * 
+   * @example
+   * // PM agent fetching full context with subgraph
+   * const pmResult = await contextManager.getFilteredTaskContext(
+   *   'task-planning-456',
+   *   'pm'
+   * );
+   * 
+   * // PM gets everything including subgraph
+   * console.log('Research:', pmResult.context.research);
+   * console.log('Planning notes:', pmResult.context.planningNotes);
+   * console.log('Subgraph nodes:', pmResult.context.fullSubgraph?.nodes.length);
+   * console.log('All project files:', pmResult.context.allFiles?.length);
+   * 
+   * @example
+   * // QC agent validating worker output
+   * const qcResult = await contextManager.getFilteredTaskContext(
+   *   'task-completed-789',
+   *   'qc'
+   * );
+   * 
+   * // QC gets worker context + validation data
+   * const passed = validateOutput(
+   *   qcResult.context.workerOutput,
+   *   qcResult.context.originalRequirements,
+   *   qcResult.context.verificationCriteria
+   * );
+   * 
+   * @example
+   * // Custom filtering for retry tasks
+   * const retryResult = await contextManager.getFilteredTaskContext(
+   *   'task-retry-999',
+   *   'worker',
+   *   {
+   *     maxFiles: 5,
+   *     includeErrorContext: true  // Include previous error for debugging
+   *   }
+   * );
+   * 
+   * if (retryResult.context.errorContext) {
+   *   console.log('Previous error:', retryResult.context.errorContext);
+   *   console.log('Attempt', retryResult.context.attemptNumber + '/' + retryResult.context.maxRetries);
+   * }
    */
   async getFilteredTaskContext(
     taskId: string,
@@ -223,8 +389,61 @@ export class ContextManager {
   }
 
   /**
-   * Validate that worker context meets size requirements
-   * Should be <10% of PM context
+   * Validate that worker context meets 90%+ reduction requirement
+   * 
+   * Ensures worker context is <10% of PM context size to maintain
+   * focused execution and prevent context pollution. Use this to
+   * verify filtering effectiveness in tests or production monitoring.
+   * 
+   * @param fullContext - Original PM context
+   * @param workerContext - Filtered worker context
+   * @returns Validation result with boolean and detailed metrics
+   * 
+   * @example
+   * // Validate context reduction in tests
+   * const pmContext = buildPMContext(task);
+   * const workerContext = contextManager.filterForAgent(pmContext, 'worker');
+   * const validation = contextManager.validateContextReduction(
+   *   pmContext,
+   *   workerContext
+   * );
+   * 
+   * expect(validation.valid).toBe(true);
+   * expect(validation.metrics.reductionPercent).toBeGreaterThanOrEqual(90);
+   * console.log('Context reduced by', validation.metrics.reductionPercent.toFixed(1) + '%');
+   * 
+   * @example
+   * // Production monitoring with alerts
+   * const validation = contextManager.validateContextReduction(
+   *   pmContext,
+   *   workerContext
+   * );
+   * 
+   * if (!validation.valid) {
+   *   console.error('Context reduction failed:', validation.metrics.reductionPercent + '%');
+   *   console.error('Original:', validation.metrics.originalSize, 'bytes');
+   *   console.error('Filtered:', validation.metrics.filteredSize, 'bytes');
+   *   console.error('Fields retained:', validation.metrics.fieldsRetained.join(', '));
+   *   
+   *   // Alert ops team
+   *   await alertOps('Context reduction below 90%', validation.metrics);
+   * }
+   * 
+   * @example
+   * // Validate custom filtering options
+   * const customWorker = contextManager.filterForAgent(pmContext, 'worker', {
+   *   maxFiles: 20  // More files than default
+   * });
+   * 
+   * const validation = contextManager.validateContextReduction(
+   *   pmContext,
+   *   customWorker
+   * );
+   * 
+   * if (!validation.valid) {
+   *   console.warn('Increase maxFiles caused validation failure');
+   *   console.warn('Consider reducing maxFiles to maintain 90% reduction');
+   * }
    */
   validateContextReduction(
     fullContext: PMContext,
@@ -237,7 +456,42 @@ export class ContextManager {
   }
 
   /**
-   * Get context scope for agent type
+   * Get context scope definition for agent type
+   * 
+   * Returns the configured scope that defines which fields each agent
+   * type is allowed to access. Used internally by filtering logic.
+   * 
+   * @param agentType - Agent type to get scope for
+   * @returns Scope configuration with allowed fields
+   * 
+   * @example
+   * // Check what fields worker agents can access
+   * const workerScope = contextManager.getScope('worker');
+   * console.log('Worker can access:', workerScope.fields);
+   * // Output: ['taskId', 'title', 'requirements', 'description', 'files', ...]
+   * 
+   * @example
+   * // Compare scopes across agent types
+   * const pmScope = contextManager.getScope('pm');
+   * const workerScope = contextManager.getScope('worker');
+   * const qcScope = contextManager.getScope('qc');
+   * 
+   * console.log('PM fields:', pmScope.fields.length);
+   * console.log('Worker fields:', workerScope.fields.length);
+   * console.log('QC fields:', qcScope.fields.length);
+   * 
+   * @example
+   * // Validate custom context against scope
+   * const workerScope = contextManager.getScope('worker');
+   * const customContext = buildCustomContext();
+   * 
+   * const invalidFields = Object.keys(customContext).filter(
+   *   key => !workerScope.fields.includes(key)
+   * );
+   * 
+   * if (invalidFields.length > 0) {
+   *   console.warn('Invalid fields for worker:', invalidFields.join(', '));
+   * }
    */
   getScope(agentType: AgentType) {
     return SCOPES[agentType];
