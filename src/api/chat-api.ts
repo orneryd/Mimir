@@ -1,8 +1,36 @@
 /**
- * @fileoverview Chat API for RAG-enhanced conversations
+ * @module api/chat-api
+ * @description RAG-enhanced chat API with semantic search
  * 
- * Provides chat completion endpoints with Graph-RAG semantic search,
- * similar to the mimir_rag_auto.py pipeline in Open WebUI.
+ * Provides OpenAI-compatible chat completion endpoints with automatic
+ * Graph-RAG semantic search integration. Queries are enriched with
+ * relevant context from the Neo4j graph database before being sent
+ * to the LLM.
+ * 
+ * **Features:**
+ * - OpenAI-compatible `/v1/chat/completions` endpoint
+ * - Automatic semantic search for relevant context
+ * - Multi-provider LLM support (OpenAI, Anthropic, Ollama, etc.)
+ * - Streaming and non-streaming responses
+ * - Context injection from graph database
+ * 
+ * **Endpoints:**
+ * - `POST /api/chat/v1/chat/completions` - Chat completion with RAG
+ * - `GET /api/chat/models` - List available LLM models
+ * 
+ * @example
+ * ```typescript
+ * // Chat with RAG context
+ * fetch('/api/chat/v1/chat/completions', {
+ *   method: 'POST',
+ *   headers: { 'Content-Type': 'application/json' },
+ *   body: JSON.stringify({
+ *     model: 'gpt-4',
+ *     messages: [{ role: 'user', content: 'What did we decide about auth?' }],
+ *     stream: false
+ *   })
+ * });
+ * ```
  * 
  * @since 1.0.0
  */

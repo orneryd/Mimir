@@ -6,13 +6,50 @@
 
 # api/orchestration-api
 
+## Description
+
+Multi-agent orchestration API with workflow execution
+
+Provides HTTP endpoints for managing multi-agent workflows with
+PM → Worker → QC agent chains. Supports workflow execution, monitoring,
+and real-time progress updates via Server-Sent Events (SSE).
+
+**Features:**
+- Workflow execution from JSON definitions
+- Real-time progress updates via SSE
+- Agent preamble generation (Agentinator)
+- Execution state persistence
+- Multi-agent coordination
+
+**Endpoints:**
+- `POST /api/orchestration/execute` - Execute a workflow
+- `GET /api/orchestration/status/:executionId` - Get execution status
+- `GET /api/orchestration/sse/:executionId` - SSE stream for updates
+- `POST /api/orchestration/generate-preamble` - Generate agent preambles
+
+## Example
+
+```typescript
+// Execute a workflow
+fetch('/api/orchestration/execute', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    workflow: {
+      name: 'Feature Implementation',
+      agents: [/* agent configs //]
+    }
+  })
+});
+```
+
 ## Functions
 
 ### createOrchestrationRouter()
 
 > **createOrchestrationRouter**(`graphManager`): `Router`
 
-Defined in: src/api/orchestration-api.ts:60
+Defined in: src/api/orchestration-api.ts:97
 
 Create Express router for orchestration API endpoints
 

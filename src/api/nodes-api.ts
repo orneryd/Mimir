@@ -1,6 +1,30 @@
 /**
- * Nodes API - Manage non-file nodes in Neo4j
- * Provides endpoints for browsing, viewing, and deleting nodes
+ * @module api/nodes-api
+ * @description REST API endpoints for managing graph nodes
+ * 
+ * Provides HTTP endpoints for browsing, viewing, and managing nodes in the
+ * Neo4j graph database. Excludes file nodes which are handled separately.
+ * 
+ * **Endpoints:**
+ * - `GET /api/nodes/types` - List all node types with counts
+ * - `GET /api/nodes/list` - List nodes by type with pagination
+ * - `GET /api/nodes/:id` - Get detailed node information
+ * - `DELETE /api/nodes/:id` - Delete a node and its relationships
+ * 
+ * All endpoints require appropriate RBAC permissions.
+ * 
+ * @example
+ * ```typescript
+ * // Get all node types
+ * fetch('/api/nodes/types')
+ *   .then(r => r.json())
+ *   .then(data => console.log(data.types));
+ * 
+ * // List todos
+ * fetch('/api/nodes/list?type=todo&limit=20')
+ *   .then(r => r.json())
+ *   .then(data => console.log(data.nodes));
+ * ```
  */
 
 import { Router, Request, Response } from 'express';
