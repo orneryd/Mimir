@@ -17,8 +17,8 @@ const getWatchManager = (): FileWatchManager => {
 };
 
 /**
- * GET /api/indexed-folders
- * Returns list of all folders currently being watched/indexed
+ * GET /api/indexed-folders - List indexed folders
+ * @example fetch('/api/indexed-folders').then(r => r.json());
  */
 router.get('/indexed-folders', async (req: Request, res: Response) => {
   let driver: neo4j.Driver | null = null;
@@ -130,8 +130,12 @@ router.get('/indexed-folders', async (req: Request, res: Response) => {
 });
 
 /**
- * POST /api/index-folder
- * Adds a new folder to the watch/index system
+ * POST /api/index-folder - Add folder to watch
+ * @example
+ * fetch('/api/index-folder', {
+ *   method: 'POST',
+ *   body: JSON.stringify({ path: '/workspace/src', recursive: true })
+ * }).then(r => r.json());
  */
 router.post('/index-folder', async (req: Request, res: Response) => {
   try {
@@ -254,8 +258,12 @@ router.post('/index-folder', async (req: Request, res: Response) => {
 });
 
 /**
- * DELETE /api/indexed-folders
- * Removes a folder from the watch/index system and deletes its indexed data
+ * DELETE /api/indexed-folders - Remove folder from watch
+ * @example
+ * fetch('/api/indexed-folders', {
+ *   method: 'DELETE',
+ *   body: JSON.stringify({ id: 'watch-123' })
+ * }).then(r => r.json());
  */
 router.delete('/indexed-folders', async (req: Request, res: Response) => {
   try {
@@ -451,8 +459,8 @@ router.patch('/indexed-folders/reactivate', async (req: Request, res: Response) 
 });
 
 /**
- * GET /api/index-config
- * Returns environment configuration for path translation
+ * GET /api/index-config - Get path translation config
+ * @example fetch('/api/index-config').then(r => r.json());
  */
 router.get('/index-config', async (req: Request, res: Response) => {
   try {
@@ -470,8 +478,8 @@ router.get('/index-config', async (req: Request, res: Response) => {
 });
 
 /**
- * GET /api/indexing-status
- * Returns the indexing status for all folders
+ * GET /api/indexing-status - Get indexing status
+ * @example fetch('/api/indexing-status').then(r => r.json());
  */
 router.get('/indexing-status', async (req: Request, res: Response) => {
   try {
@@ -518,8 +526,10 @@ router.options('/indexing-progress', (req: Request, res: Response) => {
 });
 
 /**
- * GET /api/indexing-progress (SSE)
- * Streams real-time indexing progress updates for all active indexing jobs
+ * GET /api/indexing-progress - Stream indexing progress (SSE)
+ * @example
+ * const es = new EventSource('/api/indexing-progress');
+ * es.onmessage = e => console.log(JSON.parse(e.data));
  */
 router.get('/indexing-progress', (req: Request, res: Response) => {
   // Set CORS headers for webview compatibility
@@ -578,8 +588,8 @@ router.get('/indexing-progress', (req: Request, res: Response) => {
 });
 
 /**
- * GET /api/index-stats
- * Returns aggregate statistics about all indexed content
+ * GET /api/index-stats - Get indexing statistics
+ * @example fetch('/api/index-stats').then(r => r.json());
  */
 router.get('/index-stats', async (req: Request, res: Response) => {
   try {
@@ -677,8 +687,8 @@ router.get('/index-stats', async (req: Request, res: Response) => {
 });
 
 /**
- * POST /api/migrate-indexed-folders
- * Creates WatchConfig nodes for existing indexed folders (only for paths that exist on filesystem)
+ * POST /api/migrate-indexed-folders - Migrate to WatchConfig
+ * @example fetch('/api/migrate-indexed-folders', { method: 'POST' });
  */
 router.post('/migrate-indexed-folders', async (req: Request, res: Response) => {
   try {
@@ -785,10 +795,8 @@ router.post('/migrate-indexed-folders', async (req: Request, res: Response) => {
 });
 
 /**
- * POST /api/migrate-file-paths
- * Migrates existing File nodes to new path structure:
- * OLD: f.path (relative) + f.absolute_path (container)
- * NEW: f.path (container) + f.host_path (host)
+ * POST /api/migrate-file-paths - Migrate file path schema
+ * @example fetch('/api/migrate-file-paths', { method: 'POST' });
  */
 router.post('/api/migrate-file-paths', async (req: Request, res: Response) => {
   try {
@@ -878,8 +886,8 @@ router.post('/api/migrate-file-paths', async (req: Request, res: Response) => {
 });
 
 /**
- * GET /api/debug-file-paths
- * Returns sample file paths to diagnose indexing issues
+ * GET /api/debug-file-paths - Debug file path issues
+ * @example fetch('/api/debug-file-paths').then(r => r.json());
  */
 router.get('/debug-file-paths', async (req: Request, res: Response) => {
   try {
@@ -932,8 +940,8 @@ router.get('/debug-file-paths', async (req: Request, res: Response) => {
 });
 
 /**
- * POST /api/cleanup-invalid-watchconfigs
- * Removes WatchConfig nodes with path_not_found errors and File nodes with null paths
+ * POST /api/cleanup-invalid-watchconfigs - Clean invalid configs
+ * @example fetch('/api/cleanup-invalid-watchconfigs', { method: 'POST' });
  */
 router.post('/cleanup-invalid-watchconfigs', async (req: Request, res: Response) => {
   try {
@@ -1010,8 +1018,8 @@ router.post('/cleanup-invalid-watchconfigs', async (req: Request, res: Response)
 });
 
 /**
- * POST /api/migrate-watchconfig-paths
- * Migrates all existing WatchConfig nodes to include host_path
+ * POST /api/migrate-watchconfig-paths - Migrate WatchConfig paths
+ * @example fetch('/api/migrate-watchconfig-paths', { method: 'POST' });
  */
 router.post('/migrate-watchconfig-paths', async (req: Request, res: Response) => {
   try {

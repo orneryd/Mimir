@@ -6,8 +6,30 @@ export function createMCPToolsRouter(graphManager: IGraphManager): Router {
   const router = Router();
 
   /**
-   * POST /mcp/index-folder
-   * Start indexing and watching a folder
+   * POST /mcp/index-folder - Start indexing and watching a folder
+   * 
+   * Initiates file indexing with automatic watching for changes.
+   * Supports embeddings generation, recursive scanning, and pattern filtering.
+   * 
+   * Request Body:
+   * - path: Folder path to index (required)
+   * - recursive: Scan subdirectories (default: true)
+   * - generate_embeddings: Generate vector embeddings (default: from env)
+   * - file_patterns: File patterns to include (optional)
+   * - ignore_patterns: Patterns to ignore (optional)
+   * 
+   * @returns JSON with indexing result and watch status
+   * 
+   * @example
+   * fetch('/mcp/index-folder', {
+   *   method: 'POST',
+   *   headers: { 'Content-Type': 'application/json' },
+   *   body: JSON.stringify({
+   *     path: '/workspace/src',
+   *     recursive: true,
+   *     generate_embeddings: true
+   *   })
+   * }).then(r => r.json());
    */
   router.post('/mcp/index-folder', async (req, res) => {
     try {
@@ -55,8 +77,21 @@ export function createMCPToolsRouter(graphManager: IGraphManager): Router {
   });
 
   /**
-   * POST /mcp/remove-folder
-   * Stop watching a folder and remove indexed files
+   * POST /mcp/remove-folder - Stop watching and remove indexed files
+   * 
+   * Stops file watching and removes all indexed files from database.
+   * 
+   * Request Body:
+   * - path: Folder path to remove (required)
+   * 
+   * @returns JSON with removal result
+   * 
+   * @example
+   * fetch('/mcp/remove-folder', {
+   *   method: 'POST',
+   *   headers: { 'Content-Type': 'application/json' },
+   *   body: JSON.stringify({ path: '/workspace/src' })
+   * }).then(r => r.json());
    */
   router.post('/mcp/remove-folder', async (req, res) => {
     try {
@@ -94,8 +129,26 @@ export function createMCPToolsRouter(graphManager: IGraphManager): Router {
   });
 
   /**
-   * POST /mcp/save-conversation
-   * Save a conversation as a memory node in Neo4j
+   * POST /mcp/save-conversation - Save chat conversation to memory
+   * 
+   * Stores conversation messages as a memory node for future reference.
+   * 
+   * Request Body:
+   * - messages: Array of message objects with role, content, timestamp
+   * 
+   * @returns JSON with memory ID
+   * 
+   * @example
+   * fetch('/mcp/save-conversation', {
+   *   method: 'POST',
+   *   headers: { 'Content-Type': 'application/json' },
+   *   body: JSON.stringify({
+   *     messages: [
+   *       { role: 'user', content: 'Hello', timestamp: Date.now() },
+   *       { role: 'assistant', content: 'Hi!', timestamp: Date.now() }
+   *     ]
+   *   })
+   * }).then(r => r.json());
    */
   router.post('/mcp/save-conversation', async (req, res) => {
     try {
@@ -170,8 +223,20 @@ export function createMCPToolsRouter(graphManager: IGraphManager): Router {
   });
 
   /**
-   * GET /mcp/list-folders
-   * List all indexed folders
+   * GET /mcp/list-folders - List all indexed folders
+   * 
+   * Returns all folders currently being watched with their status.
+   * 
+   * @returns JSON with folders array
+   * 
+   * @example
+   * fetch('/mcp/list-folders')
+   *   .then(r => r.json())
+   *   .then(data => {
+   *     data.folders.forEach(f => {
+   *       console.log(f.path, f.status, f.filesIndexed);
+   *     });
+   *   });
    */
   router.get('/mcp/list-folders', async (req, res) => {
     try {

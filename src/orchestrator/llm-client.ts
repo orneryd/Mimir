@@ -198,6 +198,12 @@ export class CopilotAgentClient {
     return this.configLoader.getContextWindow(provider, model);
   }
 
+  /**
+   * Load agent preamble from file or string
+   * @param pathOrContent - File path or content
+   * @param isContent - true if pathOrContent is content
+   * @example await client.loadPreamble('preambles/worker.md');
+   */
   async loadPreamble(pathOrContent: string, isContent: boolean = false): Promise<void> {
     // Initialize LLM if not already done
     if (!this.llm) {
@@ -267,8 +273,8 @@ export class CopilotAgentClient {
   }
 
   /**
-   * Initialize conversation history manager with Neo4j
-   * Call this to enable vector-based conversation persistence
+   * Initialize conversation history with Neo4j
+   * @example await client.initializeConversationHistory();
    */
   async initializeConversationHistory(): Promise<void> {
     if (this.conversationHistory) {
@@ -592,10 +598,19 @@ CONCISE SUMMARY:`;
     }
   }
 
+  /**
+   * Execute task with LLM agent
+   * @param task - Task description
+   * @param retryCount - Retry attempt number
+   * @param circuitBreakerLimit - Max iterations
+   * @example
+   * const result = await client.execute('Write hello world');
+   * console.log(result.output);
+   */
   async execute(
     task: string,
     retryCount: number = 0,
-    circuitBreakerLimit?: number, // Optional: PM's estimate × 1.5
+    circuitBreakerLimit?: number,
     sessionId?: string, // Optional: Enable conversation persistence with embeddings + retrieval
     workingDirectory?: string // Optional: Working directory for tool execution (defaults to process.cwd())
   ): Promise<{

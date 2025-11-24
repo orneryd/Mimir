@@ -31,6 +31,10 @@ import * as fsSync from 'fs';
  * normalizeSlashes('/home/user/project')       // => '/home/user/project'
  * ```
  */
+/**
+ * Normalize path slashes to forward slashes
+ * @example normalizeSlashes('C:\\Users\\file') // => 'C:/Users/file'
+ */
 export function normalizeSlashes(filepath: string): string {
   return filepath.replace(/\\/g, '/');
 }
@@ -48,6 +52,10 @@ export function normalizeSlashes(filepath: string): string {
  * expandTilde('~')                      // => '/Users/john'
  * expandTilde('/absolute/path')         // => '/absolute/path'
  * ```
+ */
+/**
+ * Expand tilde to home directory
+ * @example expandTilde('~/src/project') // => '/Users/john/src/project'
  */
 export function expandTilde(filepath: string): string {
   if (!filepath) return filepath;
@@ -84,6 +92,10 @@ export function expandTilde(filepath: string): string {
  * normalizeAndResolve('../other', '/home')   // => '/other'
  * normalizeAndResolve('C:\\Users\\file.txt') // => 'C:/Users/file.txt'
  * ```
+ */
+/**
+ * Normalize and resolve path
+ * @example normalizeAndResolve('~/project') // => '/Users/john/project'
  */
 export function normalizeAndResolve(filepath: string, basePath?: string): string {
   if (!filepath) return filepath;
@@ -149,6 +161,10 @@ export function normalizeAndResolve(filepath: string, basePath?: string): string
  * 
  * @returns true if running in Docker, false otherwise
  */
+/**
+ * Check if running in Docker container
+ * @example if (isRunningInDocker()) console.log('In Docker');
+ */
 export function isRunningInDocker(): boolean {
   // Check for common Docker indicators
   // 1. /.dockerenv file exists (most reliable)
@@ -172,6 +188,10 @@ export function isRunningInDocker(): boolean {
   return false;
 }
 
+/**
+ * Get host workspace root path
+ * @example const root = getHostWorkspaceRoot(); // => '/Users/john/src'
+ */
 export function getHostWorkspaceRoot(): string {
   const hostRoot = process.env.HOST_WORKSPACE_ROOT;
   
@@ -258,6 +278,10 @@ export function getHostWorkspaceRoot(): string {
  * // HOST_WORKSPACE_ROOT=~/src without HOST_HOME (cannot expand, returns path unchanged)
  * translateHostToContainer('/Users/john/src/project')  // => '/Users/john/src/project' (with warning)
  * ```
+ */
+/**
+ * Translate host path to container path
+ * @example translateHostToContainer('/Users/john/src/project') // => '/workspace/project'
  */
 export function translateHostToContainer(hostPath: string): string {
   if (!hostPath) return hostPath;
@@ -391,6 +415,10 @@ export function translateHostToContainer(hostPath: string): string {
  * translateContainerToHost('/mnt/data/project')       // => '/Users/john/src/project'
  * ```
  */
+/**
+ * Translate container path to host path
+ * @example translateContainerToHost('/workspace/project') // => '/Users/john/src/project'
+ */
 export function translateContainerToHost(containerPath: string): string {
   if (!containerPath) return containerPath;
   
@@ -460,6 +488,10 @@ export async function pathExists(filepath: string): Promise<boolean> {
  * validateAndSanitizePath('../other')      // => '/absolute/path/to/other'
  * validateAndSanitizePath('')              // throws Error
  * ```
+ */
+/**
+ * Validate and sanitize user-provided path
+ * @example validateAndSanitizePath('~/project') // => '/Users/john/project'
  */
 export function validateAndSanitizePath(userPath: string, allowRelative: boolean = true): string {
   // Check for empty/null

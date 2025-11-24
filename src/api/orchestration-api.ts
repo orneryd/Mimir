@@ -626,8 +626,24 @@ Location: ${process.cwd()}
   });
 
   /**
-   * POST /api/save-plan
-   * Save a task plan to the Mimir knowledge graph
+   * POST /api/save-plan - Save orchestration plan to knowledge graph
+   * 
+   * Persists a generated task plan as a project node with task relationships.
+   * Enables plan reuse, versioning, and historical tracking.
+   * 
+   * Request Body:
+   * - plan: Plan object with name, description, and tasks array
+   * 
+   * @returns JSON with saved project node ID and task count
+   * 
+   * @example
+   * const plan = await fetch('/api/generate-plan', {}).then(r => r.json());
+   * const saved = await fetch('/api/save-plan', {
+   *   method: 'POST',
+   *   headers: { 'Content-Type': 'application/json' },
+   *   body: JSON.stringify({ plan })
+   * }).then(r => r.json());
+   * console.log('Saved project:', saved.projectId);
    */
   router.post('/save-plan', async (req: any, res: any) => {
     try {
@@ -712,8 +728,17 @@ Location: ${process.cwd()}
   });
 
   /**
-   * GET /api/plans
-   * Retrieve all saved orchestration plans
+   * GET /api/plans - List all saved orchestration plans
+   * 
+   * Retrieves all project nodes from knowledge graph with task counts.
+   * 
+   * @returns JSON array of saved plans with metadata
+   * 
+   * @example
+   * const plans = await fetch('/api/plans').then(r => r.json());
+   * plans.forEach(plan => {
+   *   console.log(plan.name, '-', plan.taskCount, 'tasks');
+   * });
    */
   router.get('/plans', async (req: any, res: any) => {
     try {
@@ -750,8 +775,21 @@ Location: ${process.cwd()}
   });
 
   /**
-   * GET /api/execution-stream/:executionId
-   * Server-Sent Events endpoint for real-time execution progress
+   * GET /api/execution-stream/:executionId - Real-time execution progress via SSE
+   * 
+   * Server-Sent Events stream providing live updates during workflow execution.
+   * Emits events for task starts, completions, errors, and deliverables.
+   * 
+   * @param executionId - Execution ID from execute-workflow response
+   * @returns SSE stream with execution events
+   * 
+   * @example
+   * const eventSource = new EventSource('/api/execution-stream/exec-123');
+   * eventSource.onmessage = (e) => {
+   *   const event = JSON.parse(e.data);
+   *   console.log(event.type, event.message);
+   * };
+   * eventSource.onerror = () => eventSource.close();
    */
   router.get('/execution-stream/:executionId', (req: any, res: any) => {
     const { executionId } = req.params;

@@ -9,7 +9,6 @@
  */
 
 import sharp from 'sharp';
-import * as fs from 'fs/promises';
 import * as path from 'path';
 
 export interface ProcessedImage {
@@ -37,6 +36,19 @@ export class ImageProcessor {
 
   /**
    * Check if a file is a supported image format
+   * 
+   * @param filePath - Path to file to check
+   * @returns true if file extension is a supported image format
+   * 
+   * @example
+   * if (ImageProcessor.isImageFile('/path/to/photo.jpg')) {
+   *   console.log('Image file detected');
+   * }
+   * 
+   * @example
+   * const files = await readdir('/images');
+   * const images = files.filter(f => ImageProcessor.isImageFile(f));
+   * console.log('Found', images.length, 'images');
    */
   static isImageFile(filePath: string): boolean {
     const ext = path.extname(filePath).toLowerCase();
@@ -44,8 +56,33 @@ export class ImageProcessor {
   }
 
   /**
-   * Prepare an image for VL model processing
-   * Automatically resizes if needed, converts to Base64
+   * Prepare an image for vision-language model processing
+   * 
+   * Automatically resizes large images to fit within VL model limits while
+   * preserving aspect ratio. Converts to Base64 for API transmission.
+   * 
+   * @param imagePath - Absolute path to image file
+   * @returns Processed image with metadata and Base64 encoding
+   * @throws {Error} If image cannot be read or processed
+   * 
+   * @example
+   * const processor = new ImageProcessor({
+   *   maxPixels: 3211264,
+   *   targetSize: 1792,
+   *   resizeQuality: 85
+   * });
+   * 
+   * const result = await processor.prepareImageForVL('/path/to/large-image.jpg');
+   * if (result.wasResized) {
+   *   console.log('Resized from', result.originalSize, 'to', result.processedSize);
+   * }
+   * console.log('Base64 size:', result.base64.length, 'chars');
+   * 
+   * @example
+   * // Process image for VL API
+   * const processed = await processor.prepareImageForVL(imagePath);
+   * const dataURL = processor.createDataURL(processed.base64, processed.format);
+   * await vlModel.describeImage(dataURL);
    */
   async prepareImageForVL(imagePath: string): Promise<ProcessedImage> {
     // Read image and get metadata
@@ -137,6 +174,27 @@ export class ImageProcessor {
 
   /**
    * Create a Data URL for image (for API transmission)
+   * 
+   * Formats Base64 image data as a data URL with proper MIME type.
+   * Used for sending images to vision-language APIs.
+   * 
+   * @param base64 - Base64-encoded image data
+   * @param format - Image format (jpeg, png, webp, etc.)
+   * @returns Data URL string ready for API transmission
+   * 
+   * @example
+   * const processed = await processor.prepareImageForVL(imagePath);
+   * const dataURL = processor.createDataURL(processed.base64, processed.format);
+   * console.log('Data URL:', dataURL.substring(0, 50) + '...');
+   * // Output: data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAA...
+   * 
+   * @example
+   * // Send to VL API
+   * const dataURL = processor.createDataURL(base64, 'png');
+   * const response = await fetch('https://api.vl-model.com/describe', {
+   *   method: 'POST',
+   *   body: JSON.stringify({ image: dataURL })
+   * });
    */
   createDataURL(base64: string, format: string): string {
     const mimeType = this.getMimeType(format);

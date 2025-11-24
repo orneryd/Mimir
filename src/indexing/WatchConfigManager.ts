@@ -2,15 +2,31 @@
 // WatchConfigManager - Neo4j CRUD for WatchConfig nodes
 // ============================================================================
 
-import { Driver, Session } from 'neo4j-driver';
+import { randomUUID } from 'node:crypto';
+import type { Driver } from 'neo4j-driver';
 import type { WatchConfig, WatchConfigInput } from '../types/index.js';
-import { randomUUID } from 'crypto';
 
 export class WatchConfigManager {
   constructor(private driver: Driver) {}
 
   /**
-   * Create a new watch configuration
+   * Create a new watch configuration in Neo4j
+   * 
+   * Stores watch configuration for file monitoring with indexing settings.
+   * Used by FileWatchManager to persist watch state across restarts.
+   * 
+   * @param input - Watch configuration parameters
+   * @returns Created watch configuration with generated ID
+   * 
+   * @example
+   * const manager = new WatchConfigManager(driver);
+   * const config = await manager.createWatch({
+   *   path: '/Users/user/project/src',
+   *   host_path: '/Users/user/project/src',
+   *   recursive: true,
+   *   generate_embeddings: true
+   * });
+   * console.log('Created watch:', config.id);
    */
   async createWatch(input: WatchConfigInput): Promise<WatchConfig> {
     const session = this.driver.session();
@@ -57,7 +73,17 @@ export class WatchConfigManager {
   }
 
   /**
-   * Get watch configuration by path
+   * Get active watch configuration by path
+   * 
+   * @param path - Directory path being watched
+   * @returns Watch configuration or null if not found
+   * 
+   * @example
+   * const config = await manager.getByPath('/Users/user/project/src');
+   * if (config) {
+   *   console.log('Watch status:', config.status);
+   *   console.log('Files indexed:', config.files_indexed);
+   * }
    */
   async getByPath(path: string): Promise<WatchConfig | null> {
     const session = this.driver.session();
@@ -82,6 +108,12 @@ export class WatchConfigManager {
 
   /**
    * Get watch configuration by ID
+   * 
+   * @param id - Watch configuration ID
+   * @returns Watch configuration or null if not found
+   * 
+   * @example
+   * const config = await manager.getById('watch-1234-abcd');
    */
   async getById(id: string): Promise<WatchConfig | null> {
     const session = this.driver.session();
@@ -106,6 +138,14 @@ export class WatchConfigManager {
 
   /**
    * List all watch configurations (active and inactive)
+   * 
+   * @returns Array of all watch configurations, sorted by status and date
+   * 
+   * @example
+   * const configs = await manager.listAll();
+   * console.log('Total watches:', configs.length);
+   * const active = configs.filter(c => c.status === 'active');
+   * console.log('Active:', active.length);
    */
   async listAll(): Promise<WatchConfig[]> {
     const session = this.driver.session();
@@ -134,6 +174,13 @@ export class WatchConfigManager {
 
   /**
    * Reactivate an inactive watch configuration
+   * 
+   * @param id - Watch configuration ID to reactivate
+   * @throws {Error} If watch configuration not found
+   * 
+   * @example
+   * await manager.reactivate('watch-1234-abcd');
+   * console.log('Watch reactivated');
    */
   async reactivate(id: string): Promise<void> {
     const session = this.driver.session();
@@ -159,7 +206,13 @@ export class WatchConfigManager {
   }
 
   /**
-   * Update watch statistics
+   * Update watch statistics after indexing
+   * 
+   * @param id - Watch configuration ID
+   * @param filesIndexed - Total number of files indexed
+   * 
+   * @example
+   * await manager.updateStats('watch-1234-abcd', 150);
    */
   async updateStats(id: string, filesIndexed: number): Promise<void> {
     const session = this.driver.session();
@@ -179,7 +232,13 @@ export class WatchConfigManager {
   }
 
   /**
-   * Mark watch as inactive
+   * Mark watch as inactive with optional error
+   * 
+   * @param id - Watch configuration ID
+   * @param error - Optional error message
+   * 
+   * @example
+   * await manager.markInactive('watch-1234-abcd', 'Directory not found');
    */
   async markInactive(id: string, error?: string): Promise<void> {
     const session = this.driver.session();
@@ -199,7 +258,13 @@ export class WatchConfigManager {
   }
 
   /**
-   * Delete watch configuration
+   * Delete watch configuration from database
+   * 
+   * @param id - Watch configuration ID to delete
+   * 
+   * @example
+   * await manager.delete('watch-1234-abcd');
+   * console.log('Watch configuration deleted');
    */
   async delete(id: string): Promise<void> {
     const session = this.driver.session();

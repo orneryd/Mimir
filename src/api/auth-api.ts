@@ -38,10 +38,16 @@ function getTokenExpiration(): number | undefined {
 }
 
 /**
- * POST /auth/token
- * OAuth 2.0 RFC 6749 compliant token endpoint
- * Supports grant_type: password (Resource Owner Password Credentials)
- * Returns access_token in response body (not cookies)
+ * POST /auth/token - OAuth 2.0 token endpoint
+ * @example
+ * fetch('/auth/token', {
+ *   method: 'POST',
+ *   body: JSON.stringify({
+ *     grant_type: 'password',
+ *     username: 'user',
+ *     password: 'pass'
+ *   })
+ * }).then(r => r.json());
  */
 router.post('/auth/token', async (req, res) => {
   const { grant_type, username, password, scope } = req.body;
@@ -120,7 +126,14 @@ router.post('/auth/token', async (req, res) => {
   })(req, res);
 });
 
-// Development: Login with username/password - STATELESS JWT (for browser UI)
+/**
+ * POST /auth/login - Login with credentials
+ * @example
+ * fetch('/auth/login', {
+ *   method: 'POST',
+ *   body: JSON.stringify({ username: 'user', password: 'pass' })
+ * }).then(r => r.json());
+ */
 router.post('/auth/login', async (req, res, next) => {
   console.log('[Auth] /auth/login POST - credentials received');
   
@@ -192,7 +205,10 @@ router.post('/auth/login', async (req, res, next) => {
   })(req, res, next);
 });
 
-// Production: OAuth login - returns API key
+/**
+ * GET /auth/oauth/login - OAuth login flow
+ * @example window.location.href = '/auth/oauth/login';
+ */
 router.get('/auth/oauth/login', (req, res, next) => {
   // Encode VSCode redirect info into OAuth state parameter (stateless)
   // This preserves the info through the OAuth flow without sessions
@@ -211,6 +227,9 @@ router.get('/auth/oauth/login', (req, res, next) => {
   passport.authenticate('oauth', { session: false })(req, res, next);
 });
 
+/**
+ * GET /auth/oauth/callback - OAuth callback
+ */
 router.get('/auth/oauth/callback', 
   passport.authenticate('oauth', { session: false }), 
   async (req: any, res) => {
@@ -315,7 +334,10 @@ router.get('/auth/oauth/callback',
   }
 );
 
-// Logout - STATELESS: just clear cookie (no database operations)
+/**
+ * POST /auth/logout - Logout and clear session
+ * @example fetch('/auth/logout', { method: 'POST' });
+ */
 router.post('/auth/logout', async (req, res) => {
   try {
     // Clear the OAuth/JWT cookie with Safari-compatible settings
@@ -337,7 +359,10 @@ router.post('/auth/logout', async (req, res) => {
   }
 });
 
-// Check auth status - verify API key
+/**
+ * GET /auth/status - Check authentication status
+ * @example fetch('/auth/status').then(r => r.json());
+ */
 router.get('/auth/status', async (req, res) => {
   try {
     console.log('[Auth] /auth/status endpoint hit');
@@ -457,7 +482,10 @@ router.get('/auth/status', async (req, res) => {
   }
 });
 
-// Get auth configuration for frontend
+/**
+ * GET /auth/config - Get auth configuration
+ * @example fetch('/auth/config').then(r => r.json());
+ */
 router.get('/auth/config', (req, res) => {
   console.log('[Auth] /auth/config endpoint hit');
   

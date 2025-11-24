@@ -209,6 +209,15 @@ export class LLMConfigLoader {
     }
   }
 
+  /**
+   * Load LLM configuration from environment and defaults
+   * 
+   * @returns Complete LLM configuration with provider settings
+   * @example
+   * const loader = LLMConfigLoader.getInstance();
+   * const config = await loader.load();
+   * console.log('Default provider:', config.defaultProvider);
+   */
   async load(): Promise<LLMConfig> {
     if (this.config) {
       return this.config;
@@ -556,6 +565,16 @@ export class LLMConfigLoader {
     return config;
   }
 
+  /**
+   * Get configuration for specific model
+   * 
+   * @param provider - Provider name (e.g., 'copilot', 'ollama')
+   * @param model - Model name
+   * @returns Model configuration with context window and capabilities
+   * @example
+   * const config = await loader.getModelConfig('copilot', 'gpt-4o');
+   * console.log('Context window:', config.contextWindow);
+   */
   async getModelConfig(provider: string, model: string): Promise<ModelConfig> {
     const config = await this.load();
     const providerConfig = config.providers[provider];
@@ -623,6 +642,15 @@ export class LLMConfigLoader {
     return { valid: true };
   }
 
+  /**
+   * Get default provider and model for agent type
+   * 
+   * @param agentType - Type of agent ('pm', 'worker', 'qc')
+   * @returns Default provider and model for agent type
+   * @example
+   * const defaults = await loader.getAgentDefaults('worker');
+   * console.log(`Worker uses: ${defaults.provider}/${defaults.model}`);
+   */
   async getAgentDefaults(agentType: 'pm' | 'worker' | 'qc'): Promise<{
     provider: string;
     model: string;
@@ -656,16 +684,44 @@ export class LLMConfigLoader {
     }
   }
 
+  /**
+   * Check if PM model suggestions feature is enabled
+   * 
+   * @returns true if PM can suggest models for tasks
+   * @example
+   * if (await loader.isPMModelSuggestionsEnabled()) {
+   *   console.log('PM can suggest models');
+   * }
+   */
   async isPMModelSuggestionsEnabled(): Promise<boolean> {
     const config = await this.load();
     return config.features?.pmModelSuggestions === true;
   }
 
+  /**
+   * Check if vector embeddings are enabled
+   * 
+   * @returns true if embeddings generation is enabled
+   * @example
+   * if (await loader.isVectorEmbeddingsEnabled()) {
+   *   await generateEmbeddings();
+   * }
+   */
   async isVectorEmbeddingsEnabled(): Promise<boolean> {
     const config = await this.load();
     return config.embeddings?.enabled === true;
   }
 
+  /**
+   * Get embeddings configuration
+   * 
+   * @returns Embeddings config or null if disabled
+   * @example
+   * const embConfig = await loader.getEmbeddingsConfig();
+   * if (embConfig) {
+   *   console.log('Model:', embConfig.model);
+   * }
+   */
   async getEmbeddingsConfig(): Promise<EmbeddingsConfig | null> {
     const config = await this.load();
     if (!config.embeddings?.enabled) {

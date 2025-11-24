@@ -161,8 +161,9 @@ export function createChatRouter(graphManager: IGraphManager): express.Router {
   });
 
   /**
-   * GET /api/preambles
-   * List available preambles/chatmodes
+   * GET /api/preambles - List available agent preambles
+   * @returns JSON with preambles array
+   * @example fetch('/api/preambles').then(r => r.json());
    */
   router.get('/api/preambles', async (req: any, res: any) => {
     try {
@@ -175,9 +176,10 @@ export function createChatRouter(graphManager: IGraphManager): express.Router {
   });
 
   /**
-   * GET /api/preambles/:name
-   * Get specific preamble content by name
-   * Returns the full markdown content for client-side system message injection
+   * GET /api/preambles/:name - Get preamble content
+   * @param name - Preamble name
+   * @returns Markdown content
+   * @example fetch('/api/preambles/claudette-auto').then(r => r.text());
    */
   router.get('/api/preambles/:name', async (req: any, res: any) => {
     try {
@@ -191,8 +193,9 @@ export function createChatRouter(graphManager: IGraphManager): express.Router {
   });
 
   /**
-   * GET /api/tools
-   * List available MCP tools for the agent
+   * GET /api/tools - List available MCP tools
+   * @returns JSON with tools array
+   * @example fetch('/api/tools').then(r => r.json());
    */
   router.get('/api/tools', async (req: any, res: any) => {
     try {
@@ -215,9 +218,9 @@ export function createChatRouter(graphManager: IGraphManager): express.Router {
   });
 
   /**
-   * GET /api/models
-   * List available models from configured LLM provider
-   * Fetches dynamically from the provider's API endpoint
+   * GET /api/models - List available LLM models
+   * @returns JSON with models array
+   * @example fetch('/api/models').then(r => r.json());
    */
   router.get('/api/models', async (req: any, res: any) => {
     try {
@@ -594,8 +597,12 @@ ${relevantContext}
   });
 
   /**
-   * POST /v1/embeddings
-   * OpenAI-compatible embeddings endpoint (proxies to Ollama)
+   * POST /v1/embeddings - Generate text embeddings
+   * @example
+   * fetch('/v1/embeddings', {
+   *   method: 'POST',
+   *   body: JSON.stringify({ input: 'text' })
+   * }).then(r => r.json());
    */
   router.post('/v1/embeddings', async (req: any, res: any) => {
     try {
@@ -767,8 +774,8 @@ ${relevantContext}
   };
 
   /**
-   * GET /v1/models
-   * OpenAI-compatible models list - proxies to configured chat provider
+   * GET /v1/models - List models (OpenAI-compatible)
+   * @example fetch('/v1/models').then(r => r.json());
    */
   router.get('/v1/models', handleModelsRequest);
 

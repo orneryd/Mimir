@@ -101,7 +101,7 @@ export class FileWatchManager {
    * Emit progress update to all registered callbacks
    */
   private emitProgress(progress: IndexingProgress): void {
-    console.log(`[FileWatchManager] Emitting progress for ${progress.path} to ${this.progressCallbacks.length} callbacks`);
+    // console.log(`[FileWatchManager] Emitting progress for ${progress.path} to ${this.progressCallbacks.length} callbacks`);
     for (const callback of this.progressCallbacks) {
       try {
         callback(progress);

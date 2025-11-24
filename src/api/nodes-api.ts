@@ -10,8 +10,14 @@ import { requirePermission } from '../middleware/rbac.js';
 const router = Router();
 
 /**
- * GET /api/nodes/types
- * Get all node types (excluding file/chunk types)
+ * GET /api/nodes/types - List all node types with counts
+ * 
+ * Returns all node types in the graph (excluding files/chunks) with counts.
+ * 
+ * @returns JSON with types array
+ * @example
+ * fetch('/api/nodes/types').then(r => r.json())
+ *   .then(data => console.log(data.types));
  */
 router.get('/types', requirePermission('nodes:read'), async (req: Request, res: Response) => {
   const driver = neo4j.driver(
@@ -58,8 +64,16 @@ router.get('/types', requirePermission('nodes:read'), async (req: Request, res: 
 });
 
 /**
- * GET /api/nodes/vector-search
- * Vector search across nodes (excluding files and chunks)
+ * GET /api/nodes/vector-search - Semantic search across nodes
+ * 
+ * Query Parameters:
+ * - query: Search query text
+ * - limit: Max results (default: 50)
+ * 
+ * @returns JSON with search results
+ * @example
+ * fetch('/api/nodes/vector-search?query=authentication&limit=10')
+ *   .then(r => r.json());
  */
 router.get('/vector-search', requirePermission('search:execute'), async (req: Request, res: Response) => {
   try {
@@ -334,8 +348,13 @@ router.get('/types/:type/:id/details', requirePermission('nodes:read'), async (r
 });
 
 /**
- * DELETE /api/nodes/:id
- * Delete a node and all its edges
+ * DELETE /api/nodes/:id - Delete node and edges
+ * 
+ * @param id - Node ID to delete
+ * @returns JSON with success status
+ * @example
+ * fetch('/api/nodes/node-123', { method: 'DELETE' })
+ *   .then(r => r.json());
  */
 router.delete('/:id', requirePermission('nodes:delete'), async (req: Request, res: Response) => {
   const { id } = req.params;
@@ -583,8 +602,22 @@ router.post('/:id/embeddings', requirePermission('nodes:write'), async (req: Req
 });
 
 /**
- * POST /api/nodes
- * Create a new node
+ * POST /api/nodes - Create a new node
+ * 
+ * Request Body:
+ * - type: Node type (required)
+ * - properties: Node properties object
+ * 
+ * @returns JSON with created node
+ * @example
+ * fetch('/api/nodes', {
+ *   method: 'POST',
+ *   headers: { 'Content-Type': 'application/json' },
+ *   body: JSON.stringify({
+ *     type: 'concept',
+ *     properties: { name: 'Authentication', description: '...' }
+ *   })
+ * }).then(r => r.json());
  */
 router.post('/', requirePermission('nodes:write'), async (req: Request, res: Response) => {
   const { type, properties } = req.body;
@@ -697,8 +730,12 @@ router.patch('/:id', requirePermission('nodes:write'), async (req: Request, res:
 });
 
 /**
- * GET /api/nodes/:id
- * Get a single node by ID (catch-all route - must be last)
+ * GET /api/nodes/:id - Get node by ID
+ * 
+ * @param id - Node ID
+ * @returns JSON with node data
+ * @example
+ * fetch('/api/nodes/node-123').then(r => r.json());
  */
 router.get('/:id', requirePermission('nodes:read'), async (req: Request, res: Response) => {
   const { id } = req.params;

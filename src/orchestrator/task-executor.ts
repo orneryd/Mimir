@@ -144,7 +144,21 @@ export interface ExecutionResult {
 
 /**
  * Organize tasks into parallel execution batches based on dependencies
- * Tasks with no dependencies or whose dependencies are satisfied can run in parallel
+ * 
+ * Analyzes task dependencies and creates execution batches where tasks
+ * with satisfied dependencies can run in parallel.
+ * 
+ * @param tasks - Array of task definitions with dependencies
+ * @returns Array of task batches for parallel execution
+ * 
+ * @example
+ * const tasks = [
+ *   { id: 't1', dependencies: [] },
+ *   { id: 't2', dependencies: [] },
+ *   { id: 't3', dependencies: ['t1', 't2'] }
+ * ];
+ * const batches = organizeTasks(tasks);
+ * // Returns: [[t1, t2], [t3]] - t1 and t2 run in parallel, then t3
  */
 export function organizeTasks(tasks: TaskDefinition[]): TaskDefinition[][] {
   const batches: TaskDefinition[][] = [];
@@ -216,6 +230,19 @@ export function organizeTasks(tasks: TaskDefinition[]): TaskDefinition[][] {
  * [criteria]
  * #### **Max Retries**
  * [number]
+ */
+/**
+ * Parse chain output markdown into task definitions
+ * 
+ * Extracts structured task information from PM-generated markdown.
+ * 
+ * @param markdown - Chain output markdown content
+ * @returns Array of parsed task definitions
+ * 
+ * @example
+ * const markdown = await fs.readFile('chain-output.md', 'utf-8');
+ * const tasks = parseChainOutput(markdown);
+ * console.log('Parsed', tasks.length, 'tasks');
  */
 export function parseChainOutput(markdown: string): TaskDefinition[] {
   const tasks: TaskDefinition[] = [];
@@ -434,7 +461,20 @@ async function savePreambleToDatabase(
 }
 
 /**
- * Generate preamble for agent role via agentinator (or create a simple one as fallback)
+ * Generate agent preamble via Agentinator
+ * 
+ * Creates specialized agent preamble for given role using LLM generation.
+ * 
+ * @param roleDescription - Description of agent role and responsibilities
+ * @param outputDir - Directory to save generated preamble
+ * @param taskExample - Optional task for context
+ * @returns Generated preamble content
+ * 
+ * @example
+ * const preamble = await generatePreamble(
+ *   'Implement authentication with JWT tokens',
+ *   'generated-agents'
+ * );
  */
 export async function generatePreamble(
   roleDescription: string,
@@ -1332,7 +1372,20 @@ async function autoGenerateVerificationCriteria(task: TaskDefinition): Promise<s
 }
 
 /**
- * Execute a single task with Worker → QC → Retry flow
+ * Execute single task with Worker → QC → Retry flow
+ * 
+ * Runs task with worker agent, validates with QC, retries on failure.
+ * 
+ * @param task - Task definition to execute
+ * @param preambleContent - Worker agent preamble
+ * @param qcPreambleContent - Optional QC agent preamble
+ * @returns Execution result with status and outputs
+ * 
+ * @example
+ * const result = await executeTask(task, workerPreamble, qcPreamble);
+ * if (result.status === 'success') {
+ *   console.log('Task completed:', result.outputs);
+ * }
  */
 export async function executeTask(
   task: TaskDefinition,
@@ -2068,7 +2121,18 @@ ${task.prompt}`;
 
 
 /**
- * Execute all tasks from chain output
+ * Execute all tasks from chain output with parallel batching
+ * 
+ * Orchestrates full workflow execution with dependency-based parallelization.
+ * 
+ * @param chainOutputPath - Path to chain-output.md
+ * @param outputDir - Directory for generated agents
+ * @returns Array of execution results
+ * 
+ * @example
+ * const results = await executeChainOutput('chain-output.md');
+ * const successful = results.filter(r => r.status === 'success');
+ * console.log(`${successful.length}/${results.length} tasks succeeded`);
  */
 export async function executeChainOutput(
   chainOutputPath: string,
@@ -2313,7 +2377,16 @@ export async function executeChainOutput(
 }
 
 /**
- * Generate final PM report summarizing all execution results
+ * Generate final PM report summarizing execution results
+ * 
+ * Creates comprehensive report with success rates and deliverables.
+ * 
+ * @param tasks - All task definitions
+ * @param results - Execution results
+ * @param outputPath - Path to save report
+ * 
+ * @example
+ * await generateFinalReport(tasks, results, 'final-report.md');
  */
 export async function generateFinalReport(
   tasks: TaskDefinition[],

@@ -37,7 +37,45 @@ export class VLService {
   }
 
   /**
-   * Generate a text description of an image using VL model
+   * Generate a text description of an image using vision-language model
+   * 
+   * Sends image to VL model (e.g., qwen2.5-vl) to generate natural language
+   * description. Used for making images searchable via text embeddings.
+   * 
+   * @param imageDataURL - Image as data URL (data:image/jpeg;base64,...)
+   * @param prompt - Instruction prompt for VL model
+   * @returns Description result with text, model info, and timing
+   * @throws {Error} If VL service is disabled or API call fails
+   * 
+   * @example
+   * const vlService = new VLService({
+   *   provider: 'llama.cpp',
+   *   api: 'http://localhost:8080',
+   *   apiPath: '/v1/chat/completions',
+   *   apiKey: 'none',
+   *   model: 'qwen2.5-vl',
+   *   contextSize: 4096,
+   *   maxTokens: 500,
+   *   temperature: 0.7
+   * });
+   * 
+   * const result = await vlService.describeImage(dataURL);
+   * console.log('Description:', result.description);
+   * console.log('Processing time:', result.processingTimeMs, 'ms');
+   * 
+   * @example
+   * // Custom prompt for specific analysis
+   * const result = await vlService.describeImage(
+   *   imageDataURL,
+   *   'Describe the architecture diagram. What components are shown?'
+   * );
+   * console.log('Analysis:', result.description);
+   * 
+   * @example
+   * // Use description for embedding
+   * const vlResult = await vlService.describeImage(imageDataURL);
+   * const embedding = await embeddingsService.generateEmbedding(vlResult.description);
+   * await storeImageEmbedding(imagePath, embedding);
    */
   async describeImage(
     imageDataURL: string,
@@ -117,7 +155,29 @@ export class VLService {
   }
 
   /**
-   * Test VL service connectivity
+   * Test VL service connectivity and availability
+   * 
+   * Sends a minimal test image to verify the VL API is accessible
+   * and responding correctly. Use during initialization.
+   * 
+   * @returns true if connection successful, false otherwise
+   * 
+   * @example
+   * const vlService = new VLService(config);
+   * const isAvailable = await vlService.testConnection();
+   * if (isAvailable) {
+   *   console.log('VL service ready');
+   * } else {
+   *   console.warn('VL service unavailable');
+   * }
+   * 
+   * @example
+   * // Check before enabling image indexing
+   * if (await vlService.testConnection()) {
+   *   await indexImagesWithDescriptions();
+   * } else {
+   *   console.log('Skipping image indexing - VL service offline');
+   * }
    */
   async testConnection(): Promise<boolean> {
     try {
