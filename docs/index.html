@@ -778,8 +778,106 @@ npm run start
             </div>
         </section>
         
-        <!-- Use Cases -->
+        <!-- Vision Intelligence Demo -->
         <section class="section" style="background: var(--darker-bg);">
+            <div class="container">
+                <h2 class="section-title">Vision Intelligence Built-In</h2>
+                <p class="section-subtitle">See how Mimir understands images with multimodal embeddings</p>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2rem; margin-bottom: 3rem;">
+                    <!-- Step 1: Image Input -->
+                    <div class="feature-card" style="text-align: center;">
+                        <div class="feature-icon">📸</div>
+                        <h3 style="font-size: 1.25rem;">1. Image Input</h3>
+                        <div style="margin: 1.5rem 0;">
+                            <img src="https://raw.githubusercontent.com/orneryd/Mimir/refs/heads/main/docs/assets/character-demo.png" 
+                                 alt="Game Character" 
+                                 style="width: 100%; max-width: 200px; border-radius: 0.5rem; border: 2px solid var(--border);">
+                        </div>
+                        <p style="color: var(--text-secondary); font-size: 0.9rem;">Your game character, screenshot, or any visual content</p>
+                    </div>
+                    
+                    <!-- Step 2: AI Description -->
+                    <div class="feature-card" style="text-align: center;">
+                        <div class="feature-icon">🤖</div>
+                        <h3 style="font-size: 1.25rem;">2. AI Understanding</h3>
+                        <div style="margin: 1.5rem 0; text-align: left; font-size: 0.85rem; color: var(--text-secondary); max-height: 250px; overflow-y: auto; padding: 1rem; background: var(--darker-bg); border-radius: 0.5rem; border: 1px solid var(--border);">
+                            <strong style="color: var(--primary);">Qwen2.5-VL-2B Output:</strong><br><br>
+                            "The image depicts a character dressed in a dark, Victorian-era outfit, standing in front of a traditional Asian-style building with a tiled roof. The character is wearing a top hat, round glasses, and a long coat adorned with various accessories, including a belt with multiple pouches and what appears to be a small weapon or tool attached to the belt. The character's attire suggests a blend of Western and Eastern influences, possibly indicating a fantasy or steampunk setting..."
+                        </div>
+                        <p style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 1rem;">Vision model extracts rich semantic meaning</p>
+                    </div>
+                    
+                    <!-- Step 3: Embedding Space -->
+                    <div class="feature-card" style="text-align: center;">
+                        <div class="feature-icon">🕸️</div>
+                        <h3 style="font-size: 1.25rem;">3. Knowledge Graph</h3>
+                        <div style="margin: 1.5rem 0;">
+                            <svg width="200" height="200" viewBox="0 0 200 200" style="max-width: 100%;">
+                                <!-- Central node -->
+                                <circle cx="100" cy="100" r="20" fill="var(--primary)" opacity="0.8"/>
+                                <text x="100" y="105" text-anchor="middle" fill="var(--darker-bg)" font-size="10" font-weight="bold">Image</text>
+                                
+                                <!-- Connected concept nodes -->
+                                <circle cx="50" cy="50" r="15" fill="var(--secondary)" opacity="0.6"/>
+                                <text x="50" y="53" text-anchor="middle" fill="var(--text-primary)" font-size="8">Victorian</text>
+                                <line x1="100" y1="100" x2="50" y2="50" stroke="var(--border)" stroke-width="2" opacity="0.5"/>
+                                
+                                <circle cx="150" cy="50" r="15" fill="var(--secondary)" opacity="0.6"/>
+                                <text x="150" y="53" text-anchor="middle" fill="var(--text-primary)" font-size="8">Character</text>
+                                <line x1="100" y1="100" x2="150" y2="50" stroke="var(--border)" stroke-width="2" opacity="0.5"/>
+                                
+                                <circle cx="50" cy="150" r="15" fill="var(--secondary)" opacity="0.6"/>
+                                <text x="50" y="153" text-anchor="middle" fill="var(--text-primary)" font-size="8">Asian</text>
+                                <line x1="100" y1="100" x2="50" y2="150" stroke="var(--border)" stroke-width="2" opacity="0.5"/>
+                                
+                                <circle cx="150" cy="150" r="15" fill="var(--secondary)" opacity="0.6"/>
+                                <text x="150" y="153" text-anchor="middle" fill="var(--text-primary)" font-size="8">Steampunk</text>
+                                <line x1="100" y1="100" x2="150" y2="150" stroke="var(--border)" stroke-width="2" opacity="0.5"/>
+                                
+                                <circle cx="30" cy="100" r="12" fill="var(--secondary)" opacity="0.4"/>
+                                <text x="30" y="103" text-anchor="middle" fill="var(--text-primary)" font-size="7">Outfit</text>
+                                <line x1="100" y1="100" x2="30" y2="100" stroke="var(--border)" stroke-width="1" opacity="0.3"/>
+                                
+                                <circle cx="170" cy="100" r="12" fill="var(--secondary)" opacity="0.4"/>
+                                <text x="170" y="103" text-anchor="middle" fill="var(--text-primary)" font-size="7">Fantasy</text>
+                                <line x1="100" y1="100" x2="170" y2="100" stroke="var(--border)" stroke-width="1" opacity="0.3"/>
+                            </svg>
+                        </div>
+                        <p style="color: var(--text-secondary); font-size: 0.9rem;">Searchable by meaning, not just metadata</p>
+                    </div>
+                </div>
+                
+                <div style="text-align: center; margin-top: 3rem;">
+                    <div class="feature-card" style="background: linear-gradient(135deg, rgba(255, 215, 0, 0.1) 0%, rgba(0, 217, 255, 0.1) 100%); border: 2px solid var(--primary);">
+                        <h3 style="color: var(--primary); margin-bottom: 1rem;">🚀 Why This Matters</h3>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; text-align: left;">
+                            <div>
+                                <strong style="color: var(--secondary);">📝 Semantic Search</strong>
+                                <p style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 0.5rem;">Find images by describing what they contain: "Victorian character with top hat" or "Asian architecture steampunk"</p>
+                            </div>
+                            <div>
+                                <strong style="color: var(--secondary);">🔗 Relationship Discovery</strong>
+                                <p style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 0.5rem;">AI automatically connects related concepts across your entire knowledge base</p>
+                            </div>
+                            <div>
+                                <strong style="color: var(--secondary);">🎯 Context-Aware</strong>
+                                <p style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 0.5rem;">Agents understand visual context when making decisions or generating content</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="text-align: center; margin-top: 2rem;">
+                    <p style="color: var(--text-secondary);">
+                        <strong>Powered by Qwen2.5-VL</strong> • 2B model (fast, 8GB RAM) or 7B model (detailed, 16GB RAM) • Self-hosted • No API costs
+                    </p>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Use Cases -->
+        <section class="section">
             <div class="container">
                 <h2 class="section-title">Perfect For</h2>
                 <div class="features-grid">

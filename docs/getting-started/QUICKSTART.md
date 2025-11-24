@@ -11,11 +11,17 @@ Before starting, install these tools:
 - **Git** → https://git-scm.com/
 
 **System Requirements:**
-- **RAM**: 4GB minimum (Neo4j uses 512MB-2GB heap + 512MB page cache)
-- **Disk**: 2GB free space
+- **RAM**: 
+  - **4GB minimum** (base installation with Neo4j + embeddings)
+  - **8GB minimum** with vision models (2B Qwen2.5-VL)
+  - **16GB recommended** with vision models (7B Qwen2.5-VL)
+- **Disk**: 
+  - **2GB** (base installation)
+  - **5GB** with 2B vision model
+  - **8GB** with 7B vision model
 - **OS**: macOS, Linux, or Windows with WSL2
 
-> 💡 **Docker Memory**: Mimir needs approximately **3-4GB RAM** total. Neo4j is configured with 512MB page cache and 2GB max heap. Check: Docker Desktop → Settings → Resources → Memory
+> 💡 **Docker Memory**: Base Mimir needs **3-4GB RAM**. With vision models enabled: **8GB for 2B model** (faster inference, lower memory), **16GB for 7B model** (higher quality descriptions). Neo4j uses 512MB-2GB heap + 512MB page cache. Check: Docker Desktop → Settings → Resources → Memory
 
 ---
 
