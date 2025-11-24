@@ -8,9 +8,12 @@
 import { Driver } from 'neo4j-driver';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { EmbeddingsService, ChunkEmbeddingResult } from './EmbeddingsService.js';
+import { EmbeddingsService, ChunkEmbeddingResult, formatMetadataForEmbedding, FileMetadata } from './EmbeddingsService.js';
 import { DocumentParser } from './DocumentParser.js';
 import { getHostWorkspaceRoot } from '../utils/path-utils.js';
+import { ImageProcessor } from './ImageProcessor.js';
+import { VLService } from './VLService.js';
+import { LLMConfigLoader } from '../config/LLMConfigLoader.js';
 
 export interface IndexResult {
   file_node_id: string;
@@ -23,10 +26,14 @@ export class FileIndexer {
   private embeddingsService: EmbeddingsService;
   private embeddingsInitialized: boolean = false;
   private documentParser: DocumentParser;
+  private imageProcessor: ImageProcessor | null = null;
+  private vlService: VLService | null = null;
+  private configLoader: LLMConfigLoader;
 
   constructor(private driver: Driver) {
     this.embeddingsService = new EmbeddingsService();
     this.documentParser = new DocumentParser();
+    this.configLoader = LLMConfigLoader.getInstance();
   }
 
   /**
@@ -36,6 +43,41 @@ export class FileIndexer {
     if (!this.embeddingsInitialized) {
       await this.embeddingsService.initialize();
       this.embeddingsInitialized = true;
+    }
+  }
+
+  /**
+   * Initialize image processing services (lazy loading)
+   */
+  private async initImageServices(): Promise<void> {
+    const config = await this.configLoader.getEmbeddingsConfig();
+    
+    if (!config?.images?.enabled) {
+      return;
+    }
+
+    // Initialize ImageProcessor
+    if (!this.imageProcessor) {
+      this.imageProcessor = new ImageProcessor({
+        maxPixels: config.images.maxPixels,
+        targetSize: config.images.targetSize,
+        resizeQuality: config.images.resizeQuality
+      });
+    }
+
+    // Initialize VLService if describe mode is enabled
+    if (config.images.describeMode && config.vl && !this.vlService) {
+      this.vlService = new VLService({
+        provider: config.vl.provider,
+        api: config.vl.api,
+        apiPath: config.vl.apiPath,
+        apiKey: config.vl.apiKey,
+        model: config.vl.model,
+        contextSize: config.vl.contextSize,
+        maxTokens: config.vl.maxTokens,
+        temperature: config.vl.temperature
+      });
+      console.log('🖼️  Image embedding services initialized (VL describe mode)');
     }
   }
 
@@ -78,15 +120,74 @@ export class FileIndexer {
   async indexFile(filePath: string, rootPath: string, generateEmbeddings: boolean = false): Promise<IndexResult> {
     const session = this.driver.session();
     let content: string = '';
+    let isImage = false;
     
     try {
       const relativePath = path.relative(rootPath, filePath);
       const extension = path.extname(filePath).toLowerCase();
-      const binaryDoc = this.documentParser.isSupportedFormat(extension)
-      // Skip binary files and non-indexable file types (except supported documents)
-      // Read file content - either as text or extract from documents
+      const binaryDoc = this.documentParser.isSupportedFormat(extension);
       
-      if (binaryDoc) {
+      // Check if this is an image file BEFORE the binary skip
+      if (ImageProcessor.isImageFile(filePath) && generateEmbeddings) {
+        await this.initImageServices();
+        const config = await this.configLoader.getEmbeddingsConfig();
+        
+        if (config?.images?.enabled) {
+          isImage = true;
+          
+          if (config.images.describeMode && this.vlService && this.imageProcessor) {
+            // Path 1: VL Description Method (DEFAULT)
+            // Uses VL model to generate text description, then embeds the description
+            console.log(`🖼️  Processing image with VL description: ${relativePath}`);
+            
+            // 1. Prepare image (resize if needed)
+            const processedImage = await this.imageProcessor.prepareImageForVL(filePath);
+            
+            if (processedImage.wasResized) {
+              console.log(`   Resized from ${processedImage.originalSize.width}×${processedImage.originalSize.height} to ${processedImage.processedSize.width}×${processedImage.processedSize.height}`);
+            }
+            
+            // 2. Create Data URL
+            const dataURL = this.imageProcessor.createDataURL(processedImage.base64, processedImage.format);
+            
+            // 3. Get description from VL model
+            const result = await this.vlService.describeImage(dataURL);
+            content = result.description;
+            
+            console.log(`   Generated description (${content.length} chars) in ${result.processingTimeMs}ms`);
+          } else if (!config.images.describeMode && this.imageProcessor) {
+            // Path 2: Direct Multimodal Embedding
+            // Sends image directly to multimodal embeddings endpoint
+            console.log(`🖼️  Processing image with direct multimodal embedding: ${relativePath}`);
+            
+            // 1. Prepare image (resize if needed)
+            const processedImage = await this.imageProcessor.prepareImageForVL(filePath);
+            
+            if (processedImage.wasResized) {
+              console.log(`   Resized from ${processedImage.originalSize.width}×${processedImage.originalSize.height} to ${processedImage.processedSize.width}×${processedImage.processedSize.height}`);
+            }
+            
+            // 2. Create Data URL for embedding
+            const dataURL = this.imageProcessor.createDataURL(processedImage.base64, processedImage.format);
+            
+            // 3. Store the data URL as content - will be sent to embeddings service
+            // The embeddings service will handle multimodal input
+            content = dataURL;
+            
+            console.log(`   Prepared image for direct embedding (${processedImage.sizeBytes} bytes)`);
+          } else {
+            // Missing required services
+            const missingServices = [];
+            if (!this.imageProcessor) missingServices.push('ImageProcessor');
+            if (config.images.describeMode && !this.vlService) missingServices.push('VLService');
+            
+            throw new Error(`Image processing requires: ${missingServices.join(', ')}`);
+          }
+        } else {
+          // Images disabled, skip
+          throw new Error('Image indexing disabled');
+        }
+      } else if (binaryDoc) {
         // Extract text from PDF or DOCX
         const buffer = await fs.readFile(filePath);
         content = await this.documentParser.extractText(buffer, extension);
@@ -194,9 +295,24 @@ export class FileIndexer {
         await this.initEmbeddings();
         if (this.embeddingsService.isEnabled()) {
           try {
+            // Prepare metadata for enrichment (ALL files get metadata enrichment)
+            const fileMetadata: FileMetadata = {
+              name: path.basename(filePath),
+              relativePath: relativePath,
+              language: language,
+              extension: extension,
+              directory: path.dirname(relativePath),
+              sizeBytes: stats.size
+            };
+            
+            // Format metadata as natural language prefix
+            const metadataPrefix = formatMetadataForEmbedding(fileMetadata);
+            
             if (needsChunking) {
-              // Large file: Generate separate chunk embeddings
-              const chunkEmbeddings = await this.embeddingsService.generateChunkEmbeddings(content);
+              // Large file: Generate separate chunk embeddings with metadata
+              // Prepend metadata to the FULL content before chunking
+              const enrichedContent = metadataPrefix + content;
+              const chunkEmbeddings = await this.embeddingsService.generateChunkEmbeddings(enrichedContent);
               
               // Create FileChunk nodes with embeddings and sequential relationships
               let previousChunkId: string | null = null;
@@ -264,8 +380,9 @@ export class FileIndexer {
               
               console.log(`✅ Created ${chunksCreated} chunk embeddings with sequential links for ${displayPath}`);
             } else {
-              // Small file: Store embedding directly on File node
-              const embedding = await this.embeddingsService.generateEmbedding(content);
+              // Small file: Store embedding directly on File node with metadata enrichment
+              const enrichedContent = metadataPrefix + content;
+              const embedding = await this.embeddingsService.generateEmbedding(enrichedContent);
               
               await session.run(`
                 MATCH (f:File) WHERE id(f) = $fileNodeId

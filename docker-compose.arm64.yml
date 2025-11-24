@@ -76,13 +76,6 @@ services:
   #     start_period: 30s
   #   networks:
   #     - mcp_network
-  #   deploy:
-  #     resources:
-  #       reservations:
-  #         devices:
-  #           - driver: nvidia
-  #             count: 1
-  #             capabilities: [gpu]
 
   # llama.cpp server - OpenAI-compatible embeddings (ARM64 compatible)
   llama-server:
@@ -101,15 +94,37 @@ services:
       start_period: 30s
     networks:
       - mcp_network
-  #   # Uncomment if you have GPU support (NVIDIA)
-  #   deploy:
-  #     resources:
-  #       reservations:
-  #         devices:
-  #           - driver: nvidia
-  #             count: 1
-  #             capabilities: [gpu]
-
+ 
+  # Vision-Language server for multimodal embeddings (images + text)
+  # Uncomment to enable image embeddings, or swap with llama-server above
+  # llama-vl-server:
+  #   image: timothyswt/llama-cpp-server-arm64-qwen2.5-vl-7b:latest
+  #   container_name: llama_vl_server
+  #   ports:
+  #     - "11435:8080"  # Different external port: 11435 -> Internal 8080
+  #   environment:
+  #    # Server Configuration
+  #     - LLAMA_ARG_HOST=0.0.0.0
+  #     - LLAMA_ARG_PORT=8080
+  #     - LLAMA_ARG_CTX_SIZE=8192
+  #     - LLAMA_ARG_N_PARALLEL=4
+      
+  #     # Embeddings-specific
+  #     - LLAMA_ARG_EMBEDDINGS=true
+  #     - LLAMA_ARG_POOLING=mean
+      
+  #     # Performance
+  #     - LLAMA_ARG_THREADS=-1
+  #     - LLAMA_ARG_NO_MMAP=false
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 30s
+  #   networks:
+  #     - mcp_network
   mimir-server:
     build:
       context: .
@@ -172,9 +187,23 @@ services:
       - MIMIR_EMBEDDINGS_CHUNK_OVERLAP=${MIMIR_EMBEDDINGS_CHUNK_OVERLAP:-100}
       - MIMIR_EMBEDDINGS_DELAY_MS=${MIMIR_EMBEDDINGS_DELAY_MS:-0}
       - MIMIR_EMBEDDINGS_MAX_RETRIES=${MIMIR_EMBEDDINGS_MAX_RETRIES:-3}
-      
+      # Image/VL Embeddings Configuration (Vision-Language models)
+      # Image Embeddings Control (disabled by default for safety)
+      - MIMIR_EMBEDDINGS_IMAGES=${MIMIR_EMBEDDINGS_IMAGES:-false}  # Default: disabled
+      - MIMIR_EMBEDDINGS_IMAGES_DESCRIBE_MODE=${MIMIR_EMBEDDINGS_IMAGES_DESCRIBE_MODE:-true}  # Default: VL description mode
+      # Qwen2.5-VL Configuration (for llama.cpp server)
+      - MIMIR_EMBEDDINGS_VL_PROVIDER=${MIMIR_EMBEDDINGS_VL_PROVIDER:-llama.cpp}
+      - MIMIR_EMBEDDINGS_VL_API=${MIMIR_EMBEDDINGS_VL_API:-http://llama-vl-server:8080}
+      - MIMIR_EMBEDDINGS_VL_API_PATH=${MIMIR_EMBEDDINGS_VL_API_PATH:-/v1/chat/completions}
+      - MIMIR_EMBEDDINGS_VL_API_KEY=${MIMIR_EMBEDDINGS_VL_API_KEY:-dummy-key}
+      - MIMIR_EMBEDDINGS_VL_MODEL=${MIMIR_EMBEDDINGS_VL_MODEL:-qwen2.5-vl}
+      - MIMIR_EMBEDDINGS_VL_CONTEXT_SIZE=${MIMIR_EMBEDDINGS_VL_CONTEXT_SIZE:-131072}  # 128K tokens (7b/72b)
+      - MIMIR_EMBEDDINGS_VL_MAX_TOKENS=${MIMIR_EMBEDDINGS_VL_MAX_TOKENS:-2048}  # Max description length
+      - MIMIR_EMBEDDINGS_VL_TEMPERATURE=${MIMIR_EMBEDDINGS_VL_TEMPERATURE:-0.7}
+      - MIMIR_EMBEDDINGS_VL_DIMENSIONS=${MIMIR_EMBEDDINGS_VL_DIMENSIONS:-768}  # Falls back to text model dims
+      - MIMIR_EMBEDDINGS_VL_TIMEOUT=${MIMIR_EMBEDDINGS_VL_TIMEOUT:-180000}  # 3 minutes (VL processing is slow)
       # Indexing Configuration
-      - MIMIR_INDEXING_THREADS=${MIMIR_INDEXING_THREADS:-2}
+      - MIMIR_INDEXING_THREADS=${MIMIR_INDEXING_THREADS:-1}
       
       # Feature Flags
       - MIMIR_FEATURE_PM_MODEL_SUGGESTIONS=${MIMIR_FEATURE_PM_MODEL_SUGGESTIONS:-true}
@@ -221,6 +250,8 @@ services:
         condition: service_healthy
       llama-server:
         condition: service_healthy
+      # llama-vl-server:
+      #   condition: service_healthy
     networks:
       - mcp_network
 

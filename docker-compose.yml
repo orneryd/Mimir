@@ -134,6 +134,45 @@ services:
               count: 1
               capabilities: [gpu]
 
+  # Vision-Language server for image description (qwen2.5-vl via llama.cpp)
+  # Generates text descriptions of images, which are then embedded by text model
+  # Uncomment to enable image indexing with MIMIR_EMBEDDINGS_IMAGES_DESCRIBE_MODE=true
+  # To use: 1) Uncomment service, 2) docker-compose up -d llama-vl-server
+  # llama-vl-server:
+  #   image: timothyswt/llama-cpp-server-arm64-qwen2.5-vl:7b  # or :2b for lighter model
+  #   container_name: llama_vl_server
+  #   ports:
+  #     - "8081:8080"  # Different external port to avoid conflict with llama-server
+  #   environment:
+  #     # Model is baked into image, these are runtime overrides
+  #     # Context size: 128K tokens (7b/72b), 32K tokens (2b)
+  #     - LLAMA_ARG_CTX_SIZE=131072  # 128K tokens for 7b model (use 32768 for 2b)
+  #     - LLAMA_ARG_N_PARALLEL=4
+  #     - LLAMA_ARG_THREADS=-1  # Use all available threads
+  #     - LLAMA_ARG_HOST=0.0.0.0
+  #     - LLAMA_ARG_PORT=8080
+  #     # Vision-specific settings
+  #     - LLAMA_ARG_TEMPERATURE=0.7
+  #     - LLAMA_ARG_TOP_K=20
+  #     - LLAMA_ARG_TOP_P=0.95
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 60s  # VL models take longer to load
+  #   networks:
+  #     - mcp_network
+  #   # Uncomment for GPU support (NVIDIA)
+  #   # deploy:
+  #   #   resources:
+  #   #     reservations:
+  #   #       devices:
+  #   #         - driver: nvidia
+  #   #           count: 1
+  #   #           capabilities: [gpu]
+
   mimir-server:
     build:
       context: .
@@ -195,6 +234,16 @@ services:
       - MIMIR_EMBEDDINGS_CHUNK_OVERLAP=${MIMIR_EMBEDDINGS_CHUNK_OVERLAP:-10}
       - MIMIR_EMBEDDINGS_DELAY_MS=${MIMIR_EMBEDDINGS_DELAY_MS:-100}
       - MIMIR_EMBEDDINGS_MAX_RETRIES=${MIMIR_EMBEDDINGS_MAX_RETRIES:-3}
+      # Image/VL Embeddings Configuration (Vision-Language models)
+      # Image Embeddings Control (disabled by default for safety)
+      - MIMIR_EMBEDDINGS_IMAGES=${MIMIR_EMBEDDINGS_IMAGES:-false}  # Default: disabled
+      - MIMIR_EMBEDDINGS_IMAGES_DESCRIBE_MODE=${MIMIR_EMBEDDINGS_IMAGES_DESCRIBE_MODE:-true}  # Default: VL description mode
+      - MIMIR_EMBEDDINGS_VL_PROVIDER=${MIMIR_EMBEDDINGS_VL_PROVIDER:-}
+      - MIMIR_EMBEDDINGS_VL_API=${MIMIR_EMBEDDINGS_VL_API:-}
+      - MIMIR_EMBEDDINGS_VL_API_PATH=${MIMIR_EMBEDDINGS_VL_API_PATH:-}
+      - MIMIR_EMBEDDINGS_VL_API_KEY=${MIMIR_EMBEDDINGS_VL_API_KEY:-}
+      - MIMIR_EMBEDDINGS_VL_MODEL=${MIMIR_EMBEDDINGS_VL_MODEL:-}
+      - MIMIR_EMBEDDINGS_VL_DIMENSIONS=${MIMIR_EMBEDDINGS_VL_DIMENSIONS:-}
       
       # Indexing Configuration
       - MIMIR_INDEXING_THREADS=${MIMIR_INDEXING_THREADS:-1}
@@ -246,6 +295,8 @@ services:
       # Ollama is required for embeddings but you can use a local server
       llama-server:
         condition: service_healthy
+      # llama-vl-server:
+      #   condition: service_healthy
     networks:
       - mcp_network
 

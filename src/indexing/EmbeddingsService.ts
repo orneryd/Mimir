@@ -34,6 +34,63 @@ export interface TextChunk {
   endOffset: number;
 }
 
+// Metadata interface for file context enrichment
+export interface FileMetadata {
+  name: string;
+  relativePath: string;
+  language: string;
+  extension: string;
+  directory?: string;
+  sizeBytes?: number;
+}
+
+/**
+ * Format file metadata as natural language for embedding
+ * This enriches content with contextual information about the file itself
+ * enabling semantic search to match on filenames, paths, and file types
+ * 
+ * @example
+ * formatMetadataForEmbedding({
+ *   name: 'auth-api.ts',
+ *   relativePath: 'src/api/auth-api.ts',
+ *   language: 'typescript',
+ *   extension: '.ts',
+ *   directory: 'src/api',
+ *   sizeBytes: 15360
+ * })
+ * // Returns: "This is a typescript file named auth-api.ts located at src/api/auth-api.ts in the src/api directory."
+ */
+export function formatMetadataForEmbedding(metadata: FileMetadata): string {
+  const parts: string[] = [];
+  
+  // Core identification - always include
+  if (metadata.language) {
+    parts.push(`This is a ${metadata.language} file`);
+  } else {
+    parts.push(`This is a file`);
+  }
+  
+  if (metadata.name) {
+    parts.push(`named ${metadata.name}`);
+  }
+  
+  // Location context
+  if (metadata.relativePath) {
+    parts.push(`located at ${metadata.relativePath}`);
+  }
+  
+  // Directory context (if different from what's in path)
+  if (metadata.directory && metadata.directory !== '.') {
+    parts.push(`in the ${metadata.directory} directory`);
+  }
+  
+  // Join with natural language flow
+  const metadataText = parts.join(' ') + '.';
+  
+  // Add separator for clarity
+  return metadataText + '\n\n';
+}
+
 // Chunking configuration based on model context limits
 // Model limits: all-minilm (512 tokens), nomic-embed-text (2048 tokens), nomic-embed-text (512 tokens)
 // Configurable via environment variables for flexibility
@@ -452,9 +509,18 @@ export class EmbeddingsService {
         headers['Authorization'] = `Bearer ${apiKey}`;
       }
       
+      // Detect if input is a data URL (image) for multimodal embeddings
+      const isDataURL = text.startsWith('data:image/');
+      
+      // For multimodal embeddings, send as array with image object
+      // For text embeddings, send as string
+      const input = isDataURL 
+        ? [{ type: 'image_url', image_url: { url: text } }]
+        : text;
+      
       const requestBody = JSON.stringify({
         model: this.model,
-        input: text,
+        input: input,
       });
       
       const fetchOptions = createSecureFetchOptions(embeddingsUrl, {

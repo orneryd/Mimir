@@ -191,8 +191,9 @@ export function createSecureFetchOptions(
     fetchOptions = addAuthHeader(fetchOptions, apiKeyEnvVar);
   }
   
-  // Add timeout signal if not already provided
-  if (!fetchOptions.signal) {
+  // Add timeout signal if not already provided in options
+  // Check the original options, not fetchOptions, since signal might not be copied
+  if (!options.signal && !fetchOptions.signal) {
     fetchOptions.signal = createTimeoutSignal(timeoutMs);
   }
   

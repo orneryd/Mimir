@@ -1,0 +1,59 @@
+# Build llama.cpp server for ARM64 (Apple Silicon) with Nomic Embed Multimodal
+FROM ubuntu:22.04 AS builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    git \
+    curl \
+    libcurl4-openssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Clone llama.cpp repository
+WORKDIR /build
+RUN git clone https://github.com/ggerganov/llama.cpp.git .
+
+# Build llama.cpp server with embeddings support
+RUN mkdir build && cd build && \
+    cmake .. \
+    -DLLAMA_CURL=ON \
+    -DLLAMA_BUILD_SERVER=ON \
+    -DBUILD_SHARED_LIBS=OFF \
+    -DCMAKE_BUILD_TYPE=Release && \
+    cmake --build . --config Release -j$(nproc)
+
+# Runtime stage
+FROM ubuntu:22.04
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    libcurl4 \
+    curl \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy built binaries
+COPY --from=builder /build/build/bin/llama-server /usr/local/bin/llama-server
+
+# Create models directory
+RUN mkdir -p /models
+
+# Copy Nomic Embed Multimodal model
+# Model will be downloaded by build script and placed here
+COPY docker/llama-cpp/models/nomic-embed-multimodal.gguf /models/nomic-embed-multimodal.gguf
+
+# Expose port
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Set working directory
+WORKDIR /app
+
+# Default command with Nomic Embed Multimodal
+# Note: Adjust --ctx-size and embedding dimensions based on actual model specs
+ENTRYPOINT ["/usr/local/bin/llama-server"]
+CMD ["--host", "0.0.0.0", "--port", "8080", "--model", "/models/nomic-embed-multimodal.gguf", "--embeddings", "--pooling", "mean", "--ctx-size", "8192", "--parallel", "4"]

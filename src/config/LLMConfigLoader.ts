@@ -39,6 +39,26 @@ export interface EmbeddingsConfig {
   dimensions?: number;
   chunkSize?: number;
   chunkOverlap?: number;
+  // Image embedding configuration
+  images?: {
+    enabled: boolean;
+    describeMode: boolean;
+    maxPixels: number;
+    targetSize: number;
+    resizeQuality: number;
+  };
+  // VL (Vision-Language) provider configuration
+  vl?: {
+    provider: string;
+    api: string;
+    apiPath: string;
+    apiKey: string;
+    model: string;
+    contextSize: number;
+    maxTokens: number;
+    temperature: number;
+    dimensions?: number;
+  };
 }
 
 export interface LLMConfig {
@@ -150,6 +170,42 @@ export class LLMConfigLoader {
 
     if (process.env.MIMIR_EMBEDDINGS_CHUNK_OVERLAP && config.embeddings) {
       config.embeddings.chunkOverlap = parseInt(process.env.MIMIR_EMBEDDINGS_CHUNK_OVERLAP, 10);
+    }
+
+    // Image embedding configuration
+    if (config.embeddings) {
+      config.embeddings.images = {
+        enabled: process.env.MIMIR_EMBEDDINGS_IMAGES === 'true',
+        describeMode: process.env.MIMIR_EMBEDDINGS_IMAGES_DESCRIBE_MODE !== 'false', // Default true
+        maxPixels: parseInt(process.env.MIMIR_IMAGE_MAX_PIXELS || '3211264', 10),
+        targetSize: parseInt(process.env.MIMIR_IMAGE_TARGET_SIZE || '1536', 10),
+        resizeQuality: parseInt(process.env.MIMIR_IMAGE_RESIZE_QUALITY || '90', 10)
+      };
+
+      // VL provider configuration (with fallback to general embeddings config)
+      config.embeddings.vl = {
+        provider: process.env.MIMIR_EMBEDDINGS_VL_PROVIDER || process.env.MIMIR_EMBEDDINGS_PROVIDER || 'llama.cpp',
+        api: process.env.MIMIR_EMBEDDINGS_VL_API || process.env.MIMIR_EMBEDDINGS_API || 'http://llama-vl-server:8080',
+        apiPath: process.env.MIMIR_EMBEDDINGS_VL_API_PATH || '/v1/chat/completions',
+        apiKey: process.env.MIMIR_EMBEDDINGS_VL_API_KEY || process.env.MIMIR_EMBEDDINGS_API_KEY || 'dummy-key',
+        model: process.env.MIMIR_EMBEDDINGS_VL_MODEL || 'qwen2.5-vl',
+        contextSize: parseInt(process.env.MIMIR_EMBEDDINGS_VL_CONTEXT_SIZE || '131072', 10),
+        maxTokens: parseInt(process.env.MIMIR_EMBEDDINGS_VL_MAX_TOKENS || '2048', 10),
+        temperature: parseFloat(process.env.MIMIR_EMBEDDINGS_VL_TEMPERATURE || '0.7'),
+        dimensions: process.env.MIMIR_EMBEDDINGS_VL_DIMENSIONS 
+          ? parseInt(process.env.MIMIR_EMBEDDINGS_VL_DIMENSIONS, 10)
+          : config.embeddings.dimensions
+      };
+
+      if (config.embeddings.images.enabled) {
+        console.log(`🔧 Image Embeddings Enabled: ${config.embeddings.images.enabled}`);
+        console.log(`🔧 Image Describe Mode: ${config.embeddings.images.describeMode}`);
+        if (config.embeddings.images.describeMode) {
+          console.log(`🔧 VL Provider: ${config.embeddings.vl.provider}`);
+          console.log(`🔧 VL API: ${config.embeddings.vl.api}`);
+          console.log(`🔧 VL Model: ${config.embeddings.vl.model}`);
+        }
+      }
     }
   }
 

@@ -1,0 +1,65 @@
+# Build llama.cpp server for ARM64 (Apple Silicon) with Qwen2.5-VL
+# Supports vision-language models for image understanding
+FROM ubuntu:22.04 AS builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    git \
+    curl \
+    libcurl4-openssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Clone llama.cpp repository
+WORKDIR /build
+RUN git clone https://github.com/ggerganov/llama.cpp.git .
+
+# Build llama.cpp server with multimodal support
+RUN mkdir build && cd build && \
+    cmake .. \
+    -DLLAMA_CURL=ON \
+    -DLLAMA_BUILD_SERVER=ON \
+    -DBUILD_SHARED_LIBS=OFF \
+    -DCMAKE_BUILD_TYPE=Release && \
+    cmake --build . --config Release -j$(nproc)
+
+# Runtime stage
+FROM ubuntu:22.04
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    libcurl4 \
+    curl \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy built binaries
+COPY --from=builder /build/build/bin/llama-server /usr/local/bin/llama-server
+
+# Create models directory
+RUN mkdir -p /models
+
+# Copy specific Qwen2.5-VL model (will be provided by build script)
+# Model size depends on variant: 2b (~1.5GB), 7b (~4.5GB), 72b (~45GB)
+ARG MODEL_FILE
+ARG VISION_FILE
+COPY docker/llama-cpp/models/${MODEL_FILE} /models/qwen2.5-vl.gguf
+COPY docker/llama-cpp/models/${VISION_FILE} /models/qwen2.5-vl-vision.gguf
+
+# Expose port
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Set working directory
+WORKDIR /app
+
+# Default command with Qwen2.5-VL
+# Context size will be set by CMD override in build script
+# 2b: 32K tokens, 7b/72b: 128K tokens
+# --mmproj is required for vision capabilities
+ENTRYPOINT ["/usr/local/bin/llama-server"]
+CMD ["--host", "0.0.0.0", "--port", "8080", "--model", "/models/qwen2.5-vl.gguf", "--mmproj", "/models/qwen2.5-vl-vision.gguf", "--ctx-size", "131072", "--parallel", "4", "--threads", "-1"]
