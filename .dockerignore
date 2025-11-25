@@ -49,3 +49,4 @@ Dockerfile*
 # Scripts not needed in container
 scripts
 deliverables
+docker/llama-cpp/models/*

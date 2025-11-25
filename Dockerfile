@@ -37,8 +37,8 @@ FROM node:22-alpine AS production
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Install runtime dependencies (curl for health checks)
-RUN apk add --no-cache curl
+# Install runtime dependencies (curl for health checks, python3 for Lambda execution)
+RUN apk add --no-cache curl python3
 
 # Copy only necessary files from builder with correct ownership
 # Using --chown during COPY is much faster than RUN chown

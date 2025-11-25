@@ -123,6 +123,7 @@
     "passport-oauth2": "^1.8.0",
     "pdf-parse": "^2.4.5",
     "sharp": "^0.34.5",
+    "typescript": "^5.9.3",
     "zod": "^4.1.12"
   },
   "devDependencies": {
@@ -140,7 +141,6 @@
     "supertest": "^7.1.4",
     "typedoc": "^0.28.4",
     "typedoc-plugin-markdown": "^4.6.3",
-    "typescript": "^5.9.3",
     "vitest": "^3.2.4"
   },
   "engines": {
