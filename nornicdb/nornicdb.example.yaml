@@ -1,0 +1,87 @@
+# NornicDB Configuration
+# Copy this file to nornicdb.yaml and customize
+
+server:
+  # Bolt protocol port (Neo4j compatible)
+  bolt_port: 7687
+  
+  # HTTP REST API port
+  http_port: 7474
+  
+  # Data directory
+  data_dir: ./data
+  
+  # Maximum concurrent connections
+  max_connections: 100
+
+# Embedding configuration for vector search
+embeddings:
+  # Provider: ollama, openai
+  provider: ollama
+  
+  # API endpoint
+  api_url: http://localhost:11434
+  api_path: /api/embeddings
+  
+  # API key (for OpenAI)
+  # api_key: sk-...
+  
+  # Model name
+  model: mxbai-embed-large
+  
+  # Expected dimensions (for validation)
+  dimensions: 1024
+  
+  # Request timeout
+  timeout: 30s
+
+# Memory decay configuration
+decay:
+  # Enable automatic decay
+  enabled: true
+  
+  # How often to recalculate scores
+  recalculate_interval: 1h
+  
+  # Score threshold for archiving (0.0 - 1.0)
+  archive_threshold: 0.05
+  
+  # Decay formula weights (must sum to 1.0)
+  recency_weight: 0.4
+  frequency_weight: 0.3
+  importance_weight: 0.3
+
+# Automatic relationship inference
+auto_links:
+  # Enable automatic edge creation
+  enabled: true
+  
+  # Minimum similarity score for suggesting edges (0.0 - 1.0)
+  similarity_threshold: 0.82
+  
+  # Number of similar nodes to consider
+  similarity_top_k: 10
+  
+  # Co-access pattern detection
+  co_access_enabled: true
+  co_access_window: 30s
+  co_access_min_count: 3
+  
+  # Temporal proximity linking
+  temporal_enabled: true
+  temporal_window: 30m
+  
+  # Transitive relationship inference
+  transitive_enabled: true
+  transitive_min_confidence: 0.5
+
+# Logging configuration
+logging:
+  level: info  # debug, info, warn, error
+  format: json # json, text
+  
+# Metrics (Prometheus)
+metrics:
+  enabled: true
+  port: 9090
+  path: /metrics
