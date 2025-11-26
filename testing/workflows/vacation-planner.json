@@ -1,0 +1,272 @@
+{
+  "name": "Dream Vacation Planner",
+  "description": "A complete vacation planning workflow that researches destinations, finds flights and hotels, plans activities, creates a budget, and generates a full itinerary. Perfect example of how AI agents can collaborate on a complex real-world task.",
+  "version": "1.0.0",
+
+  "tasks": [
+    {
+      "id": "destination-researcher",
+      "taskType": "agent",
+      "title": "Destination Research",
+      "agentRoleDescription": "Travel expert specializing in destination research, considering weather, culture, safety, and tourist attractions",
+      "prompt": "You are planning a 7-day vacation for a family of 4 (2 adults, 2 kids ages 8 and 12) with a moderate budget. Research and recommend the TOP 3 vacation destinations.\n\nFor each destination provide:\n1. **Why it's great for families** - kid-friendly activities, safety\n2. **Best time to visit** - weather considerations\n3. **Estimated daily cost** - rough budget per day\n4. **Top 5 must-see attractions**\n5. **Local cuisine highlights**\n6. **Any travel advisories or tips**\n\nConsider destinations that offer a mix of:\n- Beach/relaxation\n- Cultural experiences\n- Adventure activities suitable for kids\n- Good food scene\n\nProvide a clear recommendation for the #1 choice with justification.",
+      "dependencies": [],
+      "parallelGroup": 1,
+      "recommendedModel": "gpt-4.1",
+      "estimatedDuration": "3 min",
+      "estimatedToolCalls": 10,
+      "successCriteria": [
+        "3 destinations researched",
+        "Clear #1 recommendation",
+        "Family-friendly focus"
+      ],
+      "maxRetries": 2
+    },
+    {
+      "id": "flight-finder",
+      "taskType": "agent",
+      "title": "Flight Options Research",
+      "agentRoleDescription": "Travel booking specialist focusing on finding the best flight deals, layover optimization, and family-friendly airlines",
+      "prompt": "Research flight options for a family vacation:\n\n**Travelers**: 2 adults + 2 children (ages 8 and 12)\n**Departure**: Major US hub (assume flexible - NYC, LA, or Chicago)\n**Trip Duration**: 7 days\n**Budget**: Moderate (economy class, but comfort matters with kids)\n\nProvide guidance on:\n1. **Best booking strategies** - when to book, price tracking tips\n2. **Airline recommendations for families** - legroom, entertainment, kid meals\n3. **Layover considerations** - direct vs. connecting flights with kids\n4. **Baggage tips** - what's included, what to pack carry-on\n5. **Airport tips with kids** - TSA, early arrival, entertainment\n6. **Estimated budget range** for round-trip family flights\n\nInclude money-saving tips specific to family travel.",
+      "dependencies": [],
+      "parallelGroup": 1,
+      "recommendedModel": "gpt-4.1",
+      "estimatedDuration": "3 min",
+      "estimatedToolCalls": 8,
+      "successCriteria": [
+        "Booking strategies provided",
+        "Family-specific tips",
+        "Budget estimates"
+      ],
+      "maxRetries": 2
+    },
+    {
+      "id": "accommodation-finder",
+      "taskType": "agent",
+      "title": "Accommodation Research",
+      "agentRoleDescription": "Hospitality expert specializing in family-friendly accommodations, from hotels to vacation rentals",
+      "prompt": "Research accommodation options for a family vacation:\n\n**Family**: 2 adults + 2 kids (ages 8 and 12)\n**Duration**: 7 nights\n**Needs**: Space for 4, kid-friendly, good location\n\nCompare and contrast:\n\n1. **Hotels**\n   - Family suite options\n   - Amenities (pool, kids club, breakfast)\n   - Loyalty program benefits\n   - Estimated cost range\n\n2. **Vacation Rentals (Airbnb/VRBO)**\n   - Pros/cons for families\n   - What to look for (kitchen, laundry, space)\n   - Safety considerations\n   - Estimated cost range\n\n3. **Resorts**\n   - All-inclusive benefits\n   - Kids programs\n   - Value analysis\n   - Estimated cost range\n\nProvide a recommendation based on:\n- Best value for families\n- Convenience with kids\n- Location importance\n\nInclude booking tips and red flags to avoid.",
+      "dependencies": [],
+      "parallelGroup": 1,
+      "recommendedModel": "gpt-4.1",
+      "estimatedDuration": "3 min",
+      "estimatedToolCalls": 8,
+      "successCriteria": [
+        "3 accommodation types compared",
+        "Family-specific recommendations",
+        "Cost estimates"
+      ],
+      "maxRetries": 2
+    },
+    {
+      "id": "activity-planner",
+      "taskType": "agent",
+      "title": "Activities & Entertainment Research",
+      "agentRoleDescription": "Family entertainment specialist focusing on age-appropriate activities, educational experiences, and memorable adventures",
+      "prompt": "Plan activities for a 7-day family vacation with kids ages 8 and 12:\n\nCreate a balanced mix of:\n\n1. **Adventure Activities** (suitable for both age groups)\n   - Outdoor adventures\n   - Water activities\n   - Nature experiences\n\n2. **Educational/Cultural**\n   - Museums (kid-friendly ones!)\n   - Historical sites made fun\n   - Local cultural experiences\n\n3. **Pure Fun**\n   - Theme parks or attractions\n   - Beach/pool time\n   - Local entertainment\n\n4. **Relaxation** (parents need breaks too!)\n   - Downtime activities\n   - Easy dining options\n   - Flexible schedule buffers\n\nFor each activity type, provide:\n- Specific examples\n- Age-appropriateness notes\n- Estimated time needed\n- Approximate cost\n- Pro tips for families\n\nInclude a suggested daily rhythm (not too packed, not too boring).",
+      "dependencies": [],
+      "parallelGroup": 1,
+      "recommendedModel": "gpt-4.1",
+      "estimatedDuration": "3 min",
+      "estimatedToolCalls": 10,
+      "successCriteria": [
+        "Balanced activity mix",
+        "Age-appropriate suggestions",
+        "Realistic pacing"
+      ],
+      "maxRetries": 2
+    },
+    {
+      "id": "research-consolidator",
+      "taskType": "transformer",
+      "title": "Research Consolidation",
+      "description": "Combines all research into a unified vacation plan foundation",
+      "dependencies": [
+        "destination-researcher",
+        "flight-finder",
+        "accommodation-finder",
+        "activity-planner"
+      ],
+      "parallelGroup": null,
+      "lambdaId": "vacation-consolidator"
+    },
+    {
+      "id": "budget-calculator",
+      "taskType": "agent",
+      "title": "Vacation Budget Planner",
+      "agentRoleDescription": "Financial planner specializing in travel budgets, helping families plan realistic and enjoyable vacations within their means",
+      "prompt": "Based on the consolidated vacation research, create a comprehensive budget breakdown:\n\n**Create a detailed budget for a 7-day family vacation (2 adults, 2 kids)**\n\n## Budget Categories\n\n1. **Transportation**\n   - Flights (round-trip for 4)\n   - Airport transfers\n   - Local transportation (rental car vs. rideshare vs. public transit)\n   - Parking if needed\n\n2. **Accommodation**\n   - 7 nights lodging\n   - Resort fees if applicable\n   - Taxes\n\n3. **Food & Dining**\n   - Breakfast (if not included)\n   - Lunches\n   - Dinners\n   - Snacks & treats for kids\n   - Special dining experience (1 nice dinner)\n\n4. **Activities & Entertainment**\n   - Paid attractions\n   - Tours or excursions\n   - Equipment rentals\n   - Souvenirs budget\n\n5. **Miscellaneous**\n   - Travel insurance\n   - Tips\n   - Emergency fund (10%)\n   - Sunscreen, supplies, etc.\n\n## Provide THREE budget tiers:\n- 💰 **Budget-Friendly**: Maximum savings, still fun\n- 💰💰 **Moderate**: Good balance of comfort and cost\n- 💰💰💰 **Comfortable**: Splurge on key experiences\n\nInclude money-saving tips for each category.",
+      "dependencies": ["research-consolidator"],
+      "parallelGroup": null,
+      "recommendedModel": "gpt-4.1",
+      "estimatedDuration": "4 min",
+      "estimatedToolCalls": 5,
+      "successCriteria": [
+        "3 budget tiers provided",
+        "All categories covered",
+        "Realistic estimates"
+      ],
+      "maxRetries": 2
+    },
+    {
+      "id": "itinerary-builder",
+      "taskType": "agent",
+      "title": "Day-by-Day Itinerary Creator",
+      "agentRoleDescription": "Travel itinerary specialist who creates realistic, family-friendly schedules that balance activities with rest",
+      "prompt": "Using the consolidated research and budget information, create a detailed 7-day itinerary:\n\n## Itinerary Requirements\n\n**Format for each day:**\n```\n## Day X: [Theme/Focus]\n\n🌅 Morning (8am-12pm)\n- Activity with timing\n- Breakfast plans\n\n🌞 Afternoon (12pm-5pm)  \n- Lunch spot\n- Main activity\n- Rest/pool time\n\n🌙 Evening (5pm-9pm)\n- Dinner plans\n- Evening activity or relaxation\n\n💡 Pro Tips for the day\n💰 Estimated day cost\n```\n\n## Key Considerations:\n1. **Pacing** - Not too rushed, include buffer time\n2. **Kid energy** - Big activities in the morning when energy is high\n3. **Flexibility** - Mark which activities are skippable\n4. **Meals** - Realistic meal times, kid-friendly options\n5. **Rest** - Daily quiet time (even teens need downtime)\n6. **Travel days** - Day 1 and 7 should be lighter\n\n## Include:\n- **Day 1**: Arrival day (travel + light exploration)\n- **Days 2-6**: Full vacation days\n- **Day 7**: Departure day (packing, last activity, travel)\n\nAdd weather contingency plans for outdoor activities.",
+      "dependencies": ["research-consolidator", "budget-calculator"],
+      "parallelGroup": null,
+      "recommendedModel": "gpt-4.1",
+      "estimatedDuration": "5 min",
+      "estimatedToolCalls": 5,
+      "successCriteria": [
+        "7 days planned",
+        "Realistic pacing",
+        "Family-appropriate schedule"
+      ],
+      "maxRetries": 2
+    },
+    {
+      "id": "packing-list-generator",
+      "taskType": "agent",
+      "title": "Family Packing List Creator",
+      "agentRoleDescription": "Organized travel expert who helps families pack efficiently without forgetting essentials",
+      "prompt": "Create a comprehensive packing list for the family vacation:\n\n**Family**: 2 adults + kids ages 8 and 12\n**Duration**: 7 days\n**Consider**: Weather, planned activities, airline restrictions\n\n## Packing Categories:\n\n1. **Clothing** (per person guidelines)\n   - Adults\n   - Kids (they get messier!)\n   - Activity-specific (beach, hiking, nice dinner)\n\n2. **Toiletries & Health**\n   - Shared family items\n   - Kid-specific (any medications, sunscreen)\n   - First aid essentials\n\n3. **Electronics & Entertainment**\n   - Devices and chargers\n   - Kid entertainment for travel\n   - Camera/memory cards\n\n4. **Documents & Money**\n   - IDs and tickets\n   - Insurance info\n   - Emergency contacts\n   - Cash and cards\n\n5. **Carry-On Essentials**\n   - What MUST be in carry-on\n   - Kid survival kit for flights\n   - Snacks\n\n6. **Beach/Pool Gear** (if applicable)\n\n7. **Don't Forget!**\n   - Commonly forgotten items\n   - Last-minute additions\n\n## Format as checkboxes:\n- [ ] Item description\n\nInclude packing tips:\n- What NOT to pack (buy there instead)\n- Space-saving tricks\n- Outfit planning strategy",
+      "dependencies": ["research-consolidator"],
+      "parallelGroup": 2,
+      "recommendedModel": "gpt-4.1",
+      "estimatedDuration": "3 min",
+      "estimatedToolCalls": 3,
+      "successCriteria": [
+        "Comprehensive list",
+        "Age-appropriate items",
+        "Practical organization"
+      ],
+      "maxRetries": 2
+    },
+    {
+      "id": "tips-compiler",
+      "taskType": "agent",
+      "title": "Travel Tips & Hacks Compiler",
+      "agentRoleDescription": "Experienced family traveler sharing practical wisdom and insider tips",
+      "prompt": "Compile essential travel tips and hacks for this family vacation:\n\n## Categories:\n\n### ✈️ Airport & Flight Tips\n- Getting through security with kids\n- Keeping kids entertained on flights\n- Dealing with delays\n- Jet lag management\n\n### 🏨 Accommodation Hacks\n- Hotel room tips with kids\n- Making vacation rentals feel like home\n- Safety checks upon arrival\n\n### 🍽️ Dining with Kids\n- Finding kid-friendly restaurants\n- Dealing with picky eaters abroad\n- Saving money on meals\n- Snack strategies\n\n### 🎢 Activity Tips\n- Beating the crowds\n- When to book in advance\n- Free activities worth doing\n- Rainy day backup plans\n\n### 📱 Technology Tips\n- Must-have travel apps\n- Staying connected abroad\n- Digital entertainment for kids\n- Photo backup strategies\n\n### 🆘 Emergency Preparedness\n- What to do if someone gets sick\n- Lost kid protocol\n- Important numbers to save\n- Travel insurance claims\n\n### 💡 Parent Sanity Tips\n- Managing expectations\n- Building in parent breaks\n- Keeping the peace between siblings\n- Creating lasting memories vs. checking boxes\n\nMake tips actionable and specific!",
+      "dependencies": ["research-consolidator"],
+      "parallelGroup": 2,
+      "recommendedModel": "gpt-4.1",
+      "estimatedDuration": "3 min",
+      "estimatedToolCalls": 3,
+      "successCriteria": [
+        "Practical tips",
+        "Family-focused",
+        "Actionable advice"
+      ],
+      "maxRetries": 2
+    },
+    {
+      "id": "final-package-builder",
+      "taskType": "transformer",
+      "title": "Complete Vacation Package",
+      "description": "Assembles all components into a beautiful, ready-to-use vacation guide",
+      "dependencies": [
+        "itinerary-builder",
+        "packing-list-generator",
+        "tips-compiler",
+        "budget-calculator"
+      ],
+      "parallelGroup": null,
+      "lambdaId": "vacation-packager"
+    }
+  ],
+
+  "parallelGroups": [
+    {
+      "id": 1,
+      "name": "Initial Research Phase",
+      "description": "All research happens simultaneously",
+      "color": "#3b82f6"
+    },
+    {
+      "id": 2,
+      "name": "Supporting Content Phase",
+      "description": "Packing list and tips created in parallel",
+      "color": "#10b981"
+    }
+  ],
+
+  "lambdas": [
+    {
+      "id": "vacation-consolidator",
+      "name": "VacationResearchConsolidator",
+      "description": "Combines destination, flight, hotel, and activity research into a unified foundation",
+      "language": "typescript",
+      "script": "function transform(input: any): string {\n  const tasks = input.tasks;\n  \n  // Find each research task\n  const destination = tasks.find((t: any) => t.taskTitle.includes('Destination'));\n  const flights = tasks.find((t: any) => t.taskTitle.includes('Flight'));\n  const accommodation = tasks.find((t: any) => t.taskTitle.includes('Accommodation'));\n  const activities = tasks.find((t: any) => t.taskTitle.includes('Activities'));\n  \n  let consolidated = '# 🌴 Vacation Research Summary\\n\\n';\n  consolidated += `**Prepared for**: Family of 4 (2 adults, 2 kids ages 8 & 12)\\n`;\n  consolidated += `**Trip Duration**: 7 days\\n`;\n  consolidated += `**Generated**: ${new Date().toLocaleDateString()}\\n\\n`;\n  consolidated += '---\\n\\n';\n  \n  consolidated += '## 📍 Destination Research\\n\\n';\n  consolidated += destination?.workerOutput || 'Pending...\\n';\n  consolidated += '\\n\\n---\\n\\n';\n  \n  consolidated += '## ✈️ Flight Options\\n\\n';\n  consolidated += flights?.workerOutput || 'Pending...\\n';\n  consolidated += '\\n\\n---\\n\\n';\n  \n  consolidated += '## 🏨 Accommodation Options\\n\\n';\n  consolidated += accommodation?.workerOutput || 'Pending...\\n';\n  consolidated += '\\n\\n---\\n\\n';\n  \n  consolidated += '## 🎢 Activity Ideas\\n\\n';\n  consolidated += activities?.workerOutput || 'Pending...\\n';\n  \n  consolidated += '\\n\\n---\\n\\n';\n  consolidated += '## 📊 Research Summary\\n\\n';\n  consolidated += `- Research tasks completed: ${tasks.length}\\n`;\n  consolidated += `- Total research time: ${tasks.reduce((sum: number, t: any) => sum + (t.duration || 0), 0)}ms\\n`;\n  \n  return consolidated;\n}"
+    },
+    {
+      "id": "vacation-packager",
+      "name": "VacationPackageBuilder",
+      "description": "Creates the final, beautiful vacation guide document",
+      "language": "typescript",
+      "script": "function transform(input: any): string {\n  const tasks = input.tasks;\n  \n  const itinerary = tasks.find((t: any) => t.taskTitle.includes('Itinerary'));\n  const packing = tasks.find((t: any) => t.taskTitle.includes('Packing'));\n  const tips = tasks.find((t: any) => t.taskTitle.includes('Tips'));\n  const budget = tasks.find((t: any) => t.taskTitle.includes('Budget'));\n  \n  let guide = '# 🌴 Your Complete Family Vacation Guide\\n\\n';\n  guide += '> *Everything you need for an amazing family adventure!*\\n\\n';\n  guide += `**Created**: ${new Date().toLocaleDateString()}\\n`;\n  guide += `**Trip**: 7-Day Family Vacation\\n`;\n  guide += `**Travelers**: 2 Adults + 2 Kids (ages 8 & 12)\\n\\n`;\n  \n  guide += '---\\n\\n';\n  guide += '## 📋 Table of Contents\\n\\n';\n  guide += '1. [Budget Overview](#budget-overview)\\n';\n  guide += '2. [Day-by-Day Itinerary](#itinerary)\\n';\n  guide += '3. [Packing Checklist](#packing-list)\\n';\n  guide += '4. [Travel Tips & Hacks](#travel-tips)\\n\\n';\n  \n  guide += '---\\n\\n';\n  guide += '# 💰 Budget Overview\\n\\n';\n  guide += budget?.workerOutput || 'Budget information pending...\\n';\n  \n  guide += '\\n\\n---\\n\\n';\n  guide += '# 📅 Itinerary\\n\\n';\n  guide += itinerary?.workerOutput || 'Itinerary pending...\\n';\n  \n  guide += '\\n\\n---\\n\\n';\n  guide += '# 🧳 Packing List\\n\\n';\n  guide += packing?.workerOutput || 'Packing list pending...\\n';\n  \n  guide += '\\n\\n---\\n\\n';\n  guide += '# 💡 Travel Tips\\n\\n';\n  guide += tips?.workerOutput || 'Tips pending...\\n';\n  \n  guide += '\\n\\n---\\n\\n';\n  guide += '## ✨ Have an Amazing Trip!\\n\\n';\n  guide += 'This guide was automatically generated by Mimir AI Orchestration.\\n';\n  guide += 'Remember: The best vacation is one where everyone has fun - including the parents!\\n\\n';\n  guide += '*Safe travels!* 🛫\\n';\n  \n  return guide;\n}"
+    }
+  ],
+
+  "projectPlan": {
+    "overview": {
+      "goal": "Create a complete, actionable vacation plan for a family of 4",
+      "complexity": "Medium",
+      "estimatedDuration": "15-20 minutes",
+      "realWorldValue": "Save hours of vacation planning research"
+    },
+    "phases": [
+      {
+        "name": "Research Phase",
+        "description": "4 agents research destinations, flights, hotels, and activities in parallel",
+        "tasks": [
+          "destination-researcher",
+          "flight-finder",
+          "accommodation-finder",
+          "activity-planner"
+        ],
+        "parallelExecution": true
+      },
+      {
+        "name": "Consolidation",
+        "description": "Lambda combines all research into unified foundation",
+        "tasks": ["research-consolidator"]
+      },
+      {
+        "name": "Planning Phase",
+        "description": "Budget and itinerary created based on research",
+        "tasks": ["budget-calculator", "itinerary-builder"]
+      },
+      {
+        "name": "Supporting Content",
+        "description": "Packing list and tips generated in parallel",
+        "tasks": ["packing-list-generator", "tips-compiler"],
+        "parallelExecution": true
+      },
+      {
+        "name": "Final Assembly",
+        "description": "Everything assembled into beautiful vacation guide",
+        "tasks": ["final-package-builder"]
+      }
+    ],
+    "deliverables": [
+      "Complete destination recommendation with justification",
+      "Detailed 7-day itinerary with daily schedules",
+      "Three-tier budget breakdown (budget/moderate/comfortable)",
+      "Comprehensive family packing checklist",
+      "Practical travel tips and hacks",
+      "All-in-one vacation guide document"
+    ]
+  },
+
+  "whyThisExample": {
+    "relatable": "Everyone has planned or dreamed of planning a family vacation",
+    "understandable": "No technical knowledge needed - it's about travel!",
+    "demonstratesParallel": "Research happens simultaneously, like asking 4 travel agents at once",
+    "showsTransformers": "Lambdas combine and format information beautifully",
+    "practicalValue": "Output is actually useful - could save hours of real planning",
+    "showsDependencies": "Budget needs research first, itinerary needs budget, etc."
+  }
+}
