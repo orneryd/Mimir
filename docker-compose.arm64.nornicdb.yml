@@ -46,10 +46,10 @@ services:
       - NORNICDB_DATA_DIR=/data
       - NORNICDB_HTTP_PORT=7474
       - NORNICDB_BOLT_PORT=7687
-      - NORNICDB_EMBEDDING_URL=http://llama-server:8080
-      - NORNICDB_EMBEDDING_MODEL=mxbai-embed-large
-      - NORNICDB_EMBEDDING_DIM=1024
-      # Authentication (disabled by default for dev)
+      # - NORNICDB_EMBEDDING_URL=http://llama-server:8080
+      # - NORNICDB_EMBEDDING_MODEL=mxbai-embed-large
+      # - NORNICDB_EMBEDDING_DIM=1024
+      # # Authentication (disabled by default for dev)
       - NORNICDB_NO_AUTH=${NORNICDB_NO_AUTH:-true}
       - NORNICDB_ADMIN_PASSWORD=${NEO4J_PASSWORD:-password}
       # Load export data on startup (disabled - starting fresh)
