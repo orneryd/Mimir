@@ -3,7 +3,6 @@ package main
 
 import (
 	"context"
-	"embed"
 	"fmt"
 	"os"
 	"os/signal"
@@ -19,10 +18,8 @@ import (
 	"github.com/orneryd/nornicdb/pkg/gpu"
 	"github.com/orneryd/nornicdb/pkg/nornicdb"
 	"github.com/orneryd/nornicdb/pkg/server"
+	"github.com/orneryd/nornicdb/ui"
 )
-
-//go:embed ui/dist/*
-var uiAssets embed.FS
 
 var (
 	version = "0.1.0"
@@ -184,10 +181,19 @@ func runServe(cmd *cobra.Command, args []string) error {
 	if gpuErr != nil {
 		fmt.Printf("   ⚠️  GPU not available: %v (using CPU)\n", gpuErr)
 	} else if gpuManager.IsEnabled() {
+		device := gpuManager.Device()
 		db.SetGPUManager(gpuManager)
-		fmt.Printf("   ✅ GPU enabled: %v\n", gpuManager.Device())
+		fmt.Printf("   ✅ GPU enabled: %s (%s, %dMB)\n", device.Name, device.Backend, device.MemoryMB)
 	} else {
-		fmt.Println("   ⚠️  GPU disabled (CPU fallback active)")
+		// Check if GPU hardware is present but CUDA not compiled in
+		device := gpuManager.Device()
+		if device != nil && device.MemoryMB > 0 {
+			fmt.Printf("   ⚠️  GPU detected: %s (%dMB) - CUDA not compiled in, using CPU\n",
+				device.Name, device.MemoryMB)
+			fmt.Println("      💡 Build with Dockerfile.cuda for GPU acceleration")
+		} else {
+			fmt.Println("   ⚠️  GPU disabled (CPU fallback active)")
+		}
 	}
 
 	// Load data if specified
@@ -240,8 +246,8 @@ func runServe(cmd *cobra.Command, args []string) error {
 	serverConfig := server.DefaultConfig()
 	serverConfig.Port = httpPort
 
-	// Enable embedded UI
-	server.SetUIAssets(uiAssets)
+	// Enable embedded UI from the ui package
+	server.SetUIAssets(ui.Assets)
 
 	httpServer, err := server.New(db, authenticator, serverConfig)
 	if err != nil {

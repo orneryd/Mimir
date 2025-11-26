@@ -1,4 +1,4 @@
-# NornicDB Docker Image
+# NornicDB Docker Image with NVIDIA CUDA Support
 # Neo4j-compatible graph database with GPU-accelerated vector search
 
 # Stage 1: Build the UI
@@ -12,7 +12,7 @@ RUN npm config set registry https://registry.npmjs.org/
 # Copy UI package files
 COPY ui/package.json ui/package-lock.json* ./
 
-# Install dependencies (clean install, fallback to regular install)
+# Install dependencies
 RUN npm ci 2>/dev/null || npm install --legacy-peer-deps
 
 # Copy UI source
@@ -21,13 +21,19 @@ COPY ui/ .
 # Build the UI
 RUN npm run build
 
-# Stage 2: Build the Go binary
-FROM golang:1.23-alpine AS builder
+# Stage 2: Build the Go binary with CUDA support
+FROM nvidia/cuda:12.2.0-devel-ubuntu22.04 AS builder
+
+# Install Go
+ENV GO_VERSION=1.23.3
+RUN apt-get update && apt-get install -y wget git gcc && \
+    wget https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz && \
+    tar -C /usr/local -xzf go${GO_VERSION}.linux-amd64.tar.gz && \
+    rm go${GO_VERSION}.linux-amd64.tar.gz
+ENV PATH="/usr/local/go/bin:${PATH}"
+ENV CUDA_HOME=/usr/local/cuda
 
 WORKDIR /build
-
-# Install build dependencies
-RUN apk add --no-cache git
 
 # Copy go mod files
 COPY go.mod go.sum ./
@@ -36,20 +42,23 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Copy built UI from ui-builder stage to ui/dist for go:embed
-# The embed directive is now in ui/embed.go (not cmd/nornicdb)
+# Copy built UI from ui-builder stage
 COPY --from=ui-builder /ui/dist ./ui/dist
 
-# Build the binary with embedded UI
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o nornicdb ./cmd/nornicdb
+# Build with CGO enabled for CUDA support
+RUN CGO_ENABLED=1 GOOS=linux go build -tags cuda -ldflags="-s -w" -o nornicdb ./cmd/nornicdb
 
-# Runtime stage
-FROM alpine:3.19
+# Runtime stage - use CUDA runtime image (smaller than devel)
+FROM nvidia/cuda:12.2.0-runtime-ubuntu22.04
 
 WORKDIR /app
 
 # Install runtime dependencies
-RUN apk add --no-cache ca-certificates tzdata
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    tzdata \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy binary from builder
 COPY --from=builder /build/nornicdb /app/nornicdb
@@ -62,8 +71,6 @@ RUN chmod +x /app/docker-entrypoint.sh
 RUN mkdir -p /data
 
 # Expose ports
-# 7474 - HTTP API & UI
-# 7687 - Bolt protocol
 EXPOSE 7474 7687
 
 # Health check
@@ -77,10 +84,10 @@ ENV NORNICDB_DATA_DIR=/data \
     NORNICDB_EMBEDDING_URL=http://llama-server:8080 \
     NORNICDB_EMBEDDING_MODEL=mxbai-embed-large \
     NORNICDB_EMBEDDING_DIM=1024 \
-    NORNICDB_NO_AUTH=true
+    NORNICDB_NO_AUTH=true \
+    NORNICDB_GPU_ENABLED=true \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
-# Entry point script handles environment variable expansion
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
-
-# Additional arguments can be passed via CMD
 CMD []

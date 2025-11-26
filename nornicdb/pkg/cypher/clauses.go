@@ -12,6 +12,56 @@ import (
 	"github.com/orneryd/nornicdb/pkg/storage"
 )
 
+// findStandaloneWithIndex finds the index of a standalone "WITH" keyword
+// that is NOT part of "STARTS WITH" or "ENDS WITH".
+// Returns -1 if not found.
+func findStandaloneWithIndex(s string) int {
+	upper := strings.ToUpper(s)
+	idx := 0
+	for {
+		pos := strings.Index(upper[idx:], "WITH")
+		if pos == -1 {
+			return -1
+		}
+		absolutePos := idx + pos
+
+		// Check if it's preceded by "STARTS " or "ENDS "
+		if absolutePos >= 7 {
+			preceding := upper[absolutePos-7 : absolutePos]
+			if preceding == "STARTS " {
+				idx = absolutePos + 4
+				continue
+			}
+		}
+		if absolutePos >= 5 {
+			preceding := upper[absolutePos-5 : absolutePos]
+			if preceding == "ENDS " {
+				idx = absolutePos + 4
+				continue
+			}
+		}
+
+		// Check word boundaries
+		leftOK := absolutePos == 0 || !isAlphanumeric(rune(upper[absolutePos-1]))
+		endPos := absolutePos + 4
+		rightOK := endPos >= len(upper) || !isAlphanumeric(rune(upper[endPos]))
+
+		if leftOK && rightOK {
+			return absolutePos
+		}
+
+		idx = absolutePos + 1
+		if idx >= len(upper) {
+			return -1
+		}
+	}
+}
+
+// isAlphanumeric returns true if the rune is a letter or digit
+func isAlphanumeric(r rune) bool {
+	return (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_'
+}
+
 // ========================================
 // WITH Clause
 // ========================================
@@ -339,11 +389,38 @@ func (e *StorageExecutor) executeCompoundMatchOptionalMatch(ctx context.Context,
 		restOfQuery = strings.TrimSpace(remainingAfterOptMatch[optMatchEndIdx:])
 	}
 
-	// Parse the initial MATCH to get node variable and label
-	initialPattern := strings.TrimSpace(cypher[5:optMatchIdx]) // Get original case, skip "MATCH"
-	nodePattern := e.parseNodePattern(initialPattern)
+	// Parse the initial MATCH clause section (everything between MATCH and OPTIONAL MATCH)
+	// This may contain: node pattern, WHERE clause, and WITH DISTINCT
+	initialSection := strings.TrimSpace(cypher[5:optMatchIdx]) // Get original case, skip "MATCH"
+
+	// Extract WHERE clause if present (between node pattern and WITH DISTINCT/OPTIONAL MATCH)
+	var whereClause string
+	whereIdx := findKeywordIndex(initialSection, "WHERE")
+
+	// Find standalone WITH (not part of "STARTS WITH" or "ENDS WITH")
+	firstWithIdx := findStandaloneWithIndex(initialSection)
+
+	// Determine the node pattern end
+	nodePatternEnd := len(initialSection)
+	if whereIdx > 0 {
+		nodePatternEnd = whereIdx
+	} else if firstWithIdx > 0 {
+		nodePatternEnd = firstWithIdx
+	}
+
+	nodePatternStr := strings.TrimSpace(initialSection[:nodePatternEnd])
+	nodePattern := e.parseNodePattern(nodePatternStr)
 	if nodePattern.variable == "" {
 		return nil, fmt.Errorf("could not parse node pattern from MATCH clause")
+	}
+
+	// Extract WHERE clause content if present
+	if whereIdx > 0 {
+		whereEnd := len(initialSection)
+		if firstWithIdx > whereIdx {
+			whereEnd = firstWithIdx
+		}
+		whereClause = strings.TrimSpace(initialSection[whereIdx+5 : whereEnd]) // Skip "WHERE"
 	}
 
 	// Get all nodes matching the initial pattern
@@ -374,6 +451,11 @@ func (e *StorageExecutor) executeCompoundMatchOptionalMatch(ctx context.Context,
 			}
 		}
 		initialNodes = filtered
+	}
+
+	// Apply WHERE clause filtering if present
+	if whereClause != "" {
+		initialNodes = e.filterNodes(initialNodes, nodePattern.variable, whereClause)
 	}
 
 	// Parse the OPTIONAL MATCH relationship pattern

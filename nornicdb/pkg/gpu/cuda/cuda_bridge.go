@@ -6,11 +6,13 @@
 package cuda
 
 /*
-#cgo CFLAGS: -I${CUDA_HOME}/include
-#cgo linux LDFLAGS: -L${CUDA_HOME}/lib64 -lcudart -lcublas -lcuda
-#cgo windows LDFLAGS: -L${CUDA_PATH}/lib/x64 -lcudart -lcublas -lcuda
+#cgo linux CFLAGS: -I/usr/local/cuda/include
+#cgo linux LDFLAGS: -L/usr/local/cuda/lib64 -lcudart -lcublas -lcuda
+#cgo windows CFLAGS: -IC:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/include
+#cgo windows LDFLAGS: -LC:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.2/lib/x64 -lcudart -lcublas -lcuda
 
-#include <cuda_runtime.h>
+#include <cuda.h>
+#include <cuda_runtime_api.h>
 #include <cublas_v2.h>
 #include <stdlib.h>
 #include <string.h>
@@ -99,7 +101,7 @@ void cuda_release_device(CudaDevice* dev) {
 
 const char* cuda_device_name(int device_id) {
     static char name[256];
-    cudaDeviceProp prop;
+    struct cudaDeviceProp prop;
     cudaError_t err = cudaGetDeviceProperties(&prop, device_id);
     if (err != cudaSuccess) {
         return "Unknown";
@@ -109,7 +111,7 @@ const char* cuda_device_name(int device_id) {
 }
 
 size_t cuda_device_memory(int device_id) {
-    cudaDeviceProp prop;
+    struct cudaDeviceProp prop;
     cudaError_t err = cudaGetDeviceProperties(&prop, device_id);
     if (err != cudaSuccess) {
         return 0;
@@ -118,7 +120,7 @@ size_t cuda_device_memory(int device_id) {
 }
 
 int cuda_device_compute_capability(int device_id) {
-    cudaDeviceProp prop;
+    struct cudaDeviceProp prop;
     cudaError_t err = cudaGetDeviceProperties(&prop, device_id);
     if (err != cudaSuccess) {
         return 0;
@@ -146,7 +148,7 @@ CudaBuffer* cuda_create_buffer(CudaDevice* dev, float* host_data, size_t count, 
     cudaError_t err;
     if (memory_type == 0) {
         // Device memory
-        err = cudaMalloc(&buf->data, buf->size);
+        err = cudaMalloc((void**)&buf->data, buf->size);
         if (err != cudaSuccess) {
             cuda_set_error(cudaGetErrorString(err));
             free(buf);
@@ -164,7 +166,7 @@ CudaBuffer* cuda_create_buffer(CudaDevice* dev, float* host_data, size_t count, 
         }
     } else {
         // Host pinned memory (for faster transfers)
-        err = cudaMallocHost(&buf->data, buf->size);
+        err = cudaMallocHost((void**)&buf->data, buf->size);
         if (err != cudaSuccess) {
             cuda_set_error(cudaGetErrorString(err));
             free(buf);
@@ -385,13 +387,13 @@ const (
 
 // Device represents a CUDA GPU device.
 type Device struct {
-	ptr      *C.CudaDevice
-	id       int
-	name     string
-	memory   uint64
-	ccMajor  int
-	ccMinor  int
-	mu       sync.Mutex
+	ptr     *C.CudaDevice
+	id      int
+	name    string
+	memory  uint64
+	ccMajor int
+	ccMinor int
+	mu      sync.Mutex
 }
 
 // Buffer represents a CUDA memory buffer.
@@ -663,4 +665,41 @@ func (d *Device) Search(embeddings *Buffer, query []float32, n, dimensions uint3
 	}
 
 	return results, nil
+}
+
+// HasGPUHardware returns true if CUDA GPU hardware is available.
+func HasGPUHardware() bool {
+	return IsAvailable()
+}
+
+// IsCUDACapable returns true if CUDA operations are available.
+// In the real CUDA build, this is always true if IsAvailable() is true.
+func IsCUDACapable() bool {
+	return IsAvailable()
+}
+
+// GPUName returns the name of the first CUDA device.
+func GPUName() string {
+	if !IsAvailable() {
+		return ""
+	}
+	device, err := NewDevice(0)
+	if err != nil {
+		return ""
+	}
+	defer device.Release()
+	return device.Name()
+}
+
+// GPUMemoryMB returns the memory of the first CUDA device in MB.
+func GPUMemoryMB() int {
+	if !IsAvailable() {
+		return 0
+	}
+	device, err := NewDevice(0)
+	if err != nil {
+		return 0
+	}
+	defer device.Release()
+	return device.MemoryMB()
 }

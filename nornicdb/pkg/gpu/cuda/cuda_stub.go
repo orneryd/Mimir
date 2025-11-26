@@ -3,10 +3,16 @@
 
 // Package cuda provides NVIDIA GPU acceleration using CUDA.
 // This is a stub implementation for systems without CUDA support.
+// It includes runtime detection via nvidia-smi for informational purposes.
 package cuda
 
 import (
 	"errors"
+	"fmt"
+	"os/exec"
+	"runtime"
+	"strings"
+	"sync"
 )
 
 // Errors
@@ -17,6 +23,49 @@ var (
 	ErrKernelExecution  = errors.New("cuda: kernel execution failed")
 	ErrInvalidBuffer    = errors.New("cuda: invalid buffer")
 )
+
+// Runtime GPU detection cache
+var (
+	gpuDetected     bool
+	gpuDetectedOnce sync.Once
+	gpuName         string
+	gpuMemoryMB     int
+)
+
+// detectGPURuntime checks for NVIDIA GPU using nvidia-smi (no CUDA required)
+func detectGPURuntime() {
+	gpuDetectedOnce.Do(func() {
+		if runtime.GOOS != "linux" && runtime.GOOS != "windows" {
+			return
+		}
+
+		// Try nvidia-smi to detect GPU
+		cmd := exec.Command("nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader,nounits")
+		output, err := cmd.Output()
+		if err != nil {
+			return
+		}
+
+		lines := strings.TrimSpace(string(output))
+		if lines == "" {
+			return
+		}
+
+		// Parse first GPU: "NVIDIA GeForce RTX 3080, 10240"
+		parts := strings.Split(lines, ",")
+		if len(parts) >= 1 {
+			gpuName = strings.TrimSpace(parts[0])
+			gpuDetected = true
+		}
+		if len(parts) >= 2 {
+			// Parse memory (nvidia-smi returns in MiB)
+			var mem int
+			if _, err := fmt.Sscanf(strings.TrimSpace(parts[1]), "%d", &mem); err == nil {
+				gpuMemoryMB = mem
+			}
+		}
+	})
+}
 
 // MemoryType defines how buffer memory is managed.
 type MemoryType int
@@ -38,18 +87,55 @@ type SearchResult struct {
 	Score float32
 }
 
-// IsAvailable returns false on systems without CUDA.
+// IsAvailable checks if CUDA/GPU is available.
+// In stub mode, we detect GPU via nvidia-smi but can't use it for acceleration.
+// This allows informative logging about GPU presence.
 func IsAvailable() bool {
+	detectGPURuntime()
+	return gpuDetected
+}
+
+// HasGPUHardware returns true if NVIDIA GPU hardware is detected.
+// This is separate from CUDA availability - GPU may be present but CUDA not usable.
+func HasGPUHardware() bool {
+	detectGPURuntime()
+	return gpuDetected
+}
+
+// GPUName returns the detected GPU name, or empty string if none.
+func GPUName() string {
+	detectGPURuntime()
+	return gpuName
+}
+
+// GPUMemoryMB returns the detected GPU memory in MB, or 0 if none.
+func GPUMemoryMB() int {
+	detectGPURuntime()
+	return gpuMemoryMB
+}
+
+// IsCUDACapable returns false in stub mode - GPU is detected but CUDA ops unavailable.
+func IsCUDACapable() bool {
 	return false
 }
 
-// DeviceCount returns 0 on systems without CUDA.
+// DeviceCount returns 1 if GPU detected, 0 otherwise.
+// Note: In stub mode, device can't actually be used for CUDA operations.
 func DeviceCount() int {
+	detectGPURuntime()
+	if gpuDetected {
+		return 1
+	}
 	return 0
 }
 
 // NewDevice returns an error on systems without CUDA.
+// Even with GPU detected, CUDA operations require the cuda build tag.
 func NewDevice(deviceID int) (*Device, error) {
+	detectGPURuntime()
+	if gpuDetected {
+		return nil, fmt.Errorf("%w: GPU '%s' detected but binary built without CUDA support (use -tags cuda)", ErrCUDANotAvailable, gpuName)
+	}
 	return nil, ErrCUDANotAvailable
 }
 

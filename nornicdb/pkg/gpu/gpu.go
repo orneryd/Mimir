@@ -76,24 +76,24 @@
 // Supported Backends:
 //
 // 1. **OpenCL** (Cross-platform):
-//    - Works with NVIDIA, AMD, Intel GPUs
-//    - Best compatibility across hardware
-//    - Good performance for most workloads
+//   - Works with NVIDIA, AMD, Intel GPUs
+//   - Best compatibility across hardware
+//   - Good performance for most workloads
 //
 // 2. **CUDA** (NVIDIA only):
-//    - Highest performance on NVIDIA GPUs
-//    - Requires CUDA toolkit installation
-//    - Best for production NVIDIA deployments
+//   - Highest performance on NVIDIA GPUs
+//   - Requires CUDA toolkit installation
+//   - Best for production NVIDIA deployments
 //
 // 3. **Metal** (Apple Silicon):
-//    - Native acceleration on M1/M2/M3 Macs
-//    - Excellent performance and power efficiency
-//    - Automatic on macOS with Apple Silicon
+//   - Native acceleration on M1/M2/M3 Macs
+//   - Excellent performance and power efficiency
+//   - Automatic on macOS with Apple Silicon
 //
 // 4. **Vulkan** (Cross-platform):
-//    - Modern compute API
-//    - Good performance across vendors
-//    - Future-proof choice
+//   - Modern compute API
+//   - Good performance across vendors
+//   - Future-proof choice
 //
 // Performance Characteristics:
 //
@@ -109,30 +109,31 @@
 //   - This is why GPU excels at vector operations
 //
 // When to Use GPU:
-//   ✅ Large embedding collections (>10K vectors)
-//   ✅ Frequent similarity searches
-//   ✅ Batch processing workloads
-//   ✅ Real-time recommendation systems
-//   ❌ Small datasets (<1K vectors)
-//   ❌ Infrequent searches
-//   ❌ Memory-constrained environments
+//
+//	✅ Large embedding collections (>10K vectors)
+//	✅ Frequent similarity searches
+//	✅ Batch processing workloads
+//	✅ Real-time recommendation systems
+//	❌ Small datasets (<1K vectors)
+//	❌ Infrequent searches
+//	❌ Memory-constrained environments
 //
 // ELI12 (Explain Like I'm 12):
 //
 // Think of your computer like a kitchen:
 //
-// 1. **CPU = Chef**: Really smart, can do complex recipes (graph traversal),
-//    but can only work on one thing at a time.
+//  1. **CPU = Chef**: Really smart, can do complex recipes (graph traversal),
+//     but can only work on one thing at a time.
 //
-// 2. **GPU = Assembly line**: Not as smart as the chef, but can do simple
-//    tasks (vector math) REALLY fast with hundreds of workers in parallel.
+//  2. **GPU = Assembly line**: Not as smart as the chef, but can do simple
+//     tasks (vector math) REALLY fast with hundreds of workers in parallel.
 //
-// 3. **Vector search**: Like comparing the "taste" of 1 million dishes to
-//    find the 10 most similar. The chef would take forever doing this one by
-//    one, but the assembly line can compare them all at the same time!
+//  3. **Vector search**: Like comparing the "taste" of 1 million dishes to
+//     find the 10 most similar. The chef would take forever doing this one by
+//     one, but the assembly line can compare them all at the same time!
 //
-// 4. **Memory**: The assembly line has its own super-fast ingredients storage
-//    (VRAM) that's much faster than the main kitchen storage (RAM).
+//  4. **Memory**: The assembly line has its own super-fast ingredients storage
+//     (VRAM) that's much faster than the main kitchen storage (RAM).
 //
 // So we use the assembly line for the repetitive math work, then send the
 // results back to the chef for the complex decision-making!
@@ -147,6 +148,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/orneryd/nornicdb/pkg/gpu/cuda"
 	"github.com/orneryd/nornicdb/pkg/gpu/metal"
 )
 
@@ -288,7 +290,8 @@ type DeviceInfo struct {
 //		stats.OperationsGPU, stats.FallbackCount)
 //
 // Thread Safety:
-//   All methods are thread-safe and can be called concurrently.
+//
+//	All methods are thread-safe and can be called concurrently.
 type Manager struct {
 	config  *Config
 	device  *DeviceInfo
@@ -344,7 +347,8 @@ type Stats struct {
 //	}
 //
 // Device Detection:
-//   The manager tries backends in order: Preferred -> OpenCL -> CUDA -> Vulkan -> Metal
+//
+//	The manager tries backends in order: Preferred -> OpenCL -> CUDA -> Vulkan -> Metal
 func NewManager(config *Config) (*Manager, error) {
 	if config == nil {
 		config = DefaultConfig()
@@ -413,11 +417,10 @@ func probeBackend(backend Backend, deviceID int) (*DeviceInfo, error) {
 	switch backend {
 	case BackendMetal:
 		return probeMetal(deviceID)
+	case BackendCUDA:
+		return probeCUDA(deviceID)
 	case BackendOpenCL:
 		// TODO: Implement OpenCL detection
-		return nil, ErrGPUNotAvailable
-	case BackendCUDA:
-		// TODO: Implement CUDA detection
 		return nil, ErrGPUNotAvailable
 	case BackendVulkan:
 		// TODO: Implement Vulkan detection
@@ -425,6 +428,61 @@ func probeBackend(backend Backend, deviceID int) (*DeviceInfo, error) {
 	default:
 		return nil, ErrGPUNotAvailable
 	}
+}
+
+// probeCUDA checks for NVIDIA CUDA GPU availability.
+func probeCUDA(deviceID int) (*DeviceInfo, error) {
+	if runtime.GOOS != "linux" && runtime.GOOS != "windows" {
+		return nil, ErrGPUNotAvailable
+	}
+
+	// Check if GPU hardware is present (via nvidia-smi)
+	if cuda.HasGPUHardware() && !cuda.IsCUDACapable() {
+		// GPU detected but binary not built with CUDA support
+		return &DeviceInfo{
+			ID:           0,
+			Name:         cuda.GPUName() + " (CUDA disabled - CPU fallback)",
+			Vendor:       "NVIDIA",
+			Backend:      BackendNone, // Can't use CUDA ops, but acknowledge GPU exists
+			MemoryMB:     cuda.GPUMemoryMB(),
+			ComputeUnits: 0,
+			MaxWorkGroup: 0,
+			Available:    false, // Not available for GPU compute
+		}, nil
+	}
+
+	if !cuda.IsAvailable() {
+		return nil, ErrGPUNotAvailable
+	}
+
+	deviceCount := cuda.DeviceCount()
+	if deviceCount == 0 {
+		return nil, ErrGPUNotAvailable
+	}
+
+	// Use specified device or first available
+	if deviceID < 0 || deviceID >= deviceCount {
+		deviceID = 0
+	}
+
+	device, err := cuda.NewDevice(deviceID)
+	if err != nil {
+		return nil, err
+	}
+	defer device.Release()
+
+	ccMajor, ccMinor := device.ComputeCapability()
+
+	return &DeviceInfo{
+		ID:           deviceID,
+		Name:         device.Name(),
+		Vendor:       "NVIDIA",
+		Backend:      BackendCUDA,
+		MemoryMB:     device.MemoryMB(),
+		ComputeUnits: ccMajor*10 + ccMinor, // Store compute capability
+		MaxWorkGroup: 1024,                 // Typical CUDA max threads per block
+		Available:    true,
+	}, nil
 }
 
 // probeMetal checks for Metal GPU availability (macOS/iOS only).
@@ -725,19 +783,21 @@ type BenchmarkResult struct {
 // Memory Layout (Optimized for GPU):
 //
 // GPU VRAM (contiguous float32 array):
-//   [vec0[0], vec0[1], ..., vec0[D-1], vec1[0], vec1[1], ..., vec1[D-1], ...]
-//   Pure numerical data, perfect for SIMD/parallel computation
+//
+//	[vec0[0], vec0[1], ..., vec0[D-1], vec1[0], vec1[1], ..., vec1[D-1], ...]
+//	Pure numerical data, perfect for SIMD/parallel computation
 //
 // CPU RAM (nodeID mapping):
-//   nodeIDs[0] = "node-123"  -> corresponds to vec0 in GPU
-//   nodeIDs[1] = "node-456"  -> corresponds to vec1 in GPU
-//   idToIndex["node-123"] = 0  -> fast lookup
+//
+//	nodeIDs[0] = "node-123"  -> corresponds to vec0 in GPU
+//	nodeIDs[1] = "node-456"  -> corresponds to vec1 in GPU
+//	idToIndex["node-123"] = 0  -> fast lookup
 //
 // Search Flow:
-//   1. Upload query vector to GPU (single float32 array)
-//   2. GPU computes cosine similarity for ALL embeddings in parallel
-//   3. GPU performs parallel reduction to find top-k indices
-//   4. CPU maps indices back to nodeIDs: [5, 12, 3] -> ["node-456", "node-789", "node-234"]
+//  1. Upload query vector to GPU (single float32 array)
+//  2. GPU computes cosine similarity for ALL embeddings in parallel
+//  3. GPU performs parallel reduction to find top-k indices
+//  4. CPU maps indices back to nodeIDs: [5, 12, 3] -> ["node-456", "node-789", "node-234"]
 //
 // Performance:
 //   - CPU (1M vectors): ~1-10 seconds
@@ -779,7 +839,8 @@ type BenchmarkResult struct {
 //   - GPU overhead: dimensions × 4 bytes per embedding
 //
 // Thread Safety:
-//   All methods are thread-safe. Concurrent searches are supported.
+//
+//	All methods are thread-safe. Concurrent searches are supported.
 type EmbeddingIndex struct {
 	manager    *Manager
 	dimensions int
@@ -795,6 +856,8 @@ type EmbeddingIndex struct {
 	gpuBuffer    unsafe.Pointer // Native GPU buffer handle (legacy)
 	metalBuffer  *metal.Buffer  // Metal GPU buffer (macOS)
 	metalDevice  *metal.Device  // Metal device reference
+	cudaBuffer   *cuda.Buffer   // CUDA GPU buffer (NVIDIA)
+	cudaDevice   *cuda.Device   // CUDA device reference
 	gpuAllocated int            // Bytes allocated on GPU (dimensions × count × 4)
 	gpuCapacity  int            // Max embeddings before realloc needed
 	gpuSynced    bool           // Is GPU in sync with CPU?
@@ -857,7 +920,8 @@ func DefaultEmbeddingIndexConfig(dimensions int) *EmbeddingIndexConfig {
 //	index = gpu.NewEmbeddingIndex(manager, nil)
 //
 // Memory Pre-allocation:
-//   Setting InitialCap avoids repeated memory allocations during bulk loading.
+//
+//	Setting InitialCap avoids repeated memory allocations during bulk loading.
 func NewEmbeddingIndex(manager *Manager, config *EmbeddingIndexConfig) *EmbeddingIndex {
 	if config == nil {
 		config = DefaultEmbeddingIndexConfig(1024)
@@ -1031,8 +1095,9 @@ func (ei *EmbeddingIndex) Remove(nodeID string) bool {
 //   - Typical speedup: 10-100x for large datasets
 //
 // Similarity Metric:
-//   Uses cosine similarity: score = dot(a,b) / (||a|| × ||b||)
-//   Range: [-1, 1] where 1 = identical, 0 = orthogonal, -1 = opposite
+//
+//	Uses cosine similarity: score = dot(a,b) / (||a|| × ||b||)
+//	Range: [-1, 1] where 1 = identical, 0 = orthogonal, -1 = opposite
 func (ei *EmbeddingIndex) Search(query []float32, k int) ([]SearchResult, error) {
 	if len(query) != ei.dimensions {
 		return nil, ErrInvalidDimensions
@@ -1062,11 +1127,60 @@ func (ei *EmbeddingIndex) searchGPU(query []float32, k int) ([]SearchResult, err
 		switch ei.manager.device.Backend {
 		case BackendMetal:
 			return ei.searchMetal(query, k)
+		case BackendCUDA:
+			return ei.searchCUDA(query, k)
 		}
 	}
 
 	// Fallback to CPU if no GPU backend available
 	return ei.searchCPU(query, k)
+}
+
+// searchCUDA performs similarity search using NVIDIA CUDA GPU.
+func (ei *EmbeddingIndex) searchCUDA(query []float32, k int) ([]SearchResult, error) {
+	if ei.cudaBuffer == nil || ei.cudaDevice == nil {
+		// Fall back to CPU if CUDA not initialized
+		return ei.searchCPU(query, k)
+	}
+
+	n := uint32(len(ei.nodeIDs))
+	if k > int(n) {
+		k = int(n)
+	}
+
+	// Perform GPU search using CUDA
+	results, err := ei.cudaDevice.Search(
+		ei.cudaBuffer,
+		query,
+		n,
+		uint32(ei.dimensions),
+		k,
+		true, // vectors are normalized
+	)
+
+	if err != nil {
+		// Fall back to CPU on GPU error
+		atomic.AddInt64(&ei.manager.stats.FallbackCount, 1)
+		return ei.searchCPU(query, k)
+	}
+
+	// Update stats
+	atomic.AddInt64(&ei.manager.stats.OperationsGPU, 1)
+	atomic.AddInt64(&ei.manager.stats.KernelExecutions, 2) // similarity + topk
+
+	// Convert CUDA results to SearchResult with nodeIDs
+	output := make([]SearchResult, len(results))
+	for i, r := range results {
+		if int(r.Index) < len(ei.nodeIDs) {
+			output[i] = SearchResult{
+				ID:       ei.nodeIDs[r.Index],
+				Score:    r.Score,
+				Distance: 1 - r.Score,
+			}
+		}
+	}
+
+	return output, nil
 }
 
 // searchMetal performs similarity search using Metal GPU.
@@ -1175,11 +1289,59 @@ func (ei *EmbeddingIndex) SyncToGPU() error {
 		switch ei.manager.device.Backend {
 		case BackendMetal:
 			return ei.syncToMetal()
+		case BackendCUDA:
+			return ei.syncToCUDA()
 		}
 	}
 
 	// No backend available
 	return ErrGPUNotAvailable
+}
+
+// syncToCUDA uploads embeddings to NVIDIA CUDA GPU buffer.
+func (ei *EmbeddingIndex) syncToCUDA() error {
+	// Initialize CUDA device if needed
+	if ei.cudaDevice == nil {
+		deviceID := 0
+		if ei.manager.config != nil {
+			deviceID = ei.manager.config.DeviceID
+		}
+		device, err := cuda.NewDevice(deviceID)
+		if err != nil {
+			return err
+		}
+		ei.cudaDevice = device
+	}
+
+	// Release old buffer
+	if ei.cudaBuffer != nil {
+		ei.cudaBuffer.Release()
+		ei.cudaBuffer = nil
+	}
+
+	// Create new buffer with embeddings
+	buffer, err := ei.cudaDevice.NewBuffer(ei.cpuVectors, cuda.MemoryDevice)
+	if err != nil {
+		return err
+	}
+	ei.cudaBuffer = buffer
+
+	// Normalize vectors on GPU for faster cosine similarity
+	n := uint32(len(ei.nodeIDs))
+	dims := uint32(ei.dimensions)
+	if err := ei.cudaDevice.NormalizeVectors(ei.cudaBuffer, n, dims); err != nil {
+		// Non-fatal: we can still search with unnormalized vectors
+		// (but slower since we need to normalize each query)
+	}
+
+	// Update stats
+	ei.gpuAllocated = len(ei.cpuVectors) * 4
+	ei.gpuSynced = true
+	atomic.AddInt64(&ei.uploadsCount, 1)
+	atomic.AddInt64(&ei.uploadBytes, int64(ei.gpuAllocated))
+	atomic.AddInt64(&ei.manager.stats.BytesTransferred, int64(ei.gpuAllocated))
+
+	return nil
 }
 
 // syncToMetal uploads embeddings to Metal GPU buffer.
@@ -1319,6 +1481,7 @@ func (ei *EmbeddingIndex) Release() {
 	ei.mu.Lock()
 	defer ei.mu.Unlock()
 
+	// Release Metal resources
 	if ei.metalBuffer != nil {
 		ei.metalBuffer.Release()
 		ei.metalBuffer = nil
@@ -1327,6 +1490,17 @@ func (ei *EmbeddingIndex) Release() {
 		ei.metalDevice.Release()
 		ei.metalDevice = nil
 	}
+
+	// Release CUDA resources
+	if ei.cudaBuffer != nil {
+		ei.cudaBuffer.Release()
+		ei.cudaBuffer = nil
+	}
+	if ei.cudaDevice != nil {
+		ei.cudaDevice.Release()
+		ei.cudaDevice = nil
+	}
+
 	ei.gpuAllocated = 0
 	ei.gpuSynced = false
 }
