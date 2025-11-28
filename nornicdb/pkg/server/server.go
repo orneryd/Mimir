@@ -130,6 +130,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"runtime"
@@ -413,11 +414,11 @@ func New(db *nornicdb.DB, authenticator *auth.Authenticator, config *Config) (*S
 		embedder, err := embed.NewEmbedder(embedConfig)
 		if err != nil {
 			if config.EmbeddingProvider == "local" {
-				fmt.Printf("⚠️  Local embedding model unavailable: %v\n", err)
+				log.Printf("⚠️  Local embedding model unavailable: %v", err)
 			} else {
-				fmt.Printf("⚠️  Embeddings endpoint unavailable (%s): %v\n", config.EmbeddingAPIURL, err)
+				log.Printf("⚠️  Embeddings endpoint unavailable (%s): %v", config.EmbeddingAPIURL, err)
 			}
-			fmt.Println("   → Falling back to full-text search only")
+			log.Println("   → Falling back to full-text search only")
 			// Don't set embedder - MCP server will use text search
 		} else {
 			// Health check: test embedding before enabling
@@ -427,17 +428,17 @@ func New(db *nornicdb.DB, authenticator *auth.Authenticator, config *Config) (*S
 
 			if healthErr != nil {
 				if config.EmbeddingProvider == "local" {
-					fmt.Printf("⚠️  Local embedding model failed health check: %v\n", healthErr)
+					log.Printf("⚠️  Local embedding model failed health check: %v", healthErr)
 				} else {
-					fmt.Printf("⚠️  Embeddings endpoint unavailable (%s): %v\n", config.EmbeddingAPIURL, healthErr)
+					log.Printf("⚠️  Embeddings endpoint unavailable (%s): %v", config.EmbeddingAPIURL, healthErr)
 				}
-				fmt.Println("   → Falling back to full-text search only")
+				log.Println("   → Falling back to full-text search only")
 			} else {
 				if config.EmbeddingProvider == "local" {
-					fmt.Printf("✓ Embeddings enabled: local GGUF (%s, %d dims)\n",
+					log.Printf("✓ Embeddings enabled: local GGUF (%s, %d dims)",
 						config.EmbeddingModel, config.EmbeddingDimensions)
 				} else {
-					fmt.Printf("✓ Embeddings enabled: %s (%s, %d dims)\n",
+					log.Printf("✓ Embeddings enabled: %s (%s, %d dims)",
 						config.EmbeddingAPIURL, config.EmbeddingModel, config.EmbeddingDimensions)
 				}
 				mcpServer.SetEmbedder(embedder)
@@ -604,10 +605,10 @@ func (s *Server) buildRouter() http.Handler {
 	// ==========================================================================
 	uiHandler, uiErr := newUIHandler()
 	if uiErr != nil {
-		fmt.Printf("⚠️  UI initialization failed: %v\n", uiErr)
+		log.Printf("⚠️  UI initialization failed: %v", uiErr)
 	}
 	if uiHandler != nil {
-		fmt.Println("📱 UI Browser enabled at /")
+		log.Println("📱 UI Browser enabled at /")
 		// Serve UI assets
 		mux.Handle("/assets/", uiHandler)
 		mux.HandleFunc("/nornicdb.svg", func(w http.ResponseWriter, r *http.Request) {

@@ -84,7 +84,10 @@ func NewLocalGGUF(config *Config) (*LocalGGUFEmbedder, error) {
 
 	// Check if file exists
 	if _, err := os.Stat(modelPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("model not found: %s (expected at %s)", config.Model, modelPath)
+		return nil, fmt.Errorf("model not found: %s (expected at %s)\n"+
+			"  → Download a GGUF model (e.g., bge-m3) and place it in the models directory\n"+
+			"  → Or set NORNICDB_MODELS_DIR to point to your models directory",
+			config.Model, modelPath)
 	}
 
 	opts := localllm.DefaultOptions(modelPath)

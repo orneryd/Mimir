@@ -97,14 +97,14 @@ if [[ "$OS" == "darwin" ]]; then
     libtool -static -o "$OUTDIR/$LIB_NAME" $LIBS
 else
     # On Linux, use ar to combine
-    mkdir -p /tmp/ar_combine_$$
-    cd /tmp/ar_combine_$$
+    AR_TMPDIR=$(mktemp -d)
+    cd "$AR_TMPDIR"
     for lib in $LIBS; do
         ar x "$lib"
     done
     ar rcs "$OUTDIR/$LIB_NAME" *.o
     cd - > /dev/null
-    rm -rf /tmp/ar_combine_$$
+    rm -rf "$AR_TMPDIR"
 fi
 
 # Copy all required headers

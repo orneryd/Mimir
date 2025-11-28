@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -1699,13 +1700,13 @@ func (b *BadgerEngine) ClearAllEmbeddings() (int, error) {
 		}
 		node.Embedding = nil
 		if err := b.UpdateNode(node); err != nil {
-			fmt.Printf("Warning: failed to clear embedding for node %s: %v\n", id, err)
+			log.Printf("Warning: failed to clear embedding for node %s: %v", id, err)
 			continue
 		}
 		cleared++
 	}
 
-	fmt.Printf("✓ Cleared embeddings from %d nodes\n", cleared)
+	log.Printf("✓ Cleared embeddings from %d nodes", cleared)
 	return cleared, nil
 }
 

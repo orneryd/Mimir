@@ -71,10 +71,10 @@ int get_n_layers(struct llama_model* model) {
 struct llama_model* load_model(const char* path, int n_gpu_layers) {
     init_backend();
     struct llama_model_params params = llama_model_default_params();
-    
+
     // Memory mapping for low memory usage
     params.use_mmap = 1;
-    
+
     // GPU layer offloading
     // -1 means offload all layers (determined after loading)
     // For now, use a high number that will be clamped by llama.cpp
@@ -83,38 +83,38 @@ struct llama_model* load_model(const char* path, int n_gpu_layers) {
     } else {
         params.n_gpu_layers = n_gpu_layers;
     }
-    
+
     return llama_model_load_from_file(path, params);
 }
 
 // Create embedding context with Metal/GPU optimizations
 struct llama_context* create_context(struct llama_model* model, int n_ctx, int n_batch, int n_threads) {
     struct llama_context_params params = llama_context_default_params();
-    
+
     // Context size for tokenization
     params.n_ctx = n_ctx;
-    
+
     // Batch sizes for processing
     params.n_batch = n_batch;      // Logical batch size
     params.n_ubatch = n_batch;     // Physical batch size (same for embeddings)
-    
+
     // CPU threading (used for CPU-only layers or fallback)
     params.n_threads = n_threads;
     params.n_threads_batch = n_threads;
-    
+
     // Enable embeddings mode
     params.embeddings = 1;
     params.pooling_type = LLAMA_POOLING_TYPE_MEAN;
-    
+
     // Flash attention - major speedup on Metal and CUDA
     // Note: Some older llama.cpp versions may not have this
     #ifdef LLAMA_SUPPORTS_FLASH_ATTN
     params.flash_attn = 1;
     #endif
-    
+
     // Disable features not needed for embeddings
     params.logits_all = 0;  // We only need the pooled embedding
-    
+
     return llama_init_from_model(model, params);
 }
 
@@ -161,8 +161,8 @@ int embed(struct llama_context* ctx, int32_t* tokens, int n_tokens, float* out, 
 }
 
 // Get embedding dimensions
-int get_n_embd(struct llama_model* model) { 
-    return llama_model_n_embd(model); 
+int get_n_embd(struct llama_model* model) {
+    return llama_model_n_embd(model);
 }
 
 // Free resources
@@ -231,15 +231,15 @@ func DefaultOptions(modelPath string) Options {
 		threads = 4
 	}
 	if threads > 8 {
-		threads = 8  // Diminishing returns beyond 8 for embeddings
+		threads = 8 // Diminishing returns beyond 8 for embeddings
 	}
-	
+
 	return Options{
 		ModelPath:   modelPath,
-		ContextSize: 512,  // Enough for most embedding inputs
-		BatchSize:   512,  // Matches context for efficient processing
+		ContextSize: 512, // Enough for most embedding inputs
+		BatchSize:   512, // Matches context for efficient processing
 		Threads:     threads,
-		GPULayers:   -1,   // Auto: offload all layers to GPU
+		GPULayers:   -1, // Auto: offload all layers to GPU
 	}
 }
 
@@ -297,13 +297,23 @@ func LoadModel(opts Options) (*Model, error) {
 // The returned vector is L2-normalized (unit length), suitable for
 // cosine similarity calculations.
 //
+// Concurrency:
+//
+// Operations are serialized via mutex because llama.cpp contexts are NOT
+// thread-safe. The C.embed call holds the lock for the duration of GPU/CPU
+// inference (~5-50ms depending on text length and hardware).
+//
+// For higher throughput under concurrent load, create multiple Model instances
+// (each with its own GPU context). The GPU can process multiple contexts
+// efficiently via kernel scheduling.
+//
 // GPU Acceleration:
 //
 // On Apple Silicon with Metal, the embedding is computed on the GPU:
-//   1. Tokenization (CPU)
-//   2. Model inference (GPU - flash attention enabled)
-//   3. Pooling (GPU)
-//   4. Normalization (CPU)
+//  1. Tokenization (CPU)
+//  2. Model inference (GPU - flash attention enabled)
+//  3. Pooling (GPU)
+//  4. Normalization (CPU)
 //
 // Example:
 //
@@ -317,6 +327,8 @@ func (m *Model) Embed(ctx context.Context, text string) ([]float32, error) {
 		return nil, nil
 	}
 
+	// Lock required: llama.cpp contexts are not thread-safe.
+	// For higher concurrency, use multiple Model instances.
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -406,7 +418,7 @@ func (m *Model) ModelDescription() string { return m.modelDesc }
 func (m *Model) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	if m.ctx != nil {
 		C.free_ctx(m.ctx)
 		m.ctx = nil

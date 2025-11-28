@@ -129,6 +129,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"reflect"
 	"sort"
 	"strings"
@@ -794,7 +795,7 @@ func (db *DB) SetEmbedder(embedder embed.Embedder) {
 			_ = db.searchService.IndexNode(node)
 		}
 	})
-	fmt.Printf("🧠 Auto-embed queue started using %s (%d dims)\n",
+	log.Printf("🧠 Auto-embed queue started using %s (%d dims)",
 		embedder.Model(), embedder.Dimensions())
 }
 

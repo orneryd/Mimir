@@ -34,32 +34,58 @@ ARG LLAMA_VERSION=b4535
 WORKDIR /llama
 RUN git clone --depth 1 --branch ${LLAMA_VERSION} https://github.com/ggerganov/llama.cpp.git .
 
-# Build static library (CPU-only for maximum compatibility)
-# Use generic ARM64 target and disable OpenMP for simpler static linking
-RUN cmake -B build \
+# Build static library
+# Default: generic ARM64 for maximum compatibility, disable OpenMP for simpler static linking
+#
+# Build args for customization:
+#   LLAMA_CMAKE_C_FLAGS:   C compiler flags (default: -mcpu=generic)
+#   LLAMA_CMAKE_CXX_FLAGS: C++ compiler flags (default: -mcpu=generic)
+#   LLAMA_NATIVE:          Use native CPU optimizations (default: OFF for compatibility)
+#   LLAMA_EXTRA_CMAKE_ARGS: Additional cmake args (e.g., -DGGML_CUDA=ON)
+#
+# Example optimized build for ARM64 v8.2+:
+#   docker build --build-arg LLAMA_NATIVE=ON --build-arg LLAMA_CMAKE_C_FLAGS="-mcpu=native" ...
+#
+ARG LLAMA_CMAKE_C_FLAGS="-mcpu=generic"
+ARG LLAMA_CMAKE_CXX_FLAGS="-mcpu=generic"
+ARG LLAMA_NATIVE=OFF
+ARG LLAMA_EXTRA_CMAKE_ARGS=""
+
+RUN echo "Building llama.cpp with:" && \
+    echo "  LLAMA_CMAKE_C_FLAGS=${LLAMA_CMAKE_C_FLAGS}" && \
+    echo "  LLAMA_CMAKE_CXX_FLAGS=${LLAMA_CMAKE_CXX_FLAGS}" && \
+    echo "  LLAMA_NATIVE=${LLAMA_NATIVE}" && \
+    echo "  LLAMA_EXTRA_CMAKE_ARGS=${LLAMA_EXTRA_CMAKE_ARGS}" && \
+    cmake -B build \
     -DLLAMA_STATIC=ON \
     -DBUILD_SHARED_LIBS=OFF \
     -DLLAMA_BUILD_TESTS=OFF \
     -DLLAMA_BUILD_EXAMPLES=OFF \
     -DLLAMA_BUILD_SERVER=OFF \
-    -DGGML_NATIVE=OFF \
+    -DGGML_NATIVE=${LLAMA_NATIVE} \
     -DGGML_OPENMP=OFF \
-    -DCMAKE_C_FLAGS="-mcpu=generic" \
-    -DCMAKE_CXX_FLAGS="-mcpu=generic" \
+    -DCMAKE_C_FLAGS="${LLAMA_CMAKE_C_FLAGS}" \
+    -DCMAKE_CXX_FLAGS="${LLAMA_CMAKE_CXX_FLAGS}" \
+    ${LLAMA_EXTRA_CMAKE_ARGS} \
     && cmake --build build --config Release -j$(nproc)
 
 # Combine all static libraries into one
-RUN mkdir -p /llama/lib && \
+RUN set -e && \
+    mkdir -p /llama/lib && \
     find build -name "*.a" -exec cp {} /llama/lib/ \; && \
-    ar -M <<EOF
-CREATE /llama/lib/libllama_combined.a
-ADDLIB /llama/lib/libllama.a
-ADDLIB /llama/lib/libggml.a
-ADDLIB /llama/lib/libggml-base.a
-ADDLIB /llama/lib/libggml-cpu.a
-SAVE
-END
-EOF
+    echo "Found libraries:" && ls -la /llama/lib/*.a && \
+    # Verify critical libraries exist
+    test -f /llama/lib/libllama.a || (echo "ERROR: libllama.a not found" && exit 1) && \
+    # Build ar script dynamically based on what exists
+    echo "CREATE /llama/lib/libllama_combined.a" > /tmp/ar_script.mri && \
+    for lib in /llama/lib/lib*.a; do \
+        echo "ADDLIB $lib" >> /tmp/ar_script.mri; \
+    done && \
+    echo "SAVE" >> /tmp/ar_script.mri && \
+    echo "END" >> /tmp/ar_script.mri && \
+    echo "Combining libraries:" && cat /tmp/ar_script.mri && \
+    ar -M < /tmp/ar_script.mri && \
+    echo "Created combined library:" && ls -lh /llama/lib/libllama_combined.a
 
 # =============================================================================
 # Stage 3: Build NornicDB with CGO + localllm
