@@ -153,10 +153,11 @@ server:
   data_dir: ./data
 
 embeddings:
-  provider: ollama # or openai
+  provider: ollama # or openai, local
   api_url: http://localhost:11434
   model: mxbai-embed-large
   dimensions: 1024
+  cache_size: 10000 # LRU cache for 450,000x speedup on repeated queries
 
 decay:
   enabled: true

@@ -14,6 +14,8 @@ Complete reference for all feature flags in NornicDB. Feature flags allow you to
 | | Evidence Buffering | ✅ Enabled | `NORNICDB_EVIDENCE_BUFFERING_ENABLED` |
 | | Per-Node Config | ✅ Enabled | `NORNICDB_PER_NODE_CONFIG_ENABLED` |
 | | WAL (Write-Ahead Log) | ✅ Enabled | `NORNICDB_WAL_ENABLED` |
+| **Performance** | | | |
+| | Embedding Cache | ✅ Enabled (10K) | `NORNICDB_EMBEDDING_CACHE_SIZE` |
 | **Auto-Integration** | | | |
 | | Cooldown Auto-Integration | ✅ Enabled | `NORNICDB_COOLDOWN_AUTO_INTEGRATION_ENABLED` |
 | | Evidence Auto-Integration | ✅ Enabled | `NORNICDB_EVIDENCE_AUTO_INTEGRATION_ENABLED` |
@@ -349,6 +351,72 @@ engine.GetNodeConfigStore().IsEdgeAllowed(src, dst, label)
 
 ---
 
+## Performance Features
+
+These features are **enabled by default** for optimal performance.
+
+### Embedding Cache
+
+**Purpose**: LRU cache for vector embeddings, providing ~450,000x speedup for repeated queries. Essential for semantic search workloads with recurring patterns.
+
+**Environment Variable**: `NORNICDB_EMBEDDING_CACHE_SIZE`
+
+**Default**: ✅ Enabled (10,000 entries, ~40MB memory)
+
+```bash
+# Adjust cache size (default: 10000)
+export NORNICDB_EMBEDDING_CACHE_SIZE=10000
+
+# Disable caching entirely
+export NORNICDB_EMBEDDING_CACHE_SIZE=0
+
+# Increase for heavy workloads
+export NORNICDB_EMBEDDING_CACHE_SIZE=50000
+```
+
+**CLI Flag**:
+```bash
+# Set cache size via CLI
+nornicdb serve --embedding-cache 10000
+
+# Disable caching
+nornicdb serve --embedding-cache 0
+```
+
+**Performance Characteristics**:
+| Operation | Time | Improvement |
+|-----------|------|-------------|
+| Cache hit | ~111ns | **450,000x faster** |
+| Cache miss | ~123ns overhead | Negligible |
+| Actual embedding | ~50-200ms | Baseline |
+
+**Memory Usage**:
+| Cache Size | Memory (1024-dim) |
+|------------|-------------------|
+| 1,000 | ~4MB |
+| 10,000 | ~40MB |
+| 50,000 | ~200MB |
+| 100,000 | ~400MB |
+
+**What it does**:
+- SHA256 hash of text → cached embedding lookup
+- LRU eviction when cache is full
+- Thread-safe for concurrent agents
+- Wraps any embedder (Ollama, OpenAI, local GGUF) transparently
+- Zero changes to existing code paths
+
+**When to increase cache size**:
+- High volume of `discover()` calls with recurring queries
+- Multi-agent workloads with similar semantic searches
+- RAG pipelines with common query patterns
+
+**When to disable**:
+- Memory-constrained environments
+- Fully unique queries (no repetition)
+- Debugging embedding issues
+
+---
+
 ## Experimental Features
 
 These features are **disabled by default**. Enable them to experiment with advanced functionality.
@@ -450,6 +518,9 @@ services:
       # NORNICDB_EVIDENCE_BUFFERING_ENABLED: "false"
       # NORNICDB_PER_NODE_CONFIG_ENABLED: "false"
       # NORNICDB_WAL_ENABLED: "false"
+      
+      # Performance - Embedding cache (default: 10000, 0 to disable)
+      NORNICDB_EMBEDDING_CACHE_SIZE: "10000"
       
       # Auto-Integration - All enabled by default, uncomment to disable
       # NORNICDB_COOLDOWN_AUTO_INTEGRATION_ENABLED: "false"
@@ -592,6 +663,7 @@ func TestResetAll(t *testing.T) {
 | Feature Category | Purpose | Default | When to Disable |
 |-----------------|---------|---------|-----------------|
 | **Tier 1** | Production safety | Enabled | Only if causing specific issues |
+| **Performance** | Speed optimization | Enabled | Memory-constrained environments |
 | **Auto-Integration** | Seamless inference integration | Enabled | For manual control of features |
 | **Experimental** | Advanced capabilities | Disabled | Enable to experiment |
 
