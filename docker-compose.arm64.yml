@@ -1,50 +1,42 @@
 services:
-  # nornicdb:
-  #   build:
-  #     context: ./nornicdb
-  #     dockerfile: Dockerfile
-  #     tags:
-  #       - timothyswt/nornicdb-arm64-metal:latest
-  #   image: timothyswt/nornicdb-arm64-metal:latest
-  #   container_name: nornicdb
-  #   ports:
-  #     - "7474:7474" # HTTP API & Browser UI
-  #     - "7687:7687" # Bolt protocol (Neo4j compatible)
-  #   volumes:
-  #     - ./data/testing-nornic:/data
-  #     - ./data/testing-nornic/export:/data/export # For loading Mimir exports
-  #   environment:
-  #     - NORNICDB_DATA_DIR=/data
-  #     - NORNICDB_HTTP_PORT=7474
-  #     - NORNICDB_BOLT_PORT=7687
-  #     # - NORNICDB_EMBEDDING_URL=http://llama-server:8080
-  #     # - NORNICDB_EMBEDDING_MODEL=mxbai-embed-large
-  #     # - NORNICDB_EMBEDDING_DIM=1024
-  #     # # Authentication (disabled by default for dev)
-  #     - NORNICDB_NO_AUTH=${NORNICDB_NO_AUTH:-true}
-  #     - NORNICDB_ADMIN_PASSWORD=${NEO4J_PASSWORD:-password}
-  #     # Load export data on startup (disabled - starting fresh)
-  #     - NORNICDB_LOAD_EXPORT=
-  #     # Badger memory tuning (reduce memory footprint)
-  #     - GOGC=50
-  #   restart: unless-stopped
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "wget --spider -q http://localhost:7474/health || exit 1"]
-  #     interval: 30s
-  #     timeout: 10s
-  #     retries: 3
-  #     start_period: 10s
-  #   depends_on:
-  #     llama-server:
-  #       condition: service_healthy
-  #   networks:
-  #     - mcp_network
-  #   deploy:
-  #     resources:
-  #       limits:
-  #         memory: 2G
-  #       reservations:
-  #         memory: 512M
+  nornicdb:
+    image: timothyswt/nornicdb-arm64-metal:latest
+    container_name: nornicdb
+    ports:
+      - "7474:7474" # HTTP API & Browser UI
+      - "7687:7687" # Bolt protocol (Neo4j compatible)
+    volumes:
+      - ./data/nornicdb:/data
+    environment:
+      - NORNICDB_DATA_DIR=/data
+      - NORNICDB_HTTP_PORT=7474
+      - NORNICDB_BOLT_PORT=7687
+      # Embedding configuration - llama.cpp OpenAI-compatible API
+      - NORNICDB_EMBEDDING_API_URL=http://llama-server:8080
+      - NORNICDB_EMBEDDING_API_KEY=not-needed
+      - NORNICDB_EMBEDDING_MODEL=mxbai-embed-large
+      - NORNICDB_EMBEDDING_DIMENSIONS=1024
+      - NORNICDB_NO_AUTH=${NORNICDB_NO_AUTH:-true}
+      - NORNICDB_ADMIN_PASSWORD=${NEO4J_PASSWORD:-password}
+      - GOGC=50
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:7474/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      llama-server:
+        condition: service_healthy
+    networks:
+      - mcp_network
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
 
   neo4j:
     image: neo4j:5.15-community
