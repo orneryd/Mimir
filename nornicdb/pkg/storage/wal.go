@@ -481,6 +481,8 @@ func LoadSnapshot(path string) (*Snapshot, error) {
 }
 
 // ReadWALEntries reads all entries from a WAL file.
+// Returns error on corruption of critical entries (nodes, edges).
+// Embedding updates are safe to skip as they can be regenerated.
 func ReadWALEntries(walPath string) ([]WALEntry, error) {
 	file, err := os.Open(walPath)
 	if err != nil {
@@ -489,28 +491,51 @@ func ReadWALEntries(walPath string) ([]WALEntry, error) {
 	defer file.Close()
 
 	var entries []WALEntry
+	var skippedEmbeddings int
 	decoder := json.NewDecoder(file)
+
 	for {
 		var entry WALEntry
 		if err := decoder.Decode(&entry); err != nil {
 			if err == io.EOF {
 				break
 			}
-			// Try to continue past corrupted entries
-			continue
+			// JSON decode failed - entry is malformed
+			// This is a critical error for data integrity
+			return nil, fmt.Errorf("%w: JSON decode failed at entry after seq %d: %v",
+				ErrWALCorrupted, getLastSeq(entries), err)
 		}
 
 		// Verify checksum
 		expected := crc32Checksum(entry.Data)
 		if entry.Checksum != expected {
-			// Corrupted entry, skip
-			continue
+			// Checksum mismatch - data corrupted
+			if entry.Operation == OpUpdateEmbedding {
+				// Embedding updates are safe to skip - will be regenerated
+				skippedEmbeddings++
+				continue
+			}
+			// Critical operation corrupted - fail recovery
+			return nil, fmt.Errorf("%w: checksum mismatch at seq %d, op %s (expected %d, got %d)",
+				ErrWALCorrupted, entry.Sequence, entry.Operation, expected, entry.Checksum)
 		}
 
 		entries = append(entries, entry)
 	}
 
+	if skippedEmbeddings > 0 {
+		fmt.Printf("⚠️  WAL recovery: skipped %d corrupted embedding entries (will regenerate)\n", skippedEmbeddings)
+	}
+
 	return entries, nil
+}
+
+// getLastSeq returns the sequence number of the last entry, or 0 if empty.
+func getLastSeq(entries []WALEntry) uint64 {
+	if len(entries) == 0 {
+		return 0
+	}
+	return entries[len(entries)-1].Sequence
 }
 
 // ReadWALEntriesAfter reads entries after a given sequence number.
@@ -678,6 +703,18 @@ func (w *WALEngine) UpdateNode(node *Node) error {
 	if config.IsWALEnabled() {
 		if err := w.wal.Append(OpUpdateNode, WALNodeData{Node: node}); err != nil {
 			return fmt.Errorf("wal: failed to log update_node: %w", err)
+		}
+	}
+	return w.engine.UpdateNode(node)
+}
+
+// UpdateNodeEmbedding logs then executes embedding-only node update.
+// Uses OpUpdateEmbedding which is safe to skip during WAL recovery
+// since embeddings can be regenerated automatically.
+func (w *WALEngine) UpdateNodeEmbedding(node *Node) error {
+	if config.IsWALEnabled() {
+		if err := w.wal.Append(OpUpdateEmbedding, WALNodeData{Node: node}); err != nil {
+			return fmt.Errorf("wal: failed to log update_embedding: %w", err)
 		}
 	}
 	return w.engine.UpdateNode(node)

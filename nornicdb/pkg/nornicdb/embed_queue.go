@@ -52,8 +52,8 @@ type EmbedWorkerConfig struct {
 // DefaultEmbedWorkerConfig returns sensible defaults.
 func DefaultEmbedWorkerConfig() *EmbedWorkerConfig {
 	return &EmbedWorkerConfig{
-		ScanInterval: 5 * time.Second,
-		BatchDelay:   500 * time.Millisecond,
+		ScanInterval: 1 * time.Hour,          // Hourly scan for missed nodes
+		BatchDelay:   500 * time.Millisecond, // Delay between processing nodes
 		MaxRetries:   3,
 		ChunkSize:    512,
 		ChunkOverlap: 50,
@@ -207,8 +207,16 @@ func (ew *EmbedWorker) processNextBatch() {
 		node.Properties["embedding_chunks"] = len(chunks)
 	}
 
-	if err := ew.storage.UpdateNode(node); err != nil {
-		fmt.Printf("⚠️  Failed to update node %s: %v\n", node.ID, err)
+	// Use embedding-specific update if available (uses OpUpdateEmbedding in WAL)
+	// This is safe to skip during recovery since embeddings can be regenerated
+	var updateErr error
+	if embedUpdater, ok := ew.storage.(interface{ UpdateNodeEmbedding(*storage.Node) error }); ok {
+		updateErr = embedUpdater.UpdateNodeEmbedding(node)
+	} else {
+		updateErr = ew.storage.UpdateNode(node)
+	}
+	if updateErr != nil {
+		fmt.Printf("⚠️  Failed to update node %s: %v\n", node.ID, updateErr)
 		ew.mu.Lock()
 		ew.failed++
 		ew.mu.Unlock()

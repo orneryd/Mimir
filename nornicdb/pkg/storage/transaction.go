@@ -60,12 +60,13 @@ const (
 type OperationType string
 
 const (
-	OpCreateNode OperationType = "create_node"
-	OpUpdateNode OperationType = "update_node"
-	OpDeleteNode OperationType = "delete_node"
-	OpCreateEdge OperationType = "create_edge"
-	OpUpdateEdge OperationType = "update_edge"
-	OpDeleteEdge OperationType = "delete_edge"
+	OpCreateNode      OperationType = "create_node"
+	OpUpdateNode      OperationType = "update_node"
+	OpDeleteNode      OperationType = "delete_node"
+	OpCreateEdge      OperationType = "create_edge"
+	OpUpdateEdge      OperationType = "update_edge"
+	OpDeleteEdge      OperationType = "delete_edge"
+	OpUpdateEmbedding OperationType = "update_embedding" // Safe to skip on corruption - regenerable
 )
 
 // Operation represents a single operation within a transaction.
