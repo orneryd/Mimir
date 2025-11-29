@@ -384,6 +384,10 @@ type Engine interface {
 	BulkCreateNodes(nodes []*Node) error
 	BulkCreateEdges(edges []*Edge) error
 
+	// Bulk delete operations (for async flush performance)
+	BulkDeleteNodes(ids []NodeID) error
+	BulkDeleteEdges(ids []EdgeID) error
+
 	// Lifecycle
 	Close() error
 

@@ -44,9 +44,11 @@ import (
 
 // Additional WAL operation types (extends OperationType from transaction.go)
 const (
-	OpBulkNodes  OperationType = "bulk_create_nodes"
-	OpBulkEdges  OperationType = "bulk_create_edges"
-	OpCheckpoint OperationType = "checkpoint" // Marks snapshot boundaries
+	OpBulkNodes       OperationType = "bulk_create_nodes"
+	OpBulkEdges       OperationType = "bulk_create_edges"
+	OpBulkDeleteNodes OperationType = "bulk_delete_nodes"
+	OpBulkDeleteEdges OperationType = "bulk_delete_edges"
+	OpCheckpoint      OperationType = "checkpoint" // Marks snapshot boundaries
 )
 
 // Common WAL errors
@@ -90,6 +92,16 @@ type WALBulkNodesData struct {
 // WALBulkEdgesData holds bulk edge creation data.
 type WALBulkEdgesData struct {
 	Edges []*Edge `json:"edges"`
+}
+
+// WALBulkDeleteNodesData holds bulk node deletion data.
+type WALBulkDeleteNodesData struct {
+	IDs []string `json:"ids"`
+}
+
+// WALBulkDeleteEdgesData holds bulk edge deletion data.
+type WALBulkDeleteEdgesData struct {
+	IDs []string `json:"ids"`
 }
 
 // WALConfig configures WAL behavior.
@@ -745,6 +757,28 @@ func ReplayWALEntry(engine Engine, entry WALEntry) error {
 		}
 		return engine.BulkCreateEdges(data.Edges)
 
+	case OpBulkDeleteNodes:
+		var data WALBulkDeleteNodesData
+		if err := json.Unmarshal(entry.Data, &data); err != nil {
+			return fmt.Errorf("wal: failed to unmarshal bulk delete nodes: %w", err)
+		}
+		ids := make([]NodeID, len(data.IDs))
+		for i, id := range data.IDs {
+			ids[i] = NodeID(id)
+		}
+		return engine.BulkDeleteNodes(ids)
+
+	case OpBulkDeleteEdges:
+		var data WALBulkDeleteEdgesData
+		if err := json.Unmarshal(entry.Data, &data); err != nil {
+			return fmt.Errorf("wal: failed to unmarshal bulk delete edges: %w", err)
+		}
+		ids := make([]EdgeID, len(data.IDs))
+		for i, id := range data.IDs {
+			ids[i] = EdgeID(id)
+		}
+		return engine.BulkDeleteEdges(ids)
+
 	case OpCheckpoint:
 		// Checkpoints are markers, no action needed
 		return nil
@@ -910,6 +944,36 @@ func (w *WALEngine) BulkCreateEdges(edges []*Edge) error {
 		}
 	}
 	return w.engine.BulkCreateEdges(edges)
+}
+
+// BulkDeleteNodes logs then executes bulk node deletion.
+func (w *WALEngine) BulkDeleteNodes(ids []NodeID) error {
+	if config.IsWALEnabled() {
+		// Convert to strings for serialization
+		strIDs := make([]string, len(ids))
+		for i, id := range ids {
+			strIDs[i] = string(id)
+		}
+		if err := w.wal.Append(OpBulkDeleteNodes, WALBulkDeleteNodesData{IDs: strIDs}); err != nil {
+			return fmt.Errorf("wal: failed to log bulk_delete_nodes: %w", err)
+		}
+	}
+	return w.engine.BulkDeleteNodes(ids)
+}
+
+// BulkDeleteEdges logs then executes bulk edge deletion.
+func (w *WALEngine) BulkDeleteEdges(ids []EdgeID) error {
+	if config.IsWALEnabled() {
+		// Convert to strings for serialization
+		strIDs := make([]string, len(ids))
+		for i, id := range ids {
+			strIDs[i] = string(id)
+		}
+		if err := w.wal.Append(OpBulkDeleteEdges, WALBulkDeleteEdgesData{IDs: strIDs}); err != nil {
+			return fmt.Errorf("wal: failed to log bulk_delete_edges: %w", err)
+		}
+	}
+	return w.engine.BulkDeleteEdges(ids)
 }
 
 // Delegate read operations directly to underlying engine

@@ -961,6 +961,107 @@ func (b *BadgerEngine) deleteEdgeInTxn(txn *badger.Txn, id EdgeID) error {
 	return txn.Delete(key)
 }
 
+// deleteNodeInTxn is the internal helper for deleting a node within a transaction.
+func (b *BadgerEngine) deleteNodeInTxn(txn *badger.Txn, id NodeID) error {
+	key := nodeKey(id)
+
+	// Get node for label cleanup
+	item, err := txn.Get(key)
+	if err == badger.ErrKeyNotFound {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+
+	var node *Node
+	if err := item.Value(func(val []byte) error {
+		var decodeErr error
+		node, decodeErr = decodeNode(val)
+		return decodeErr
+	}); err != nil {
+		return err
+	}
+
+	// Delete label indexes
+	for _, label := range node.Labels {
+		if err := txn.Delete(labelIndexKey(label, id)); err != nil {
+			return err
+		}
+	}
+
+	// Delete outgoing edges
+	outPrefix := outgoingIndexPrefix(id)
+	if err := b.deleteEdgesWithPrefix(txn, outPrefix); err != nil {
+		return err
+	}
+
+	// Delete incoming edges
+	inPrefix := incomingIndexPrefix(id)
+	if err := b.deleteEdgesWithPrefix(txn, inPrefix); err != nil {
+		return err
+	}
+
+	// Delete the node
+	return txn.Delete(key)
+}
+
+// BulkDeleteNodes removes multiple nodes in a single transaction.
+// This is much faster than calling DeleteNode repeatedly.
+func (b *BadgerEngine) BulkDeleteNodes(ids []NodeID) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	b.mu.RLock()
+	if b.closed {
+		b.mu.RUnlock()
+		return ErrStorageClosed
+	}
+	b.mu.RUnlock()
+
+	return b.db.Update(func(txn *badger.Txn) error {
+		for _, id := range ids {
+			if id == "" {
+				continue // Skip invalid IDs
+			}
+			// Best effort - continue on ErrNotFound
+			if err := b.deleteNodeInTxn(txn, id); err != nil && err != ErrNotFound {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// BulkDeleteEdges removes multiple edges in a single transaction.
+// This is much faster than calling DeleteEdge repeatedly.
+func (b *BadgerEngine) BulkDeleteEdges(ids []EdgeID) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	b.mu.RLock()
+	if b.closed {
+		b.mu.RUnlock()
+		return ErrStorageClosed
+	}
+	b.mu.RUnlock()
+
+	return b.db.Update(func(txn *badger.Txn) error {
+		for _, id := range ids {
+			if id == "" {
+				continue // Skip invalid IDs
+			}
+			// Best effort - continue on ErrNotFound
+			if err := b.deleteEdgeInTxn(txn, id); err != nil && err != ErrNotFound {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 // ============================================================================
 // Query Operations
 // ============================================================================

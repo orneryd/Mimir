@@ -96,6 +96,7 @@ func (ae *AsyncEngine) flushLoop() {
 }
 
 // Flush writes all pending changes to the underlying engine.
+// Uses batched operations for better performance - all deletes in one transaction.
 func (ae *AsyncEngine) Flush() error {
 	ae.mu.Lock()
 
@@ -120,16 +121,20 @@ func (ae *AsyncEngine) Flush() error {
 
 	ae.totalFlushes++
 
-	// Apply deletes first
-	for id := range delNodes {
-		if err := ae.engine.DeleteNode(id); err != nil {
-			// Log but continue - best effort
+	// Apply bulk deletes first (SINGLE transaction instead of N transactions!)
+	if len(delNodes) > 0 {
+		nodeIDs := make([]NodeID, 0, len(delNodes))
+		for id := range delNodes {
+			nodeIDs = append(nodeIDs, id)
 		}
+		ae.engine.BulkDeleteNodes(nodeIDs) // Best effort - ignore errors
 	}
-	for id := range delEdges {
-		if err := ae.engine.DeleteEdge(id); err != nil {
-			// Log but continue
+	if len(delEdges) > 0 {
+		edgeIDs := make([]EdgeID, 0, len(delEdges))
+		for id := range delEdges {
+			edgeIDs = append(edgeIDs, id)
 		}
+		ae.engine.BulkDeleteEdges(edgeIDs) // Best effort - ignore errors
 	}
 
 	// Apply creates/updates
@@ -532,6 +537,32 @@ func (ae *AsyncEngine) BulkCreateEdges(edges []*Edge) error {
 		ae.edgeCache[edge.ID] = edge
 	}
 	ae.pendingWrites += int64(len(edges))
+	return nil
+}
+
+// BulkDeleteNodes marks multiple nodes for deletion (async).
+func (ae *AsyncEngine) BulkDeleteNodes(ids []NodeID) error {
+	ae.mu.Lock()
+	defer ae.mu.Unlock()
+
+	for _, id := range ids {
+		delete(ae.nodeCache, id)
+		ae.deleteNodes[id] = true
+	}
+	ae.pendingWrites += int64(len(ids))
+	return nil
+}
+
+// BulkDeleteEdges marks multiple edges for deletion (async).
+func (ae *AsyncEngine) BulkDeleteEdges(ids []EdgeID) error {
+	ae.mu.Lock()
+	defer ae.mu.Unlock()
+
+	for _, id := range ids {
+		delete(ae.edgeCache, id)
+		ae.deleteEdges[id] = true
+	}
+	ae.pendingWrites += int64(len(ids))
 	return nil
 }
 
