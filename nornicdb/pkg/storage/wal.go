@@ -44,9 +44,11 @@ import (
 
 // Additional WAL operation types (extends OperationType from transaction.go)
 const (
-	OpBulkNodes  OperationType = "bulk_create_nodes"
-	OpBulkEdges  OperationType = "bulk_create_edges"
-	OpCheckpoint OperationType = "checkpoint" // Marks snapshot boundaries
+	OpBulkNodes       OperationType = "bulk_create_nodes"
+	OpBulkEdges       OperationType = "bulk_create_edges"
+	OpBulkDeleteNodes OperationType = "bulk_delete_nodes"
+	OpBulkDeleteEdges OperationType = "bulk_delete_edges"
+	OpCheckpoint      OperationType = "checkpoint" // Marks snapshot boundaries
 )
 
 // Common WAL errors
@@ -90,6 +92,16 @@ type WALBulkNodesData struct {
 // WALBulkEdgesData holds bulk edge creation data.
 type WALBulkEdgesData struct {
 	Edges []*Edge `json:"edges"`
+}
+
+// WALBulkDeleteNodesData holds bulk node deletion data.
+type WALBulkDeleteNodesData struct {
+	IDs []string `json:"ids"`
+}
+
+// WALBulkDeleteEdgesData holds bulk edge deletion data.
+type WALBulkDeleteEdgesData struct {
+	IDs []string `json:"ids"`
 }
 
 // WALConfig configures WAL behavior.
@@ -371,6 +383,138 @@ func (w *WAL) Sequence() uint64 {
 	return w.sequence.Load()
 }
 
+// =============================================================================
+// BATCH COMMIT MODE
+// =============================================================================
+
+// BatchWriter provides explicit batch commit control for bulk operations.
+// Instead of syncing after each write (even in batch mode), BatchWriter
+// buffers all writes and only syncs when Commit() is called.
+//
+// This dramatically improves bulk write throughput by reducing fsync calls.
+// Use for imports, migrations, or any operation writing many records.
+//
+// Example:
+//
+//	batch := wal.NewBatch()
+//	for _, node := range nodes {
+//	    batch.AppendNode(OpCreateNode, node)
+//	}
+//	if err := batch.Commit(); err != nil {
+//	    batch.Rollback() // Discard uncommitted entries
+//	}
+//
+// Performance:
+//   - Single fsync at end instead of per-write
+//   - 10-100x faster for bulk operations
+//   - Memory usage proportional to batch size
+type BatchWriter struct {
+	wal     *WAL
+	entries []WALEntry
+	mu      sync.Mutex
+}
+
+// NewBatch creates a new batch writer.
+func (w *WAL) NewBatch() *BatchWriter {
+	return &BatchWriter{
+		wal:     w,
+		entries: make([]WALEntry, 0, 100),
+	}
+}
+
+// AppendNode adds a node operation to the batch.
+func (b *BatchWriter) AppendNode(op OperationType, node *Node) error {
+	return b.append(op, &WALNodeData{Node: node})
+}
+
+// AppendEdge adds an edge operation to the batch.
+func (b *BatchWriter) AppendEdge(op OperationType, edge *Edge) error {
+	return b.append(op, &WALEdgeData{Edge: edge})
+}
+
+// AppendDelete adds a delete operation to the batch.
+func (b *BatchWriter) AppendDelete(op OperationType, id string) error {
+	return b.append(op, &WALDeleteData{ID: id})
+}
+
+// append adds a generic operation to the batch.
+func (b *BatchWriter) append(op OperationType, data interface{}) error {
+	if !config.IsWALEnabled() {
+		return nil
+	}
+
+	dataBytes, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("wal batch: failed to marshal data: %w", err)
+	}
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	seq := b.wal.sequence.Add(1)
+	entry := WALEntry{
+		Sequence:  seq,
+		Timestamp: time.Now(),
+		Operation: op,
+		Data:      dataBytes,
+		Checksum:  crc32Checksum(dataBytes),
+	}
+	b.entries = append(b.entries, entry)
+	return nil
+}
+
+// Commit writes all batched entries and syncs to disk.
+// This is the only fsync in the batch - much faster than per-write sync.
+func (b *BatchWriter) Commit() error {
+	if !config.IsWALEnabled() {
+		return nil
+	}
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if len(b.entries) == 0 {
+		return nil
+	}
+
+	b.wal.mu.Lock()
+	defer b.wal.mu.Unlock()
+
+	// Write all entries
+	for _, entry := range b.entries {
+		if err := b.wal.encoder.Encode(&entry); err != nil {
+			return fmt.Errorf("wal batch: failed to write entry: %w", err)
+		}
+		b.wal.entries.Add(1)
+		b.wal.totalWrites.Add(1)
+	}
+
+	// Single sync at the end
+	if err := b.wal.syncLocked(); err != nil {
+		return fmt.Errorf("wal batch: sync failed: %w", err)
+	}
+
+	b.wal.lastEntryTime.Store(time.Now().UnixNano())
+
+	// Clear batch
+	b.entries = b.entries[:0]
+	return nil
+}
+
+// Rollback discards all uncommitted entries.
+func (b *BatchWriter) Rollback() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.entries = b.entries[:0]
+}
+
+// Len returns the number of pending entries.
+func (b *BatchWriter) Len() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return len(b.entries)
+}
+
 // crc32Checksum computes a simple checksum.
 func crc32Checksum(data []byte) uint32 {
 	var sum uint32
@@ -613,6 +757,28 @@ func ReplayWALEntry(engine Engine, entry WALEntry) error {
 		}
 		return engine.BulkCreateEdges(data.Edges)
 
+	case OpBulkDeleteNodes:
+		var data WALBulkDeleteNodesData
+		if err := json.Unmarshal(entry.Data, &data); err != nil {
+			return fmt.Errorf("wal: failed to unmarshal bulk delete nodes: %w", err)
+		}
+		ids := make([]NodeID, len(data.IDs))
+		for i, id := range data.IDs {
+			ids[i] = NodeID(id)
+		}
+		return engine.BulkDeleteNodes(ids)
+
+	case OpBulkDeleteEdges:
+		var data WALBulkDeleteEdgesData
+		if err := json.Unmarshal(entry.Data, &data); err != nil {
+			return fmt.Errorf("wal: failed to unmarshal bulk delete edges: %w", err)
+		}
+		ids := make([]EdgeID, len(data.IDs))
+		for i, id := range data.IDs {
+			ids[i] = EdgeID(id)
+		}
+		return engine.BulkDeleteEdges(ids)
+
 	case OpCheckpoint:
 		// Checkpoints are markers, no action needed
 		return nil
@@ -778,6 +944,36 @@ func (w *WALEngine) BulkCreateEdges(edges []*Edge) error {
 		}
 	}
 	return w.engine.BulkCreateEdges(edges)
+}
+
+// BulkDeleteNodes logs then executes bulk node deletion.
+func (w *WALEngine) BulkDeleteNodes(ids []NodeID) error {
+	if config.IsWALEnabled() {
+		// Convert to strings for serialization
+		strIDs := make([]string, len(ids))
+		for i, id := range ids {
+			strIDs[i] = string(id)
+		}
+		if err := w.wal.Append(OpBulkDeleteNodes, WALBulkDeleteNodesData{IDs: strIDs}); err != nil {
+			return fmt.Errorf("wal: failed to log bulk_delete_nodes: %w", err)
+		}
+	}
+	return w.engine.BulkDeleteNodes(ids)
+}
+
+// BulkDeleteEdges logs then executes bulk edge deletion.
+func (w *WALEngine) BulkDeleteEdges(ids []EdgeID) error {
+	if config.IsWALEnabled() {
+		// Convert to strings for serialization
+		strIDs := make([]string, len(ids))
+		for i, id := range ids {
+			strIDs[i] = string(id)
+		}
+		if err := w.wal.Append(OpBulkDeleteEdges, WALBulkDeleteEdgesData{IDs: strIDs}); err != nil {
+			return fmt.Errorf("wal: failed to log bulk_delete_edges: %w", err)
+		}
+	}
+	return w.engine.BulkDeleteEdges(ids)
 }
 
 // Delegate read operations directly to underlying engine

@@ -129,18 +129,21 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"reflect"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	featureflags "github.com/orneryd/nornicdb/pkg/config"
 	"github.com/orneryd/nornicdb/pkg/cypher"
 	"github.com/orneryd/nornicdb/pkg/decay"
 	"github.com/orneryd/nornicdb/pkg/embed"
 	"github.com/orneryd/nornicdb/pkg/inference"
 	"github.com/orneryd/nornicdb/pkg/search"
 	"github.com/orneryd/nornicdb/pkg/storage"
+	"github.com/orneryd/nornicdb/pkg/temporal"
 )
 
 // Errors returned by DB operations.
@@ -317,6 +320,10 @@ type Config struct {
 	ParallelMaxWorkers   int  `yaml:"parallel_max_workers"`    // Max worker goroutines (0 = auto, uses runtime.NumCPU())
 	ParallelMinBatchSize int  `yaml:"parallel_min_batch_size"` // Min items before parallelizing (default: 1000)
 
+	// Async writes (eventual consistency)
+	AsyncWritesEnabled bool          `yaml:"async_writes_enabled"` // Enable async writes for faster performance
+	AsyncFlushInterval time.Duration `yaml:"async_flush_interval"` // How often to flush pending writes (default: 50ms)
+
 	// Server
 	BoltPort int `yaml:"bolt_port"`
 	HTTPPort int `yaml:"http_port"`
@@ -353,9 +360,11 @@ func DefaultConfig() *Config {
 		AutoLinksEnabled:             true,
 		AutoLinksSimilarityThreshold: 0.82,
 		AutoLinksCoAccessWindow:      30 * time.Second,
-		ParallelEnabled:              true, // Enable parallel query execution by default
-		ParallelMaxWorkers:           0,    // 0 = auto (runtime.NumCPU())
-		ParallelMinBatchSize:         1000, // Parallelize for 1000+ items
+		ParallelEnabled:              true,                  // Enable parallel query execution by default
+		ParallelMaxWorkers:           0,                     // 0 = auto (runtime.NumCPU())
+		ParallelMinBatchSize:         1000,                  // Parallelize for 1000+ items
+		AsyncWritesEnabled:           true,                  // Enable async writes for eventual consistency (faster writes)
+		AsyncFlushInterval:           50 * time.Millisecond, // Flush pending writes every 50ms
 		BoltPort:                     7687,
 		HTTPPort:                     7474,
 	}
@@ -399,6 +408,7 @@ type DB struct {
 
 	// Internal components
 	storage        storage.Engine
+	wal            *storage.WAL // Write-ahead log for durability
 	decay          *decay.Manager
 	inference      *inference.Engine
 	cypherExecutor *cypher.StorageExecutor
@@ -409,6 +419,9 @@ type DB struct {
 
 	// Async embedding queue for auto-generating embeddings
 	embedQueue *EmbedQueue
+
+	// Background goroutine tracking
+	bgWg sync.WaitGroup
 }
 
 // Open opens or creates a NornicDB database at the specified directory.
@@ -704,8 +717,31 @@ func Open(dataDir string, config *Config) (*DB, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to open persistent storage: %w", err)
 		}
-		db.storage = badgerEngine
-		fmt.Printf("📂 Using persistent storage at %s\n", dataDir)
+
+		// Initialize WAL for durability (uses batch sync mode by default for better performance)
+		walConfig := storage.DefaultWALConfig()
+		walConfig.Dir = dataDir + "/wal"
+		wal, err := storage.NewWAL(walConfig.Dir, walConfig)
+		if err != nil {
+			badgerEngine.Close()
+			return nil, fmt.Errorf("failed to initialize WAL: %w", err)
+		}
+		db.wal = wal
+
+		// Wrap storage with WAL for durability
+		walEngine := storage.NewWALEngine(badgerEngine, wal)
+
+		// Optionally wrap with AsyncEngine for faster writes (eventual consistency)
+		if config.AsyncWritesEnabled {
+			asyncConfig := &storage.AsyncEngineConfig{
+				FlushInterval: config.AsyncFlushInterval,
+			}
+			db.storage = storage.NewAsyncEngine(walEngine, asyncConfig)
+			fmt.Printf("📂 Using persistent storage at %s (WAL + async writes, flush: %v)\n", dataDir, config.AsyncFlushInterval)
+		} else {
+			db.storage = walEngine
+			fmt.Printf("📂 Using persistent storage at %s (WAL enabled, batch sync)\n", dataDir)
+		}
 	} else {
 		db.storage = storage.NewMemoryEngine()
 		fmt.Println("⚠️  Using in-memory storage (data will not persist)")
@@ -747,6 +783,38 @@ func Open(dataDir string, config *Config) (*DB, error) {
 			TransitiveMinConf:   0.5,
 		}
 		db.inference = inference.New(inferConfig)
+
+		// Wire up TopologyIntegration if feature flag is enabled
+		// This enables automatic topology-based relationship suggestions
+		// Note: Manual TLP via Cypher (CALL gds.linkPrediction.*) is always available
+		if featureflags.IsTopologyAutoIntegrationEnabled() {
+			topoConfig := inference.DefaultTopologyConfig()
+			topoConfig.Enabled = true
+			topoConfig.Algorithm = "adamic_adar" // Best for social/knowledge graphs
+			topoConfig.Weight = 0.4              // 40% topology, 60% semantic
+			topoConfig.MinScore = 0.3
+			topoConfig.GraphRefreshInterval = 100 // Rebuild every 100 predictions
+
+			topo := inference.NewTopologyIntegration(db.storage, topoConfig)
+			db.inference.SetTopologyIntegration(topo)
+			fmt.Println("✅ Topology auto-integration enabled (NORNICDB_TOPOLOGY_AUTO_INTEGRATION_ENABLED=true)")
+		}
+
+		// Wire up KalmanAdapter if feature flag is enabled
+		// This enables Kalman-smoothed confidence and temporal pattern tracking
+		// Note: Base inference works without this - it's an enhancement
+		if featureflags.IsKalmanEnabled() {
+			kalmanConfig := inference.DefaultKalmanAdapterConfig()
+			kalmanAdapter := inference.NewKalmanAdapter(db.inference, kalmanConfig)
+
+			// Create temporal tracker for access pattern analysis
+			trackerConfig := temporal.DefaultConfig()
+			tracker := temporal.NewTracker(trackerConfig)
+			kalmanAdapter.SetTracker(tracker)
+
+			db.inference.SetKalmanAdapter(kalmanAdapter)
+			fmt.Println("✅ Kalman filtering enabled (NORNICDB_KALMAN_ENABLED=true)")
+		}
 	}
 
 	// Initialize search service (uses pre-computed embeddings from Mimir)
@@ -754,7 +822,9 @@ func Open(dataDir string, config *Config) (*DB, error) {
 
 	// Build search indexes from existing data (including embeddings)
 	// This runs in background to not block startup
+	db.bgWg.Add(1)
 	go func() {
+		defer db.bgWg.Done()
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
 		if err := db.searchService.BuildIndexes(ctx); err != nil {
@@ -764,40 +834,38 @@ func Open(dataDir string, config *Config) (*DB, error) {
 		}
 	}()
 
-	// Initialize async embedding queue (if enabled and provider configured)
-	if config.AutoEmbedEnabled && config.EmbeddingProvider != "" {
-		// Set API path based on provider
-		apiPath := "/v1/embeddings" // OpenAI-compatible (llama.cpp, vLLM, etc.)
-		if config.EmbeddingProvider == "ollama" {
-			apiPath = "/api/embeddings"
-		}
-
-		embedConfig := &embed.Config{
-			Provider:   config.EmbeddingProvider,
-			APIURL:     config.EmbeddingAPIURL,
-			APIPath:    apiPath,
-			APIKey:     config.EmbeddingAPIKey,
-			Model:      config.EmbeddingModel,
-			Dimensions: config.EmbeddingDimensions,
-			Timeout:    30 * time.Second,
-		}
-		embedder, err := embed.NewEmbedder(embedConfig)
-		if err != nil {
-			fmt.Printf("⚠️  Auto-embed disabled: %v\n", err)
-		} else {
-			db.embedQueue = NewEmbedQueue(embedder, db.storage, nil)
-			// Set callback to update search index after embedding
-			db.embedQueue.SetOnEmbedded(func(node *storage.Node) {
-				if db.searchService != nil {
-					_ = db.searchService.IndexNode(node)
-				}
-			})
-			fmt.Printf("🧠 Auto-embed queue started using %s/%s (%d dims)\n",
-				config.EmbeddingProvider, config.EmbeddingModel, config.EmbeddingDimensions)
-		}
-	}
+	// Note: Auto-embed queue is initialized via SetEmbedder() after the server creates
+	// the embedder. This avoids duplicate embedder creation and ensures consistency
+	// between search embeddings and auto-embed.
 
 	return db, nil
+}
+
+// SetEmbedder configures the auto-embed queue with the given embedder.
+// This should be called by the server after creating a working embedder.
+// The embedder is shared with the MCP server for consistency.
+func (db *DB) SetEmbedder(embedder embed.Embedder) {
+	if embedder == nil {
+		return
+	}
+
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	if db.embedQueue != nil {
+		// Already set up
+		return
+	}
+
+	db.embedQueue = NewEmbedQueue(embedder, db.storage, nil)
+	// Set callback to update search index after embedding
+	db.embedQueue.SetOnEmbedded(func(node *storage.Node) {
+		if db.searchService != nil {
+			_ = db.searchService.IndexNode(node)
+		}
+	})
+	log.Printf("🧠 Auto-embed queue started using %s (%d dims)",
+		embedder.Model(), embedder.Dimensions())
 }
 
 // LoadFromExport loads data from a Mimir JSON export directory.
@@ -857,6 +925,9 @@ func (db *DB) Close() error {
 	}
 	db.closed = true
 
+	// Wait for background goroutines to complete
+	db.bgWg.Wait()
+
 	var errs []error
 
 	if db.decay != nil {
@@ -866,6 +937,13 @@ func (db *DB) Close() error {
 	// Close embed queue gracefully (processes remaining batch)
 	if db.embedQueue != nil {
 		db.embedQueue.Close()
+	}
+
+	// Close WAL first to ensure all writes are flushed
+	if db.wal != nil {
+		if err := db.wal.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("WAL close: %w", err))
+		}
 	}
 
 	if db.storage != nil {
@@ -898,6 +976,16 @@ func (db *DB) EmbedExisting(ctx context.Context) (int, error) {
 	}
 	db.embedQueue.Trigger()
 	return 0, nil // Worker will process in background
+}
+
+// ClearAllEmbeddings removes embeddings from all nodes, allowing them to be regenerated.
+// This is useful for re-embedding with a new model or fixing corrupted embeddings.
+func (db *DB) ClearAllEmbeddings() (int, error) {
+	// Check if storage supports ClearAllEmbeddings
+	if badgerStorage, ok := db.storage.(*storage.BadgerEngine); ok {
+		return badgerStorage.ClearAllEmbeddings()
+	}
+	return 0, fmt.Errorf("storage engine does not support ClearAllEmbeddings")
 }
 
 // EmbedQuery generates an embedding for a search query.
@@ -970,6 +1058,7 @@ func (db *DB) Store(ctx context.Context, mem *Memory) (*Memory, error) {
 }
 
 // Remember performs semantic search for memories using embedding.
+// Uses streaming iteration to avoid loading all nodes into memory.
 func (db *DB) Remember(ctx context.Context, embedding []float32, limit int) ([]*Memory, error) {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
@@ -986,39 +1075,53 @@ func (db *DB) Remember(ctx context.Context, embedding []float32, limit int) ([]*
 		limit = 10
 	}
 
-	// Get all nodes from storage (naive implementation for now)
-	// TODO: Replace with HNSW index for efficient ANN search
-	allNodes, err := db.storage.AllNodes()
-	if err != nil {
-		return nil, fmt.Errorf("getting nodes: %w", err)
-	}
-
 	type scored struct {
 		mem   *Memory
 		score float64
 	}
+
+	// Use streaming iteration to avoid loading all nodes at once
+	// We maintain a sorted slice of top-k results
 	var results []scored
 
-	for _, node := range allNodes {
-		mem := nodeToMemory(node)
-		if len(mem.Embedding) == 0 {
-			continue
+	err := storage.StreamNodesWithFallback(ctx, db.storage, 1000, func(node *storage.Node) error {
+		// Skip nodes without embeddings
+		if len(node.Embedding) == 0 {
+			return nil
 		}
 
-		// Calculate cosine similarity
+		mem := nodeToMemory(node)
 		sim := cosineSimilarity(embedding, mem.Embedding)
-		results = append(results, scored{mem: mem, score: sim})
+
+		// If we don't have enough results yet, just add
+		if len(results) < limit {
+			results = append(results, scored{mem: mem, score: sim})
+			// Sort when we reach limit
+			if len(results) == limit {
+				sort.Slice(results, func(i, j int) bool {
+					return results[i].score > results[j].score
+				})
+			}
+		} else if sim > results[limit-1].score {
+			// Only add if better than worst in results
+			results[limit-1] = scored{mem: mem, score: sim}
+			// Re-sort (could optimize with heap)
+			sort.Slice(results, func(i, j int) bool {
+				return results[i].score > results[j].score
+			})
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("streaming nodes: %w", err)
 	}
 
-	// Sort by similarity descending
+	// Final sort (in case we have fewer than limit results)
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].score > results[j].score
 	})
-
-	// Take top limit
-	if len(results) > limit {
-		results = results[:limit]
-	}
 
 	memories := make([]*Memory, len(results))
 	for i, r := range results {
@@ -1458,6 +1561,15 @@ func (db *DB) GetGPUManager() interface{} {
 	return db.gpuManager
 }
 
+// IsAsyncWritesEnabled returns true if async writes (eventual consistency) is enabled.
+// When enabled, write operations return immediately and are flushed in the background.
+// HTTP handlers should return 202 Accepted instead of 201 Created for writes.
+func (db *DB) IsAsyncWritesEnabled() bool {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	return db.config.AsyncWritesEnabled
+}
+
 // CypherResult holds results from a Cypher query.
 type CypherResult struct {
 	Columns []string        `json:"columns"`
@@ -1706,6 +1818,7 @@ type Node struct {
 }
 
 // ListNodes returns nodes with optional label filter.
+// Uses streaming iteration to avoid loading all nodes into memory.
 func (db *DB) ListNodes(ctx context.Context, label string, limit, offset int) ([]*Node, error) {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
@@ -1714,14 +1827,10 @@ func (db *DB) ListNodes(ctx context.Context, label string, limit, offset int) ([
 		return nil, ErrClosed
 	}
 
-	allNodes, err := db.storage.AllNodes()
-	if err != nil {
-		return nil, err
-	}
-
 	var nodes []*Node
 	count := 0
-	for _, n := range allNodes {
+
+	err := storage.StreamNodesWithFallback(ctx, db.storage, 1000, func(n *storage.Node) error {
 		// Filter by label if specified
 		if label != "" {
 			hasLabel := false
@@ -1732,19 +1841,19 @@ func (db *DB) ListNodes(ctx context.Context, label string, limit, offset int) ([
 				}
 			}
 			if !hasLabel {
-				continue
+				return nil // Skip, continue iteration
 			}
 		}
 
 		// Handle offset
 		if count < offset {
 			count++
-			continue
+			return nil
 		}
 
-		// Handle limit
+		// Handle limit - stop early when we have enough
 		if len(nodes) >= limit {
-			break
+			return storage.ErrIterationStopped
 		}
 
 		nodes = append(nodes, &Node{
@@ -1754,6 +1863,11 @@ func (db *DB) ListNodes(ctx context.Context, label string, limit, offset int) ([
 			CreatedAt:  n.CreatedAt,
 		})
 		count++
+		return nil
+	})
+
+	if err != nil && err != storage.ErrIterationStopped {
+		return nil, err
 	}
 
 	return nodes, nil
@@ -2136,35 +2250,46 @@ func (db *DB) FindSimilar(ctx context.Context, nodeID string, limit int) ([]*Sea
 		return nil, fmt.Errorf("node has no embedding")
 	}
 
-	// Find similar by embedding
-	allNodes, err := db.storage.AllNodes()
-	if err != nil {
-		return nil, err
-	}
-
+	// Find similar by embedding using streaming iteration
 	type scored struct {
 		node  *storage.Node
 		score float64
 	}
 	var results []scored
 
-	for _, n := range allNodes {
+	err = storage.StreamNodesWithFallback(ctx, db.storage, 1000, func(n *storage.Node) error {
+		// Skip self and nodes without embeddings
 		if string(n.ID) == nodeID || len(n.Embedding) == 0 {
-			continue
+			return nil
 		}
 
 		sim := cosineSimilarity(target.Embedding, n.Embedding)
-		results = append(results, scored{node: n, score: sim})
+
+		// Maintain top-k results
+		if len(results) < limit {
+			results = append(results, scored{node: n, score: sim})
+			if len(results) == limit {
+				sort.Slice(results, func(i, j int) bool {
+					return results[i].score > results[j].score
+				})
+			}
+		} else if sim > results[limit-1].score {
+			results[limit-1] = scored{node: n, score: sim}
+			sort.Slice(results, func(i, j int) bool {
+				return results[i].score > results[j].score
+			})
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
 	}
 
-	// Sort by similarity
+	// Final sort
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].score > results[j].score
 	})
-
-	if len(results) > limit {
-		results = results[:limit]
-	}
 
 	searchResults := make([]*SearchResult, len(results))
 	for i, r := range results {
@@ -2183,6 +2308,7 @@ func (db *DB) FindSimilar(ctx context.Context, nodeID string, limit int) ([]*Sea
 }
 
 // GetLabels returns all distinct node labels.
+// Uses streaming iteration to avoid loading all nodes into memory.
 func (db *DB) GetLabels(ctx context.Context) ([]string, error) {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
@@ -2191,28 +2317,18 @@ func (db *DB) GetLabels(ctx context.Context) ([]string, error) {
 		return nil, ErrClosed
 	}
 
-	allNodes, err := db.storage.AllNodes()
+	// Use streaming helper for memory efficiency
+	labels, err := storage.CollectLabels(ctx, db.storage)
 	if err != nil {
 		return nil, err
 	}
 
-	labelSet := make(map[string]bool)
-	for _, n := range allNodes {
-		for _, l := range n.Labels {
-			labelSet[l] = true
-		}
-	}
-
-	labels := make([]string, 0, len(labelSet))
-	for l := range labelSet {
-		labels = append(labels, l)
-	}
 	sort.Strings(labels)
-
 	return labels, nil
 }
 
 // GetRelationshipTypes returns all distinct edge types.
+// Uses streaming iteration to avoid loading all edges into memory.
 func (db *DB) GetRelationshipTypes(ctx context.Context) ([]string, error) {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
@@ -2221,20 +2337,12 @@ func (db *DB) GetRelationshipTypes(ctx context.Context) ([]string, error) {
 		return nil, ErrClosed
 	}
 
-	allEdges, err := db.storage.AllEdges()
+	// Use streaming helper for memory efficiency
+	types, err := storage.CollectEdgeTypes(ctx, db.storage)
 	if err != nil {
 		return nil, err
 	}
 
-	typeSet := make(map[string]bool)
-	for _, e := range allEdges {
-		typeSet[e.Type] = true
-	}
-
-	types := make([]string, 0, len(typeSet))
-	for t := range typeSet {
-		types = append(types, t)
-	}
 	sort.Strings(types)
 
 	return types, nil
@@ -2267,6 +2375,7 @@ func (db *DB) Backup(ctx context.Context, path string) error {
 }
 
 // ExportUserData exports all data for a user (GDPR compliance).
+// Uses streaming iteration to avoid loading all nodes into memory.
 func (db *DB) ExportUserData(ctx context.Context, userID, format string) ([]byte, error) {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
@@ -2275,15 +2384,9 @@ func (db *DB) ExportUserData(ctx context.Context, userID, format string) ([]byte
 		return nil, ErrClosed
 	}
 
-	// Find all nodes associated with user
-	allNodes, err := db.storage.AllNodes()
-	if err != nil {
-		return nil, err
-	}
-
+	// Collect user data using streaming
 	var userData []map[string]interface{}
-	for _, n := range allNodes {
-		// Check if node belongs to user (by owner_id property or similar)
+	err := storage.StreamNodesWithFallback(ctx, db.storage, 1000, func(n *storage.Node) error {
 		if owner, ok := n.Properties["owner_id"].(string); ok && owner == userID {
 			userData = append(userData, map[string]interface{}{
 				"id":         string(n.ID),
@@ -2292,6 +2395,10 @@ func (db *DB) ExportUserData(ctx context.Context, userID, format string) ([]byte
 				"created_at": n.CreatedAt,
 			})
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	// Format output
@@ -2309,6 +2416,7 @@ func (db *DB) ExportUserData(ctx context.Context, userID, format string) ([]byte
 }
 
 // DeleteUserData deletes all data for a user (GDPR compliance).
+// Uses streaming iteration to avoid loading all nodes into memory.
 func (db *DB) DeleteUserData(ctx context.Context, userID string) error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -2317,16 +2425,22 @@ func (db *DB) DeleteUserData(ctx context.Context, userID string) error {
 		return ErrClosed
 	}
 
-	allNodes, err := db.storage.AllNodes()
+	// Collect IDs to delete first (can't delete while iterating)
+	var toDelete []storage.NodeID
+	err := storage.StreamNodesWithFallback(ctx, db.storage, 1000, func(n *storage.Node) error {
+		if owner, ok := n.Properties["owner_id"].(string); ok && owner == userID {
+			toDelete = append(toDelete, n.ID)
+		}
+		return nil
+	})
 	if err != nil {
 		return err
 	}
 
-	for _, n := range allNodes {
-		if owner, ok := n.Properties["owner_id"].(string); ok && owner == userID {
-			if err := db.storage.DeleteNode(n.ID); err != nil {
-				return err
-			}
+	// Now delete the collected nodes
+	for _, id := range toDelete {
+		if err := db.storage.DeleteNode(id); err != nil {
+			return err
 		}
 	}
 
@@ -2334,6 +2448,7 @@ func (db *DB) DeleteUserData(ctx context.Context, userID string) error {
 }
 
 // AnonymizeUserData anonymizes all data for a user (GDPR compliance).
+// Uses streaming iteration to avoid loading all nodes into memory.
 func (db *DB) AnonymizeUserData(ctx context.Context, userID string) error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -2342,14 +2457,11 @@ func (db *DB) AnonymizeUserData(ctx context.Context, userID string) error {
 		return ErrClosed
 	}
 
-	allNodes, err := db.storage.AllNodes()
-	if err != nil {
-		return err
-	}
-
 	anonymousID := "anon-" + generateID("")
 
-	for _, n := range allNodes {
+	// Collect nodes to update (can't update while streaming in some engines)
+	var toUpdate []*storage.Node
+	err := storage.StreamNodesWithFallback(ctx, db.storage, 1000, func(n *storage.Node) error {
 		if owner, ok := n.Properties["owner_id"].(string); ok && owner == userID {
 			// Replace identifying info
 			n.Properties["owner_id"] = anonymousID
@@ -2357,10 +2469,18 @@ func (db *DB) AnonymizeUserData(ctx context.Context, userID string) error {
 			delete(n.Properties, "name")
 			delete(n.Properties, "username")
 			delete(n.Properties, "ip_address")
+			toUpdate = append(toUpdate, n)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
 
-			if err := db.storage.UpdateNode(n); err != nil {
-				return err
-			}
+	// Now update the collected nodes
+	for _, n := range toUpdate {
+		if err := db.storage.UpdateNode(n); err != nil {
+			return err
 		}
 	}
 

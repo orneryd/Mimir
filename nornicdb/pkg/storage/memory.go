@@ -616,6 +616,107 @@ func (m *MemoryEngine) DeleteEdge(id EdgeID) error {
 	return nil
 }
 
+// BulkDeleteNodes removes multiple nodes and their edges.
+// This is more efficient than calling DeleteNode repeatedly.
+func (m *MemoryEngine) BulkDeleteNodes(ids []NodeID) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.closed {
+		return ErrStorageClosed
+	}
+
+	for _, id := range ids {
+		if id == "" {
+			continue
+		}
+
+		node, exists := m.nodes[id]
+		if !exists {
+			continue // Best effort - skip not found
+		}
+
+		// Remove from label index
+		for _, label := range node.Labels {
+			normalLabel := normalizeLabel(label)
+			if m.nodesByLabel[normalLabel] != nil {
+				delete(m.nodesByLabel[normalLabel], id)
+			}
+		}
+
+		// Delete all edges involving this node
+		if m.outgoingEdges[id] != nil {
+			for edgeID := range m.outgoingEdges[id] {
+				if edge := m.edges[edgeID]; edge != nil {
+					if m.incomingEdges[edge.EndNode] != nil {
+						delete(m.incomingEdges[edge.EndNode], edgeID)
+					}
+				}
+				delete(m.edges, edgeID)
+			}
+			delete(m.outgoingEdges, id)
+		}
+
+		if m.incomingEdges[id] != nil {
+			for edgeID := range m.incomingEdges[id] {
+				if edge := m.edges[edgeID]; edge != nil {
+					if m.outgoingEdges[edge.StartNode] != nil {
+						delete(m.outgoingEdges[edge.StartNode], edgeID)
+					}
+				}
+				delete(m.edges, edgeID)
+			}
+			delete(m.incomingEdges, id)
+		}
+
+		delete(m.nodes, id)
+	}
+
+	return nil
+}
+
+// BulkDeleteEdges removes multiple edges.
+// This is more efficient than calling DeleteEdge repeatedly.
+func (m *MemoryEngine) BulkDeleteEdges(ids []EdgeID) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.closed {
+		return ErrStorageClosed
+	}
+
+	for _, id := range ids {
+		if id == "" {
+			continue
+		}
+
+		edge, exists := m.edges[id]
+		if !exists {
+			continue // Best effort - skip not found
+		}
+
+		// Remove from indexes
+		if m.outgoingEdges[edge.StartNode] != nil {
+			delete(m.outgoingEdges[edge.StartNode], id)
+		}
+		if m.incomingEdges[edge.EndNode] != nil {
+			delete(m.incomingEdges[edge.EndNode], id)
+		}
+
+		delete(m.edges, id)
+	}
+
+	return nil
+}
+
 // GetNodesByLabel returns all nodes that have the specified label.
 //
 // Uses an index for O(k) performance where k = number of nodes with this label.

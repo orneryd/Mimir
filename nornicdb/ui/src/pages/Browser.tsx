@@ -50,7 +50,8 @@ export function Browser() {
     setEmbedTriggering(true);
     setEmbedMessage(null);
     try {
-      const res = await fetch('/nornicdb/embed/trigger', { method: 'POST' });
+      // Use regenerate=true to clear existing embeddings and regenerate all
+      const res = await fetch('/nornicdb/embed/trigger?regenerate=true', { method: 'POST' });
       const data = await res.json();
       if (res.ok) {
         setEmbedMessage(data.message);
@@ -64,8 +65,8 @@ export function Browser() {
       setEmbedMessage('Error triggering embeddings');
     } finally {
       setEmbedTriggering(false);
-      // Clear message after 3 seconds
-      setTimeout(() => setEmbedMessage(null), 3000);
+      // Clear message after 5 seconds (longer for regenerate)
+      setTimeout(() => setEmbedMessage(null), 5000);
     }
   };
 
@@ -142,7 +143,7 @@ export function Browser() {
                 <Zap className="w-4 h-4" />
               )}
               <span>
-                {embedStats?.running ? 'Embedding...' : 'Generate Embeddings'}
+                {embedStats?.running ? 'Embedding...' : 'Regenerate Embeddings'}
               </span>
               {embedStats && embedStats.processed > 0 && (
                 <span className="text-xs text-norse-silver">({embedStats.processed})</span>

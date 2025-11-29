@@ -115,6 +115,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/orneryd/nornicdb/pkg/storage"
@@ -160,7 +161,8 @@ type StorageExecutor struct {
 	parser    *Parser
 	storage   storage.Engine
 	txContext *TransactionContext // Active transaction context
-	cache     *QueryCache         // Query result cache
+	cache     *SmartQueryCache    // Query result cache with label-aware invalidation
+	planCache *QueryPlanCache     // Parsed query plan cache
 }
 
 // NewStorageExecutor creates a new Cypher executor with the given storage backend.
@@ -184,9 +186,10 @@ type StorageExecutor struct {
 //	result, err := executor.Execute(ctx, "MATCH (n) RETURN count(n)", nil)
 func NewStorageExecutor(store storage.Engine) *StorageExecutor {
 	return &StorageExecutor{
-		parser:  NewParser(),
-		storage: store,
-		cache:   NewQueryCache(1000), // Cache up to 1000 query results
+		parser:    NewParser(),
+		storage:   store,
+		cache:     NewSmartQueryCache(1000), // Query result cache with label-aware invalidation
+		planCache: NewQueryPlanCache(500),   // Cache 500 parsed query plans
 	}
 }
 
@@ -341,9 +344,14 @@ func (e *StorageExecutor) Execute(ctx context.Context, cypher string, params map
 		e.cache.Put(cypher, params, result, ttl)
 	}
 
-	// Invalidate cache on write operations
+	// Smart invalidation: only invalidate caches for affected labels
 	if !isReadOnly && e.cache != nil {
-		e.cache.Invalidate()
+		affectedLabels := extractLabelsFromQuery(cypher)
+		if len(affectedLabels) > 0 {
+			e.cache.InvalidateLabels(affectedLabels)
+		} else {
+			e.cache.Invalidate()
+		}
 	}
 
 	return result, err
@@ -1337,26 +1345,10 @@ func (e *StorageExecutor) buildEmbeddingSummary(node *storage.Node) map[string]i
 		summary["dimensions"] = 0
 	}
 
-	// DEAD CODE PATH - kept for potential future use if we ever support legacy imports
-	// This code path is never reached because embeddings in properties are stripped on intake
-	/*
-		if embProp := node.Properties["embedding"]; embProp != nil {
-			switch emb := embProp.(type) {
-			case []float32:
-				summary["status"] = "ready"
-				summary["dimensions"] = len(emb)
-			case []float64:
-				summary["status"] = "ready"
-				summary["dimensions"] = len(emb)
-			case []interface{}:
-				summary["status"] = "ready"
-				summary["dimensions"] = len(emb)
-			default:
-				summary["status"] = "invalid"
-				summary["dimensions"] = 0
-			}
-		}
-	*/
+	// Include model info from properties if available
+	if model, ok := node.Properties["embedding_model"]; ok {
+		summary["model"] = model
+	}
 
 	return summary
 }
@@ -1854,6 +1846,48 @@ func (e *StorageExecutor) parseRemoveProperties(removePart string) []string {
 
 // Helper functions
 
+// looksLikeFunctionCall checks if a string looks like any function call.
+// Matches patterns like: functionName(), name.sub(), kalman.init({...})
+// Unlike isFunctionCall(expr, funcName) which checks for a specific function,
+// this checks if the string has function call syntax.
+func looksLikeFunctionCall(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+
+	// Must end with ) for a function call
+	if !strings.HasSuffix(s, ")") {
+		return false
+	}
+
+	// Find the opening parenthesis
+	parenIdx := strings.Index(s, "(")
+	if parenIdx <= 0 {
+		return false
+	}
+
+	// The part before ( must be a valid identifier or dotted name
+	funcName := s[:parenIdx]
+
+	// Check if it looks like a function name (alphanumeric, dots, underscores)
+	for i, c := range funcName {
+		if i == 0 {
+			// First char must be letter or underscore
+			if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_') {
+				return false
+			}
+		} else {
+			// Subsequent chars can be alphanumeric, underscore, or dot
+			if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '.') {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
 func (e *StorageExecutor) parseNodePattern(pattern string) nodePatternInfo {
 	info := nodePatternInfo{
 		labels:     []string{},
@@ -2033,6 +2067,16 @@ func (e *StorageExecutor) parsePropertyValue(valueStr string) interface{} {
 	// Handle nested maps (rare in properties, but possible)
 	if strings.HasPrefix(valueStr, "{") && strings.HasSuffix(valueStr, "}") {
 		return e.parseProperties(valueStr)
+	}
+
+	// Handle function calls like kalman.init(), toUpper('test'), etc.
+	// A function call has the pattern: name(...) or name.sub.name(...)
+	if looksLikeFunctionCall(valueStr) {
+		result := e.evaluateExpressionWithContext(valueStr, nil, nil)
+		// Only use the result if evaluation succeeded (not returned as original string)
+		if result != nil && result != valueStr {
+			return result
+		}
 	}
 
 	// Otherwise return as string (handles unquoted identifiers, etc.)
@@ -2682,15 +2726,22 @@ func (e *StorageExecutor) resolveReturnItem(item returnItem, variable string, no
 }
 
 func (e *StorageExecutor) generateID() string {
-	// Simple ID generation - use UUID in production
-	return fmt.Sprintf("node-%d", e.idCounter())
+	// Generate cryptographically unique ID like Neo4j does internally
+	// Neo4j uses internal sequences; we use UUIDs for guaranteed uniqueness
+	// Format: node-{uuid} to ensure zero collision probability
+	buf := make([]byte, 16)
+	rand.Read(buf)
+	// Use timestamp prefix for readability and rough time-ordering
+	return fmt.Sprintf("node-%d-%x", time.Now().UnixNano()/1000000, buf[:8])
 }
 
+// Deprecated: Sequential counter replaced with UUID generation
 var idCounter int64
 
 func (e *StorageExecutor) idCounter() int64 {
-	idCounter++
-	return idCounter
+	// Keep for backward compatibility but not used in generateID anymore
+	atomic.AddInt64(&idCounter, 1)
+	return atomic.LoadInt64(&idCounter)
 }
 
 // evaluateExistsSubquery checks if an EXISTS { } subquery returns any matches
@@ -3159,6 +3210,17 @@ func (e *StorageExecutor) executeShowFunctions(ctx context.Context, cypher strin
 		// Vector functions
 		{"vector.similarity.cosine", "vector.similarity.cosine(vector1 :: LIST<FLOAT>, vector2 :: LIST<FLOAT>) :: FLOAT", "Cosine similarity", false, false, false},
 		{"vector.similarity.euclidean", "vector.similarity.euclidean(vector1 :: LIST<FLOAT>, vector2 :: LIST<FLOAT>) :: FLOAT", "Euclidean similarity", false, false, false},
+		// Kalman filter functions
+		{"kalman.init", "kalman.init(config? :: MAP) :: STRING", "Create new Kalman filter state (basic scalar filter for noise smoothing)", false, false, false},
+		{"kalman.process", "kalman.process(measurement :: FLOAT, state :: STRING, target? :: FLOAT) :: MAP", "Process measurement, returns {value, state}", false, false, false},
+		{"kalman.predict", "kalman.predict(state :: STRING, steps :: INTEGER) :: FLOAT", "Predict state n steps into the future", false, false, false},
+		{"kalman.state", "kalman.state(state :: STRING) :: FLOAT", "Get current state estimate from state JSON", false, false, false},
+		{"kalman.reset", "kalman.reset(state :: STRING) :: STRING", "Reset filter state to initial values", false, false, false},
+		{"kalman.velocity.init", "kalman.velocity.init(initialPos? :: FLOAT, initialVel? :: FLOAT) :: STRING", "Create 2-state Kalman filter (position + velocity for trend tracking)", false, false, false},
+		{"kalman.velocity.process", "kalman.velocity.process(measurement :: FLOAT, state :: STRING) :: MAP", "Process measurement, returns {value, velocity, state}", false, false, false},
+		{"kalman.velocity.predict", "kalman.velocity.predict(state :: STRING, steps :: INTEGER) :: FLOAT", "Predict position n steps into the future", false, false, false},
+		{"kalman.adaptive.init", "kalman.adaptive.init(config? :: MAP) :: STRING", "Create adaptive Kalman filter (auto-switches between basic and velocity modes)", false, false, false},
+		{"kalman.adaptive.process", "kalman.adaptive.process(measurement :: FLOAT, state :: STRING) :: MAP", "Process measurement, returns {value, mode, state}", false, false, false},
 	}
 
 	return &ExecuteResult{

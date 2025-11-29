@@ -1,0 +1,165 @@
+# NornicDB Docker Image with NVIDIA CUDA Support + Bundled BGE-M3 Embedding Model
+# Neo4j-compatible graph database with GPU-accelerated local embeddings
+#
+# This image includes the BGE-M3 GGUF model (MIT licensed) for zero-config embeddings
+
+# Stage 1: Build the UI
+FROM node:20-alpine AS ui-builder
+
+WORKDIR /ui
+
+# Ensure clean npm config (no auth issues from host)
+RUN npm config set registry https://registry.npmjs.org/
+
+# Copy UI package files
+COPY ui/package.json ui/package-lock.json* ./
+
+# Install dependencies
+RUN npm ci 2>/dev/null || npm install --legacy-peer-deps
+
+# Copy UI source
+COPY ui/ .
+
+# Build the UI
+RUN npm run build
+
+# Stage 2: Build llama.cpp with CUDA
+FROM nvidia/cuda:12.6.3-devel-ubuntu22.04 AS llama-builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    git \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Clone and build llama.cpp with CUDA
+ARG LLAMA_VERSION=b4785
+WORKDIR /llama
+RUN git clone --depth 1 --branch ${LLAMA_VERSION} https://github.com/ggerganov/llama.cpp.git .
+
+# Build static library with CUDA support
+RUN cmake -B build \
+    -DLLAMA_STATIC=ON \
+    -DBUILD_SHARED_LIBS=OFF \
+    -DLLAMA_BUILD_TESTS=OFF \
+    -DLLAMA_BUILD_EXAMPLES=OFF \
+    -DLLAMA_BUILD_SERVER=OFF \
+    -DGGML_CUDA=ON \
+    -DGGML_CUDA_FA_ALL_QUANTS=ON \
+    && cmake --build build --config Release -j$(nproc)
+
+# Combine static libraries
+RUN set -e && \
+    mkdir -p /llama/lib && \
+    find build -name "*.a" -exec cp {} /llama/lib/ \; && \
+    echo "CREATE /llama/lib/libllama_combined.a" > /tmp/ar_script.mri && \
+    for lib in /llama/lib/lib*.a; do \
+        echo "ADDLIB $lib" >> /tmp/ar_script.mri; \
+    done && \
+    echo "SAVE" >> /tmp/ar_script.mri && \
+    echo "END" >> /tmp/ar_script.mri && \
+    ar -M < /tmp/ar_script.mri
+
+# Stage 3: Model provider - uses local model file
+# The BGE-M3 GGUF model (MIT licensed) should be placed in models/bge-m3.gguf
+# If not present, the build will fail with a helpful message
+FROM alpine:3.19 AS model-provider
+
+WORKDIR /models
+
+# Copy local model file - must exist at build time
+# Place the model at: nornicdb/models/bge-m3.gguf
+COPY models/bge-m3.gguf /models/bge-m3.gguf
+
+# Verify the model file is valid (should be > 100MB)
+RUN ls -lh /models/bge-m3.gguf && \
+    test $(stat -c%s /models/bge-m3.gguf) -gt 100000000 || \
+    (echo "ERROR: Model file too small or invalid. Please download from:" && \
+     echo "  https://huggingface.co/BAAI/bge-m3-gguf/resolve/main/bge-m3-q8_0.gguf" && \
+     echo "and place it at: nornicdb/models/bge-m3.gguf" && exit 1)
+
+# Stage 4: Build the Go binary with CUDA support
+FROM nvidia/cuda:12.6.3-devel-ubuntu22.04 AS builder
+
+# Install Go and OpenMP
+ENV GO_VERSION=1.23.4
+RUN apt-get update && apt-get install -y wget git gcc g++ libgomp1 && \
+    wget https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz && \
+    tar -C /usr/local -xzf go${GO_VERSION}.linux-amd64.tar.gz && \
+    rm go${GO_VERSION}.linux-amd64.tar.gz
+ENV PATH="/usr/local/go/bin:${PATH}"
+ENV CUDA_HOME=/usr/local/cuda
+
+WORKDIR /build
+
+# Copy llama.cpp artifacts from llama-builder
+COPY --from=llama-builder /llama/lib/libllama_combined.a /build/lib/llama/libllama_linux_amd64_cuda.a
+COPY --from=llama-builder /llama/include/llama.h /build/lib/llama/
+COPY --from=llama-builder /llama/ggml/include/*.h /build/lib/llama/
+
+# Copy go mod files
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Copy built UI from ui-builder stage
+COPY --from=ui-builder /ui/dist ./ui/dist
+
+# Build with CGO enabled for CUDA support and local LLM embeddings
+RUN CGO_ENABLED=1 GOOS=linux go build -tags "cuda localllm" -ldflags="-s -w" -o nornicdb ./cmd/nornicdb
+
+# Runtime stage - use CUDA runtime image (smaller than devel)
+FROM nvidia/cuda:12.6.3-runtime-ubuntu22.04
+
+WORKDIR /app
+
+# Install runtime dependencies (libgomp1 required for OpenMP in llama.cpp)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    tzdata \
+    wget \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy binary from builder
+COPY --from=builder /build/nornicdb /app/nornicdb
+
+# Copy entrypoint script
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+
+# Create directories - /data for user data (volume mount), /app/models for bundled model
+RUN mkdir -p /data /app/models
+
+# Copy the bundled BGE-M3 model to /app/models (won't be overwritten by /data volume mounts)
+COPY --from=model-provider /models/bge-m3.gguf /app/models/bge-m3.gguf
+
+# Expose ports
+EXPOSE 7474 7687
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+  CMD wget --spider -q http://localhost:7474/health || exit 1
+
+# Default environment variables - configured for bundled model
+# Note: NORNICDB_MODELS_DIR points to /app/models where the bundled model lives
+# This way volume mounts to /data won't overwrite the model
+ENV NORNICDB_DATA_DIR=/data \
+    NORNICDB_HTTP_PORT=7474 \
+    NORNICDB_BOLT_PORT=7687 \
+    NORNICDB_EMBEDDING_PROVIDER=local \
+    NORNICDB_EMBEDDING_MODEL=bge-m3 \
+    NORNICDB_EMBEDDING_DIMENSIONS=1024 \
+    NORNICDB_MODELS_DIR=/app/models \
+    NORNICDB_EMBEDDING_GPU_LAYERS=-1 \
+    NORNICDB_NO_AUTH=true \
+    NORNICDB_GPU_ENABLED=true \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
+CMD []

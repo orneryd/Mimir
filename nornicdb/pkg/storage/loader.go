@@ -43,19 +43,22 @@
 //   - relationships.json: One JSON object per line, each representing a relationship
 //
 // Example nodes.json:
-//   {"id":"0","labels":["Person"],"properties":{"name":"Alice","age":30}}
-//   {"id":"1","labels":["Person"],"properties":{"name":"Bob","age":25}}
+//
+//	{"id":"0","labels":["Person"],"properties":{"name":"Alice","age":30}}
+//	{"id":"1","labels":["Person"],"properties":{"name":"Bob","age":25}}
 //
 // Example relationships.json:
-//   {"id":"0","type":"KNOWS","startNode":"0","endNode":"1","properties":{"since":2020}}
+//
+//	{"id":"0","type":"KNOWS","startNode":"0","endNode":"1","properties":{"since":2020}}
 //
 // Combined Export Format:
 //
 // The combined format includes both nodes and relationships in a single JSON file:
-//   {
-//     "nodes": [...],
-//     "relationships": [...]
-//   }
+//
+//	{
+//	  "nodes": [...],
+//	  "relationships": [...]
+//	}
 //
 // Data Type Mapping:
 //
@@ -77,18 +80,18 @@
 //
 // Think of this like moving between different types of photo albums:
 //
-// 1. **Neo4j format**: Like a specific brand of photo album with a special
-//    way of organizing photos (nodes) and the connections between them (relationships).
+//  1. **Neo4j format**: Like a specific brand of photo album with a special
+//     way of organizing photos (nodes) and the connections between them (relationships).
 //
-// 2. **Loading**: Like taking photos from a Neo4j album and putting them
-//    into a NornicDB album, making sure each photo goes in the right place
-//    and keeps all its information.
+//  2. **Loading**: Like taking photos from a Neo4j album and putting them
+//     into a NornicDB album, making sure each photo goes in the right place
+//     and keeps all its information.
 //
-// 3. **Exporting**: Like taking photos from a NornicDB album and organizing
-//    them in the Neo4j format so they can be used in Neo4j tools.
+//  3. **Exporting**: Like taking photos from a NornicDB album and organizing
+//     them in the Neo4j format so they can be used in Neo4j tools.
 //
-// 4. **Bulk operations**: Instead of moving photos one by one, we move
-//    whole pages at a time to make it much faster.
+//  4. **Bulk operations**: Instead of moving photos one by one, we move
+//     whole pages at a time to make it much faster.
 //
 // This lets you easily move your data between NornicDB and Neo4j!
 package storage
@@ -131,16 +134,19 @@ import (
 //	fmt.Println("Successfully loaded Neo4j data into NornicDB")
 //
 // Expected Directory Structure:
-//   neo4j-export/
-//   ├── nodes.json
-//   └── relationships.json
+//
+//	neo4j-export/
+//	├── nodes.json
+//	└── relationships.json
 //
 // Node Format (nodes.json):
-//   {"id":"0","labels":["Person"],"properties":{"name":"Alice","age":30}}
-//   {"id":"1","labels":["Company"],"properties":{"name":"Acme Corp"}}
+//
+//	{"id":"0","labels":["Person"],"properties":{"name":"Alice","age":30}}
+//	{"id":"1","labels":["Company"],"properties":{"name":"Acme Corp"}}
 //
 // Relationship Format (relationships.json):
-//   {"id":"0","type":"WORKS_FOR","startNode":"0","endNode":"1","properties":{"since":2020}}
+//
+//	{"id":"0","type":"WORKS_FOR","startNode":"0","endNode":"1","properties":{"since":2020}}
 //
 // Performance:
 //   - Processes files sequentially (nodes first, then relationships)
@@ -187,15 +193,16 @@ func LoadFromNeo4jJSON(engine Engine, dir string) error {
 //	fmt.Println("Successfully loaded data from export file")
 //
 // File Format:
-//   {
-//     "nodes": [
-//       {"id":"0","labels":["Person"],"properties":{"name":"Alice"}},
-//       {"id":"1","labels":["Person"],"properties":{"name":"Bob"}}
-//     ],
-//     "relationships": [
-//       {"id":"0","type":"KNOWS","startNode":"0","endNode":"1","properties":{}}
-//     ]
-//   }
+//
+//	{
+//	  "nodes": [
+//	    {"id":"0","labels":["Person"],"properties":{"name":"Alice"}},
+//	    {"id":"1","labels":["Person"],"properties":{"name":"Bob"}}
+//	  ],
+//	  "relationships": [
+//	    {"id":"0","type":"KNOWS","startNode":"0","endNode":"1","properties":{}}
+//	  ]
+//	}
 //
 // Performance:
 //   - Loads entire file into memory for parsing
@@ -261,31 +268,32 @@ func LoadFromNeo4jExport(engine Engine, path string) error {
 //	// storage.LoadFromNeo4jExport(newEngine, "./backup.json")
 //
 // Output Format:
-//   {
-//     "nodes": [
-//       {
-//         "id": "node-123",
-//         "labels": ["Person", "Employee"],
-//         "properties": {
-//           "name": "Alice Smith",
-//           "age": 30,
-//           "email": "alice@example.com"
-//         }
-//       }
-//     ],
-//     "relationships": [
-//       {
-//         "id": "rel-456",
-//         "type": "WORKS_FOR",
-//         "startNode": "node-123",
-//         "endNode": "node-789",
-//         "properties": {
-//           "since": "2020-01-15",
-//           "role": "Developer"
-//         }
-//       }
-//     ]
-//   }
+//
+//	{
+//	  "nodes": [
+//	    {
+//	      "id": "node-123",
+//	      "labels": ["Person", "Employee"],
+//	      "properties": {
+//	        "name": "Alice Smith",
+//	        "age": 30,
+//	        "email": "alice@example.com"
+//	      }
+//	    }
+//	  ],
+//	  "relationships": [
+//	    {
+//	      "id": "rel-456",
+//	      "type": "WORKS_FOR",
+//	      "startNode": "node-123",
+//	      "endNode": "node-789",
+//	      "properties": {
+//	        "since": "2020-01-15",
+//	        "role": "Developer"
+//	      }
+//	    }
+//	  ]
+//	}
 //
 // Use Cases:
 //   - Creating backups of NornicDB data
@@ -525,19 +533,7 @@ func FindNodeNeedingEmbedding(engine Engine) *Node {
 			return nil
 		}
 		for _, node := range nodes {
-			// Skip internal nodes
-			isInternal := false
-			for _, label := range node.Labels {
-				if len(label) > 0 && label[0] == '_' {
-					isInternal = true
-					break
-				}
-			}
-			if isInternal {
-				continue
-			}
-			// Return first node without embedding
-			if len(node.Embedding) == 0 {
+			if NodeNeedsEmbedding(node) {
 				return node
 			}
 		}

@@ -1,15 +1,8 @@
 /**
- * NornicDB vs Neo4j - FastRP (Fast Random Projection) Benchmark Suite
+ * NornicDB - FastRP (Fast Random Projection) Benchmark Suite
  * 
- * Tests node embedding capabilities using Neo4j's Graph Data Science (GDS) library.
+ * Tests node embedding capabilities using GDS-compatible procedures.
  * FastRP creates vector embeddings for nodes based on graph structure and properties.
- * 
- * Compares:
- * - NornicDB (drop-in replacement): bolt://localhost:7687
- * - Neo4j with GDS: bolt://localhost:7688
- * 
- * NOTE: FastRP requires the Neo4j Graph Data Science library. If NornicDB doesn't
- * support GDS procedures, this benchmark will document the compatibility gap.
  * 
  * Run with: npm run bench:fastrp
  */
@@ -25,21 +18,14 @@ const NORNICDB_URI = process.env.NORNICDB_URI || 'bolt://localhost:7687';
 const NORNICDB_USER = process.env.NORNICDB_USER || 'admin';
 const NORNICDB_PASSWORD = process.env.NORNICDB_PASSWORD || 'admin';
 
-const NEO4J_URI = process.env.NEO4J_URI || 'bolt://localhost:7688';
-const NEO4J_USER = process.env.NEO4J_USER || 'neo4j';
-const NEO4J_PASSWORD = process.env.NEO4J_PASSWORD || 'password';
-
 // ============================================================================
-// DATABASE CONNECTIONS
+// DATABASE CONNECTION
 // ============================================================================
 
 let nornicdbDriver: Driver;
 let nornicdbSession: Session;
-let neo4jDriver: Driver;
-let neo4jSession: Session;
 
 let nornicdbSupportsGDS = false;
-let neo4jSupportsGDS = false;
 
 // ============================================================================
 // DATASET LOADER (Social Network for FastRP)
@@ -152,7 +138,7 @@ async function createGDSProjection(session: Session, graphName: string): Promise
 beforeAll(async () => {
   console.log('\n╔════════════════════════════════════════════════════════════════════╗');
   console.log('║         FastRP Node Embeddings Benchmark Suite                     ║');
-  console.log('║         NornicDB vs Neo4j (with Graph Data Science)                ║');
+  console.log('║         NornicDB GDS Compatibility Test                            ║');
   console.log('╚════════════════════════════════════════════════════════════════════╝\n');
   
   // Connect to NornicDB
@@ -179,51 +165,14 @@ beforeAll(async () => {
       console.log('Creating GDS graph projection in NornicDB...');
       await createGDSProjection(nornicdbSession, 'persons-nornicdb');
     } catch (error) {
-      console.log('  ⚠️  NornicDB does not support GDS procedures (expected for drop-in replacement)');
+      console.log('  ⚠️  NornicDB does not support GDS procedures');
       nornicdbSupportsGDS = false;
     }
   } catch (error) {
     console.error(`✗ Failed to connect to NornicDB: ${error}`);
   }
   
-  // Connect to Neo4j
-  console.log(`\nConnecting to Neo4j at ${NEO4J_URI}...`);
-  try {
-    neo4jDriver = neo4j.driver(NEO4J_URI, neo4j.auth.basic(NEO4J_USER, NEO4J_PASSWORD));
-    neo4jSession = neo4jDriver.session();
-    await neo4jSession.run('RETURN 1');
-    console.log('✓ Connected to Neo4j');
-    
-    console.log('Loading social network dataset into Neo4j...');
-    await loadSocialNetworkDataset(neo4jSession);
-    const result2 = await neo4jSession.run('MATCH (n:Person) RETURN count(n) as count');
-    console.log(`  → ${result2.records[0].get('count')} people created in Neo4j`);
-    
-    // Check GDS support
-    console.log('Checking Graph Data Science (GDS) support in Neo4j...');
-    try {
-      const versionResult = await neo4jSession.run('CALL gds.version() YIELD version RETURN version');
-      const version = versionResult.records[0].get('version');
-      neo4jSupportsGDS = true;
-      console.log(`  ✓ Neo4j GDS version: ${version}`);
-      
-      // Create GDS projection
-      console.log('Creating GDS graph projection in Neo4j...');
-      await createGDSProjection(neo4jSession, 'persons-neo4j');
-    } catch (error) {
-      console.log('  ⚠️  Neo4j GDS library not installed (install from https://neo4j.com/download-center/)');
-      neo4jSupportsGDS = false;
-    }
-  } catch (error) {
-    console.error(`✗ Failed to connect to Neo4j: ${error}`);
-  }
-  
   console.log('\n' + '─'.repeat(72) + '\n');
-  
-  if (!neo4jSupportsGDS) {
-    console.log('⚠️  WARNING: Neo4j GDS library not detected. FastRP benchmarks will be skipped.');
-    console.log('   Install GDS from: https://neo4j.com/download-center/\n');
-  }
 });
 
 afterAll(async () => {
@@ -237,24 +186,12 @@ afterAll(async () => {
     } catch (e) {}
   }
   
-  if (neo4jSession && neo4jSupportsGDS) {
-    try {
-      await neo4jSession.run("CALL gds.graph.drop('persons-neo4j')");
-    } catch (e) {}
-  }
-  
   // Clear data
   if (nornicdbSession) {
     await nornicdbSession.run('MATCH (n) DETACH DELETE n').catch(() => {});
     await nornicdbSession.close();
   }
   if (nornicdbDriver) await nornicdbDriver.close();
-  
-  if (neo4jSession) {
-    await neo4jSession.run('MATCH (n) DETACH DELETE n').catch(() => {});
-    await neo4jSession.close();
-  }
-  if (neo4jDriver) await neo4jDriver.close();
   
   console.log('✓ Cleanup complete\n');
 });
@@ -349,105 +286,6 @@ describe('NornicDB - FastRP Embeddings', () => {
     
     bench('Manual: Weighted neighbor aggregation', async () => {
       await nornicdbSession.run(`
-        MATCH (p:Person)-[r:KNOWS]-(neighbor:Person)
-        RETURN p.name,
-               sum(r.weight * neighbor.age) / sum(r.weight) as weighted_avg_age,
-               sum(r.weight) as total_weight
-      `);
-    });
-  }
-});
-
-// ============================================================================
-// NEO4J BENCHMARKS
-// ============================================================================
-
-describe('Neo4j - FastRP Embeddings', () => {
-  if (neo4jSupportsGDS) {
-    // Basic FastRP - Stream mode
-    bench('FastRP stream (dim=8)', async () => {
-      await neo4jSession.run(`
-        CALL gds.fastRP.stream('persons-neo4j', {
-          embeddingDimension: 8,
-          randomSeed: 42
-        })
-        YIELD nodeId, embedding
-        RETURN nodeId, embedding
-      `);
-    });
-    
-    bench('FastRP stream (dim=128)', async () => {
-      await neo4jSession.run(`
-        CALL gds.fastRP.stream('persons-neo4j', {
-          embeddingDimension: 128,
-          randomSeed: 42
-        })
-        YIELD nodeId, embedding
-        RETURN nodeId, embedding
-      `);
-    });
-    
-    bench('FastRP stream with weights (dim=64)', async () => {
-      await neo4jSession.run(`
-        CALL gds.fastRP.stream('persons-neo4j', {
-          embeddingDimension: 64,
-          randomSeed: 42,
-          relationshipWeightProperty: 'weight'
-        })
-        YIELD nodeId, embedding
-        RETURN nodeId, embedding
-      `);
-    });
-    
-    bench('FastRP with node features (age)', async () => {
-      await neo4jSession.run(`
-        CALL gds.fastRP.stream('persons-neo4j', {
-          embeddingDimension: 32,
-          randomSeed: 42,
-          propertyRatio: 0.5,
-          featureProperties: ['age']
-        })
-        YIELD nodeId, embedding
-        RETURN nodeId, embedding
-      `);
-    });
-    
-    bench('FastRP stats (performance check)', async () => {
-      await neo4jSession.run(`
-        CALL gds.fastRP.stats('persons-neo4j', {
-          embeddingDimension: 64,
-          randomSeed: 42
-        })
-        YIELD nodeCount
-        RETURN nodeCount
-      `);
-    });
-    
-  } else {
-    // Fallback: Manual embedding-like queries (no GDS)
-    bench('Manual: Aggregate neighbor ages', async () => {
-      await neo4jSession.run(`
-        MATCH (p:Person)
-        OPTIONAL MATCH (p)-[:KNOWS]-(neighbor:Person)
-        RETURN p.name, 
-               avg(neighbor.age) as avg_neighbor_age,
-               count(neighbor) as neighbor_count
-      `);
-    });
-    
-    bench('Manual: 2-hop neighborhood features', async () => {
-      await neo4jSession.run(`
-        MATCH (p:Person)
-        OPTIONAL MATCH (p)-[:KNOWS*1..2]-(neighbor:Person)
-        WHERE p <> neighbor
-        RETURN p.name,
-               avg(neighbor.age) as avg_neighbor_age,
-               count(DISTINCT neighbor) as reach
-      `);
-    });
-    
-    bench('Manual: Weighted neighbor aggregation', async () => {
-      await neo4jSession.run(`
         MATCH (p:Person)-[r:KNOWS]-(neighbor:Person)
         RETURN p.name,
                sum(r.weight * neighbor.age) / sum(r.weight) as weighted_avg_age,

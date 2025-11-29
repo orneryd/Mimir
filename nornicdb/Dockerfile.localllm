@@ -1,0 +1,169 @@
+# NornicDB Docker Image with Local GGUF Embedding Support
+# Includes llama.cpp for native embedding generation without external services
+#
+# Build: docker build -f Dockerfile.localllm -t nornicdb-local .
+# Run:   docker run -v /path/to/models:/data/models -e NORNICDB_EMBEDDING_PROVIDER=local nornicdb-local
+
+# =============================================================================
+# Stage 1: Build the UI
+# =============================================================================
+FROM node:20-alpine AS ui-builder
+
+WORKDIR /ui
+RUN npm config set registry https://registry.npmjs.org/
+COPY ui/package.json ui/package-lock.json* ./
+RUN npm ci 2>/dev/null || npm install --legacy-peer-deps
+COPY ui/ .
+RUN npm run build
+
+# =============================================================================
+# Stage 2: Build llama.cpp static libraries
+# =============================================================================
+FROM debian:bookworm-slim AS llama-builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    git \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Clone and build llama.cpp
+ARG LLAMA_VERSION=b4535
+WORKDIR /llama
+RUN git clone --depth 1 --branch ${LLAMA_VERSION} https://github.com/ggerganov/llama.cpp.git .
+
+# Build static library
+# Default: generic ARM64 for maximum compatibility, disable OpenMP for simpler static linking
+#
+# Build args for customization:
+#   LLAMA_CMAKE_C_FLAGS:   C compiler flags (default: -mcpu=generic)
+#   LLAMA_CMAKE_CXX_FLAGS: C++ compiler flags (default: -mcpu=generic)
+#   LLAMA_NATIVE:          Use native CPU optimizations (default: OFF for compatibility)
+#   LLAMA_EXTRA_CMAKE_ARGS: Additional cmake args (e.g., -DGGML_CUDA=ON)
+#
+# Example optimized build for ARM64 v8.2+:
+#   docker build --build-arg LLAMA_NATIVE=ON --build-arg LLAMA_CMAKE_C_FLAGS="-mcpu=native" ...
+#
+ARG LLAMA_CMAKE_C_FLAGS="-mcpu=generic"
+ARG LLAMA_CMAKE_CXX_FLAGS="-mcpu=generic"
+ARG LLAMA_NATIVE=OFF
+ARG LLAMA_EXTRA_CMAKE_ARGS=""
+
+RUN echo "Building llama.cpp with:" && \
+    echo "  LLAMA_CMAKE_C_FLAGS=${LLAMA_CMAKE_C_FLAGS}" && \
+    echo "  LLAMA_CMAKE_CXX_FLAGS=${LLAMA_CMAKE_CXX_FLAGS}" && \
+    echo "  LLAMA_NATIVE=${LLAMA_NATIVE}" && \
+    echo "  LLAMA_EXTRA_CMAKE_ARGS=${LLAMA_EXTRA_CMAKE_ARGS}" && \
+    cmake -B build \
+    -DLLAMA_STATIC=ON \
+    -DBUILD_SHARED_LIBS=OFF \
+    -DLLAMA_BUILD_TESTS=OFF \
+    -DLLAMA_BUILD_EXAMPLES=OFF \
+    -DLLAMA_BUILD_SERVER=OFF \
+    -DGGML_NATIVE=${LLAMA_NATIVE} \
+    -DGGML_OPENMP=OFF \
+    -DCMAKE_C_FLAGS="${LLAMA_CMAKE_C_FLAGS}" \
+    -DCMAKE_CXX_FLAGS="${LLAMA_CMAKE_CXX_FLAGS}" \
+    ${LLAMA_EXTRA_CMAKE_ARGS} \
+    && cmake --build build --config Release -j$(nproc)
+
+# Combine all static libraries into one
+RUN set -e && \
+    mkdir -p /llama/lib && \
+    find build -name "*.a" -exec cp {} /llama/lib/ \; && \
+    echo "Found libraries:" && ls -la /llama/lib/*.a && \
+    # Verify critical libraries exist
+    test -f /llama/lib/libllama.a || (echo "ERROR: libllama.a not found" && exit 1) && \
+    # Build ar script dynamically based on what exists
+    echo "CREATE /llama/lib/libllama_combined.a" > /tmp/ar_script.mri && \
+    for lib in /llama/lib/lib*.a; do \
+        echo "ADDLIB $lib" >> /tmp/ar_script.mri; \
+    done && \
+    echo "SAVE" >> /tmp/ar_script.mri && \
+    echo "END" >> /tmp/ar_script.mri && \
+    echo "Combining libraries:" && cat /tmp/ar_script.mri && \
+    ar -M < /tmp/ar_script.mri && \
+    echo "Created combined library:" && ls -lh /llama/lib/libllama_combined.a
+
+# =============================================================================
+# Stage 3: Build NornicDB with CGO + localllm
+# =============================================================================
+FROM golang:1.23-bookworm AS builder
+
+WORKDIR /build
+
+# Install CGO dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy llama.cpp artifacts from llama-builder
+# Detect architecture and name library accordingly
+ARG TARGETARCH=arm64
+COPY --from=llama-builder /llama/lib/libllama_combined.a /build/lib/llama/libllama_linux_arm64.a
+COPY --from=llama-builder /llama/include/llama.h /build/lib/llama/
+COPY --from=llama-builder /llama/ggml/include/*.h /build/lib/llama/
+
+# Copy go mod files and download dependencies
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Copy built UI from ui-builder stage
+COPY --from=ui-builder /ui/dist ./ui/dist
+
+# Build with CGO enabled and localllm tag
+RUN CGO_ENABLED=1 GOOS=linux go build \
+    -tags=localllm \
+    -ldflags="-s -w -linkmode external -extldflags '-static'" \
+    -o nornicdb ./cmd/nornicdb
+
+# =============================================================================
+# Stage 4: Runtime
+# =============================================================================
+FROM debian:bookworm-slim
+
+WORKDIR /app
+
+# Install minimal runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    tzdata \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy binary from builder
+COPY --from=builder /build/nornicdb /app/nornicdb
+
+# Copy entrypoint script
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+
+# Create directories
+RUN mkdir -p /data /data/models
+
+# Expose ports
+EXPOSE 7474 7687
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+  CMD wget --spider -q http://localhost:7474/health || exit 1
+
+# Environment variables
+ENV NORNICDB_DATA_DIR=/data \
+    NORNICDB_HTTP_PORT=7474 \
+    NORNICDB_BOLT_PORT=7687 \
+    NORNICDB_EMBEDDING_PROVIDER=local \
+    NORNICDB_EMBEDDING_MODEL=bge-m3 \
+    NORNICDB_EMBEDDING_DIMENSIONS=1024 \
+    NORNICDB_MODELS_DIR=/data/models \
+    NORNICDB_EMBEDDING_GPU_LAYERS=0 \
+    NORNICDB_NO_AUTH=true
+
+# Entry point
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
+CMD []

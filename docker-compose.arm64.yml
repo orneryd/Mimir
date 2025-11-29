@@ -12,10 +12,12 @@ services:
       - NORNICDB_HTTP_PORT=7474
       - NORNICDB_BOLT_PORT=7687
       # Embedding configuration - llama.cpp OpenAI-compatible API
-      - NORNICDB_EMBEDDING_API_URL=http://llama-server:8080
-      - NORNICDB_EMBEDDING_API_KEY=not-needed
-      - NORNICDB_EMBEDDING_MODEL=mxbai-embed-large
-      - NORNICDB_EMBEDDING_DIMENSIONS=1024
+      - NORNICDB_EMBEDDING_PROVIDER=local
+      # - NORNICDB_EMBEDDING_API_URL=http://llama-server:8080
+      # - NORNICDB_EMBEDDING_API_KEY=not-needed
+      - NORNICDB_EMBEDDING_MODEL=bge-m3
+      - NORNICDB_MODELS_DIR=/data/models
+      # - NORNICDB_EMBEDDING_DIMENSIONS=1024
       - NORNICDB_NO_AUTH=${NORNICDB_NO_AUTH:-true}
       - NORNICDB_ADMIN_PASSWORD=${NEO4J_PASSWORD:-password}
       - GOGC=50
@@ -27,9 +29,9 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
-    depends_on:
-      llama-server:
-        condition: service_healthy
+    # depends_on:
+    #   llama-server:
+    #     condition: service_healthy
     networks:
       - mcp_network
     deploy:
@@ -91,22 +93,22 @@ services:
       - mcp_network
 
   # llama.cpp server - OpenAI-compatible embeddings (ARM64 compatible)
-  llama-server:
-    image: timothyswt/llama-cpp-server-arm64-mxbai:latest
-    container_name: llama_server
-    ports:
-      - "11434:8080" # External 11434 -> Internal 8080 (llama.cpp default)
-    # Note: Model is bundled in the image (nomic-embed-text, 261MB)
-    # No volumes needed unless you want to add additional models
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    networks:
-      - mcp_network
+  # llama-server:
+  #   image: timothyswt/llama-cpp-server-arm64-mxbai:latest
+  #   container_name: llama_server
+  #   ports:
+  #     - "11434:8080" # External 11434 -> Internal 8080 (llama.cpp default)
+  #   # Note: Model is bundled in the image (nomic-embed-text, 261MB)
+  #   # No volumes needed unless you want to add additional models
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 30s
+  #   networks:
+  #     - mcp_network
 
   # Vision-Language server for multimodal embeddings (images + text)
   # Uncomment to enable image embeddings, or swap with llama-server above
@@ -266,8 +268,8 @@ services:
         condition: service_healthy
       copilot-api:
         condition: service_healthy
-      llama-server:
-        condition: service_healthy
+      # llama-server:
+      #   condition: service_healthy
       # llama-vl-server:
       #   condition: service_healthy
     networks:

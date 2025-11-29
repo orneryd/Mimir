@@ -40,23 +40,32 @@ func (e *StorageExecutor) handleBegin() (*ExecuteResult, error) {
 		return nil, fmt.Errorf("transaction already active")
 	}
 
+	// Unwrap AsyncEngine and WALEngine to get underlying engine for transactions
+	engine := e.storage
+	if asyncEngine, ok := engine.(*storage.AsyncEngine); ok {
+		engine = asyncEngine.GetEngine()
+	}
+	if walEngine, ok := engine.(*storage.WALEngine); ok {
+		engine = walEngine.GetEngine()
+	}
+
 	// Start transaction based on engine type
-	switch engine := e.storage.(type) {
+	switch eng := engine.(type) {
 	case *storage.BadgerEngine:
-		tx, err := engine.BeginTransaction()
+		tx, err := eng.BeginTransaction()
 		if err != nil {
 			return nil, fmt.Errorf("failed to start transaction: %w", err)
 		}
 		e.txContext = &TransactionContext{
 			tx:     tx,
-			engine: engine,
+			engine: eng,
 			active: true,
 		}
 	case *storage.MemoryEngine:
-		tx := engine.BeginTransaction()
+		tx := eng.BeginTransaction()
 		e.txContext = &TransactionContext{
 			tx:     tx,
-			engine: engine,
+			engine: eng,
 			active: true,
 		}
 	default:

@@ -15,10 +15,16 @@ services:
       - "7687:7687"  # Bolt protocol
     volumes:
       - nornicdb-cuda-data:/data
+      - ./models:/data/models  # Mount local models directory for GGUF files
     environment:
       - NORNICDB_DATA_DIR=/data
       - NORNICDB_HTTP_PORT=7474
       - NORNICDB_BOLT_PORT=7687
+      - NORNICDB_EMBEDDING_PROVIDER=local
+      - NORNICDB_EMBEDDING_MODEL=bge-m3
+      - NORNICDB_EMBEDDING_DIMENSIONS=1024
+      - NORNICDB_MODELS_DIR=/data/models
+      - NORNICDB_EMBEDDING_GPU_LAYERS=-1
       - NORNICDB_NO_AUTH=true
       - NORNICDB_GPU_ENABLED=true
       - NVIDIA_VISIBLE_DEVICES=all

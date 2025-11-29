@@ -1,5 +1,5 @@
 # NornicDB Docker Image with NVIDIA CUDA Support
-# Neo4j-compatible graph database with GPU-accelerated vector search
+# Neo4j-compatible graph database with GPU-accelerated local embeddings
 
 # Stage 1: Build the UI
 FROM node:20-alpine AS ui-builder
@@ -21,12 +21,51 @@ COPY ui/ .
 # Build the UI
 RUN npm run build
 
-# Stage 2: Build the Go binary with CUDA support
+# Stage 2: Build llama.cpp with CUDA
+FROM nvidia/cuda:12.6.3-devel-ubuntu22.04 AS llama-builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    git \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Clone and build llama.cpp with CUDA
+ARG LLAMA_VERSION=b4785
+WORKDIR /llama
+RUN git clone --depth 1 --branch ${LLAMA_VERSION} https://github.com/ggerganov/llama.cpp.git .
+
+# Build static library with CUDA support
+RUN cmake -B build \
+    -DLLAMA_STATIC=ON \
+    -DBUILD_SHARED_LIBS=OFF \
+    -DLLAMA_BUILD_TESTS=OFF \
+    -DLLAMA_BUILD_EXAMPLES=OFF \
+    -DLLAMA_BUILD_SERVER=OFF \
+    -DGGML_CUDA=ON \
+    -DGGML_CUDA_FA_ALL_QUANTS=ON \
+    && cmake --build build --config Release -j$(nproc)
+
+# Combine static libraries
+RUN set -e && \
+    mkdir -p /llama/lib && \
+    find build -name "*.a" -exec cp {} /llama/lib/ \; && \
+    echo "CREATE /llama/lib/libllama_combined.a" > /tmp/ar_script.mri && \
+    for lib in /llama/lib/lib*.a; do \
+        echo "ADDLIB $lib" >> /tmp/ar_script.mri; \
+    done && \
+    echo "SAVE" >> /tmp/ar_script.mri && \
+    echo "END" >> /tmp/ar_script.mri && \
+    ar -M < /tmp/ar_script.mri
+
+# Stage 3: Build the Go binary with CUDA support
 FROM nvidia/cuda:12.6.3-devel-ubuntu22.04 AS builder
 
-# Install Go
+# Install Go and OpenMP
 ENV GO_VERSION=1.23.4
-RUN apt-get update && apt-get install -y wget git gcc && \
+RUN apt-get update && apt-get install -y wget git gcc g++ libgomp1 && \
     wget https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz && \
     tar -C /usr/local -xzf go${GO_VERSION}.linux-amd64.tar.gz && \
     rm go${GO_VERSION}.linux-amd64.tar.gz
@@ -34,6 +73,11 @@ ENV PATH="/usr/local/go/bin:${PATH}"
 ENV CUDA_HOME=/usr/local/cuda
 
 WORKDIR /build
+
+# Copy llama.cpp artifacts from llama-builder
+COPY --from=llama-builder /llama/lib/libllama_combined.a /build/lib/llama/libllama_linux_amd64_cuda.a
+COPY --from=llama-builder /llama/include/llama.h /build/lib/llama/
+COPY --from=llama-builder /llama/ggml/include/*.h /build/lib/llama/
 
 # Copy go mod files
 COPY go.mod go.sum ./
@@ -45,19 +89,20 @@ COPY . .
 # Copy built UI from ui-builder stage
 COPY --from=ui-builder /ui/dist ./ui/dist
 
-# Build with CGO enabled for CUDA support
-RUN CGO_ENABLED=1 GOOS=linux go build -tags cuda -ldflags="-s -w" -o nornicdb ./cmd/nornicdb
+# Build with CGO enabled for CUDA support and local LLM embeddings
+RUN CGO_ENABLED=1 GOOS=linux go build -tags "cuda localllm" -ldflags="-s -w" -o nornicdb ./cmd/nornicdb
 
 # Runtime stage - use CUDA runtime image (smaller than devel)
 FROM nvidia/cuda:12.6.3-runtime-ubuntu22.04
 
 WORKDIR /app
 
-# Install runtime dependencies
+# Install runtime dependencies (libgomp1 required for OpenMP in llama.cpp)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     tzdata \
     wget \
+    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy binary from builder
@@ -68,7 +113,7 @@ COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 
 # Create data directory
-RUN mkdir -p /data
+RUN mkdir -p /data /data/models
 
 # Expose ports
 EXPOSE 7474 7687
@@ -81,9 +126,11 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
 ENV NORNICDB_DATA_DIR=/data \
     NORNICDB_HTTP_PORT=7474 \
     NORNICDB_BOLT_PORT=7687 \
-    NORNICDB_EMBEDDING_URL=http://llama-server:8080 \
-    NORNICDB_EMBEDDING_MODEL=mxbai-embed-large \
-    NORNICDB_EMBEDDING_DIM=1024 \
+    NORNICDB_EMBEDDING_PROVIDER=local \
+    NORNICDB_EMBEDDING_MODEL=bge-m3 \
+    NORNICDB_EMBEDDING_DIMENSIONS=1024 \
+    NORNICDB_MODELS_DIR=/data/models \
+    NORNICDB_EMBEDDING_GPU_LAYERS=-1 \
     NORNICDB_NO_AUTH=true \
     NORNICDB_GPU_ENABLED=true \
     NVIDIA_VISIBLE_DEVICES=all \

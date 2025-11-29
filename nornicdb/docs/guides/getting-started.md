@@ -161,12 +161,46 @@ config := &nornicdb.Config{
     AutoLinksEnabled:             true,
     AutoLinksSimilarityThreshold: 0.85,
     AutoLinksCoAccessWindow:      60 * time.Second,
+    AsyncWritesEnabled:           true,  // Enable write-behind caching
+    AsyncFlushInterval:           50 * time.Millisecond, // Flush interval
     BoltPort:                     7687,
     HTTPPort:                     7474,
 }
 
 db, err := nornicdb.Open("./data", config)
 ```
+
+### Write Consistency Options
+
+NornicDB supports two write consistency modes:
+
+| Mode | Config | Write Latency | Durability | HTTP Status |
+|------|--------|---------------|------------|-------------|
+| **Strong** | `AsyncWritesEnabled: false` | ~50-100ms | Immediate | `200 OK` |
+| **Eventual** | `AsyncWritesEnabled: true` | <1ms | Within flush interval | `202 Accepted` |
+
+**Strong Consistency** (default off, but recommended for critical data):
+```go
+config.AsyncWritesEnabled = false  // Writes block until persisted
+```
+
+**Eventual Consistency** (default on, faster writes):
+```go
+config.AsyncWritesEnabled = true           // Writes return immediately
+config.AsyncFlushInterval = 50 * time.Millisecond  // Flush every 50ms
+```
+
+When `AsyncWritesEnabled` is true:
+- Write operations (CREATE, DELETE, SET) return immediately
+- Data is flushed to disk every `AsyncFlushInterval`
+- HTTP responses include header `X-NornicDB-Consistency: eventual`
+- Mutations return `202 Accepted` instead of `200 OK`
+
+**Trade-offs:**
+- ✅ Much faster writes (~100x improvement)
+- ✅ Better throughput for batch operations
+- ⚠️ Data may be lost if crash before flush (use with WAL for durability)
+- ⚠️ Reads may see slightly stale data (within flush interval)
 
 ## Memory Tiers
 

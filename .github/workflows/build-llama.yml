@@ -1,0 +1,109 @@
+name: Build llama.cpp
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'llama.cpp version (tag or branch)'
+        required: false
+        default: 'b4535'
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: libllama_linux_amd64.a
+            platform: linux-amd64
+          - os: macos-14
+            artifact: libllama_darwin_arm64.a
+            platform: darwin-arm64
+          - os: macos-13
+            artifact: libllama_darwin_amd64.a
+            platform: darwin-amd64
+
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential
+
+      - name: Build llama.cpp
+        run: |
+          chmod +x ./nornicdb/scripts/build-llama.sh
+          cd nornicdb && ./scripts/build-llama.sh ${{ github.event.inputs.version }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}
+          path: |
+            nornicdb/lib/llama/${{ matrix.artifact }}
+            nornicdb/lib/llama/llama.h
+            nornicdb/lib/llama/ggml.h
+            nornicdb/lib/llama/VERSION
+          retention-days: 30
+
+  # CUDA build requires self-hosted runner with NVIDIA GPU
+  build-cuda:
+    runs-on: ubuntu-latest
+    if: false  # Disabled by default - enable with self-hosted runner
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup CUDA
+        uses: Jimver/cuda-toolkit@v0.2.14
+        with:
+          cuda: '12.2.0'
+
+      - name: Build llama.cpp with CUDA
+        run: |
+          chmod +x ./nornicdb/scripts/build-llama.sh
+          cd nornicdb && ./scripts/build-llama.sh ${{ github.event.inputs.version }}
+
+      - name: Upload CUDA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-amd64-cuda
+          path: |
+            nornicdb/lib/llama/libllama_linux_amd64_cuda.a
+            nornicdb/lib/llama/llama.h
+            nornicdb/lib/llama/ggml.h
+            nornicdb/lib/llama/VERSION
+          retention-days: 30
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create combined archive
+        run: |
+          mkdir -p release/lib/llama
+          cp artifacts/linux-amd64/* release/lib/llama/
+          cp artifacts/darwin-arm64/*.a release/lib/llama/
+          cp artifacts/darwin-amd64/*.a release/lib/llama/
+          cd release && tar -czvf ../llama-libs-${{ github.event.inputs.version }}.tar.gz lib
+
+      - name: Upload combined artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: llama-libs-all-platforms
+          path: llama-libs-${{ github.event.inputs.version }}.tar.gz
+          retention-days: 90

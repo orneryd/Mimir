@@ -165,6 +165,10 @@ type MemoryConfig struct {
 	EmbeddingAPIURL string
 	// EmbeddingDimensions size
 	EmbeddingDimensions int
+	// EmbeddingCacheSize is max embeddings to cache (0 = disabled, default: 10000)
+	// Each cached embedding uses ~4KB (1024 dims × 4 bytes)
+	// 10000 cache = ~40MB memory, provides significant speedup for repeated queries
+	EmbeddingCacheSize int
 	// AutoLinksEnabled for automatic relationship detection
 	AutoLinksEnabled bool
 	// AutoLinksSimilarityThreshold for similarity-based links
@@ -528,6 +532,7 @@ func LoadFromEnv() *Config {
 	config.Memory.EmbeddingModel = getEnv("NORNICDB_EMBEDDING_MODEL", "mxbai-embed-large")
 	config.Memory.EmbeddingAPIURL = getEnv("NORNICDB_EMBEDDING_API_URL", "http://localhost:11434")
 	config.Memory.EmbeddingDimensions = getEnvInt("NORNICDB_EMBEDDING_DIMENSIONS", 1024)
+	config.Memory.EmbeddingCacheSize = getEnvInt("NORNICDB_EMBEDDING_CACHE_SIZE", 10000) // Default: 10K (~40MB)
 	config.Memory.AutoLinksEnabled = getEnvBool("NORNICDB_AUTO_LINKS_ENABLED", true)
 	config.Memory.AutoLinksSimilarityThreshold = getEnvFloat("NORNICDB_AUTO_LINKS_THRESHOLD", 0.82)
 

@@ -6,8 +6,10 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -959,6 +961,107 @@ func (b *BadgerEngine) deleteEdgeInTxn(txn *badger.Txn, id EdgeID) error {
 	return txn.Delete(key)
 }
 
+// deleteNodeInTxn is the internal helper for deleting a node within a transaction.
+func (b *BadgerEngine) deleteNodeInTxn(txn *badger.Txn, id NodeID) error {
+	key := nodeKey(id)
+
+	// Get node for label cleanup
+	item, err := txn.Get(key)
+	if err == badger.ErrKeyNotFound {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+
+	var node *Node
+	if err := item.Value(func(val []byte) error {
+		var decodeErr error
+		node, decodeErr = decodeNode(val)
+		return decodeErr
+	}); err != nil {
+		return err
+	}
+
+	// Delete label indexes
+	for _, label := range node.Labels {
+		if err := txn.Delete(labelIndexKey(label, id)); err != nil {
+			return err
+		}
+	}
+
+	// Delete outgoing edges
+	outPrefix := outgoingIndexPrefix(id)
+	if err := b.deleteEdgesWithPrefix(txn, outPrefix); err != nil {
+		return err
+	}
+
+	// Delete incoming edges
+	inPrefix := incomingIndexPrefix(id)
+	if err := b.deleteEdgesWithPrefix(txn, inPrefix); err != nil {
+		return err
+	}
+
+	// Delete the node
+	return txn.Delete(key)
+}
+
+// BulkDeleteNodes removes multiple nodes in a single transaction.
+// This is much faster than calling DeleteNode repeatedly.
+func (b *BadgerEngine) BulkDeleteNodes(ids []NodeID) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	b.mu.RLock()
+	if b.closed {
+		b.mu.RUnlock()
+		return ErrStorageClosed
+	}
+	b.mu.RUnlock()
+
+	return b.db.Update(func(txn *badger.Txn) error {
+		for _, id := range ids {
+			if id == "" {
+				continue // Skip invalid IDs
+			}
+			// Best effort - continue on ErrNotFound
+			if err := b.deleteNodeInTxn(txn, id); err != nil && err != ErrNotFound {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// BulkDeleteEdges removes multiple edges in a single transaction.
+// This is much faster than calling DeleteEdge repeatedly.
+func (b *BadgerEngine) BulkDeleteEdges(ids []EdgeID) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	b.mu.RLock()
+	if b.closed {
+		b.mu.RUnlock()
+		return ErrStorageClosed
+	}
+	b.mu.RUnlock()
+
+	return b.db.Update(func(txn *badger.Txn) error {
+		for _, id := range ids {
+			if id == "" {
+				continue // Skip invalid IDs
+			}
+			// Best effort - continue on ErrNotFound
+			if err := b.deleteEdgeInTxn(txn, id); err != nil && err != ErrNotFound {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 // ============================================================================
 // Query Operations
 // ============================================================================
@@ -1562,26 +1665,26 @@ func (b *BadgerEngine) FindNodeNeedingEmbedding() *Node {
 					return nil // Skip invalid nodes
 				}
 
-				// Skip internal nodes (labels starting with _)
-				isInternal := false
+				// Skip internal nodes for stats
 				for _, label := range node.Labels {
 					if len(label) > 0 && label[0] == '_' {
-						isInternal = true
-						break
+						internal++
+						return nil
 					}
 				}
-				if isInternal {
-					internal++
-					return nil // Continue to next node
-				}
 
-				// Check embedding
+				// Track nodes with embeddings for stats
 				if len(node.Embedding) > 0 {
 					withEmbed++
-					return nil // Has embedding, continue
+					return nil
 				}
 
-				// Found one without embedding
+				// Use helper to check if node needs embedding
+				if !NodeNeedsEmbedding(node) {
+					return nil
+				}
+
+				// Found one that needs embedding
 				result = node
 				return ErrIterationStopped // Custom error to break iteration
 			})
@@ -1597,9 +1700,6 @@ func (b *BadgerEngine) FindNodeNeedingEmbedding() *Node {
 
 	return result
 }
-
-// ErrIterationStopped is used to break iteration early
-var ErrIterationStopped = fmt.Errorf("iteration stopped")
 
 // IterateNodes iterates through all nodes one at a time without loading all into memory.
 // The callback returns true to continue, false to stop.
@@ -1638,6 +1738,165 @@ func (b *BadgerEngine) IterateNodes(fn func(*Node) bool) error {
 	})
 }
 
+// StreamNodes implements StreamingEngine.StreamNodes for memory-efficient iteration.
+// Iterates through all nodes one at a time without loading all into memory.
+func (b *BadgerEngine) StreamNodes(ctx context.Context, fn func(node *Node) error) error {
+	b.mu.RLock()
+	if b.closed {
+		b.mu.RUnlock()
+		return ErrStorageClosed
+	}
+	b.mu.RUnlock()
+
+	return b.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = true
+		opts.PrefetchSize = 10
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		prefix := []byte{prefixNode}
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			// Check context cancellation
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+
+			item := it.Item()
+			var node *Node
+			err := item.Value(func(val []byte) error {
+				var decErr error
+				node, decErr = decodeNode(val)
+				return decErr
+			})
+			if err != nil {
+				continue // Skip invalid nodes
+			}
+			if err := fn(node); err != nil {
+				if err == ErrIterationStopped {
+					return nil // Normal stop
+				}
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// StreamEdges implements StreamingEngine.StreamEdges for memory-efficient iteration.
+// Iterates through all edges one at a time without loading all into memory.
+func (b *BadgerEngine) StreamEdges(ctx context.Context, fn func(edge *Edge) error) error {
+	b.mu.RLock()
+	if b.closed {
+		b.mu.RUnlock()
+		return ErrStorageClosed
+	}
+	b.mu.RUnlock()
+
+	return b.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = true
+		opts.PrefetchSize = 10
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		prefix := []byte{prefixEdge}
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			// Check context cancellation
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+
+			item := it.Item()
+			var edge *Edge
+			err := item.Value(func(val []byte) error {
+				var decErr error
+				edge, decErr = decodeEdge(val)
+				return decErr
+			})
+			if err != nil {
+				continue // Skip invalid edges
+			}
+			if err := fn(edge); err != nil {
+				if err == ErrIterationStopped {
+					return nil // Normal stop
+				}
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// StreamNodeChunks implements StreamingEngine.StreamNodeChunks for batch processing.
+// Iterates through nodes in chunks, more efficient for batch operations.
+func (b *BadgerEngine) StreamNodeChunks(ctx context.Context, chunkSize int, fn func(nodes []*Node) error) error {
+	if chunkSize <= 0 {
+		chunkSize = 1000
+	}
+
+	b.mu.RLock()
+	if b.closed {
+		b.mu.RUnlock()
+		return ErrStorageClosed
+	}
+	b.mu.RUnlock()
+
+	return b.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = true
+		opts.PrefetchSize = min(chunkSize, 100)
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		chunk := make([]*Node, 0, chunkSize)
+		prefix := []byte{prefixNode}
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			// Check context cancellation
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+
+			item := it.Item()
+			var node *Node
+			err := item.Value(func(val []byte) error {
+				var decErr error
+				node, decErr = decodeNode(val)
+				return decErr
+			})
+			if err != nil {
+				continue // Skip invalid nodes
+			}
+
+			chunk = append(chunk, node)
+
+			if len(chunk) >= chunkSize {
+				if err := fn(chunk); err != nil {
+					return err
+				}
+				// Reset chunk, reuse capacity
+				chunk = chunk[:0]
+			}
+		}
+
+		// Process remaining nodes
+		if len(chunk) > 0 {
+			if err := fn(chunk); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+}
+
 // ============================================================================
 // Utility functions for compatibility
 // ============================================================================
@@ -1645,6 +1904,68 @@ func (b *BadgerEngine) IterateNodes(fn func(*Node) bool) error {
 // HasPrefix checks if a byte slice has the given prefix.
 func hasPrefix(s, prefix []byte) bool {
 	return len(s) >= len(prefix) && bytes.Equal(s[:len(prefix)], prefix)
+}
+
+// ClearAllEmbeddings removes embeddings from all nodes, allowing them to be regenerated.
+// Returns the number of nodes that had their embeddings cleared.
+func (b *BadgerEngine) ClearAllEmbeddings() (int, error) {
+	b.mu.Lock()
+	if b.closed {
+		b.mu.Unlock()
+		return 0, ErrStorageClosed
+	}
+	b.mu.Unlock()
+
+	cleared := 0
+
+	// First, collect all node IDs that have embeddings
+	var nodeIDs []NodeID
+	err := b.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = true
+		opts.PrefetchSize = 100
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		prefix := []byte{prefixNode}
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			item := it.Item()
+			err := item.Value(func(val []byte) error {
+				node, err := decodeNode(val)
+				if err != nil {
+					return nil // Skip invalid nodes
+				}
+				if len(node.Embedding) > 0 {
+					nodeIDs = append(nodeIDs, node.ID)
+				}
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, fmt.Errorf("error scanning nodes: %w", err)
+	}
+
+	// Now update each node to clear its embedding
+	for _, id := range nodeIDs {
+		node, err := b.GetNode(id)
+		if err != nil {
+			continue // Skip if node no longer exists
+		}
+		node.Embedding = nil
+		if err := b.UpdateNode(node); err != nil {
+			log.Printf("Warning: failed to clear embedding for node %s: %v", id, err)
+			continue
+		}
+		cleared++
+	}
+
+	log.Printf("✓ Cleared embeddings from %d nodes", cleared)
+	return cleared, nil
 }
 
 // Verify BadgerEngine implements Engine interface

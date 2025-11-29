@@ -28,6 +28,14 @@ config/rbac.*.json
 !config/rbac.json
 docker/llama-cpp/models/*
 nornicdb/nornicdb
+nornicdb/nornicdb_local
 # BadgerDB test data directories (created by nornicdb tests)
 nornicdb/pkg/nornicdb/testdata/
 nornicdb/pkg/nornicdb/custom/
+nornicdb/models/bge-m3.gguf
+
+# llama.cpp pre-built static libraries (too large, platform-specific)
+# Users should build locally using scripts/build-llama-cuda.ps1 (Windows) or build-llama.sh (Linux)
+# Headers (.h) and VERSION file are checked in for CGO compilation
+nornicdb/lib/llama/**/*.lib
+nornicdb/lib/llama/**/*.a

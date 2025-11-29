@@ -96,26 +96,48 @@ for i, text := range texts {
 
 ### Cached Embeddings
 
+NornicDB includes a transparent LRU cache wrapper that provides **450,000x speedup** for repeated queries.
+
 ```go
-// Use auto-embedder with caching
-config := embed.DefaultAutoEmbedConfig(embedder)
-config.Workers = 8
-config.MaxCacheSize = 50000
+// Wrap any embedder with caching (default: 10K entries)
+base := embed.NewOllama(nil)
+cached := embed.NewCachedEmbedder(base, 10000)
 
-autoEmbedder := embed.NewAutoEmbedder(config)
-defer autoEmbedder.Stop()
+// First call generates embedding (~50-200ms)
+emb1, _ := cached.Embed(ctx, "Hello world")
 
-// First call generates embedding
-emb1, _ := autoEmbedder.Embed(ctx, "Hello world")
-
-// Second call uses cache (much faster!)
-emb2, _ := autoEmbedder.Embed(ctx, "Hello world")
+// Second call uses cache (~111ns - 450,000x faster!)
+emb2, _ := cached.Embed(ctx, "Hello world")
 
 // Check cache statistics
-stats := autoEmbedder.Stats()
-fmt.Printf("Cache hit rate: %.2f%%\n",
-    float64(stats["cache_hits"]) / 
-    float64(stats["cache_hits"] + stats["cache_misses"]) * 100)
+stats := cached.Stats()
+fmt.Printf("Cache: %d/%d entries, %.1f%% hit rate\n",
+    stats.Size, stats.MaxSize, stats.HitRate)
+```
+
+**Cache is enabled by default** when starting NornicDB server:
+
+```bash
+# Default: 10K cache (~40MB for 1024-dim vectors)
+nornicdb serve
+
+# Increase for heavy workloads
+nornicdb serve --embedding-cache 50000
+
+# Disable caching
+nornicdb serve --embedding-cache 0
+
+# Or via environment variable
+export NORNICDB_EMBEDDING_CACHE_SIZE=50000
+```
+
+**Batch operations also benefit from caching**:
+
+```go
+// Only uncached texts are sent to the embedder
+texts := []string{"cached", "new1", "new2"}
+embeddings, _ := cached.EmbedBatch(ctx, texts)
+// If "cached" was previously embedded, only "new1" and "new2" are processed
 ```
 
 ### Asynchronous Embedding

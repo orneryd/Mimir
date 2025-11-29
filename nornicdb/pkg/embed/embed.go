@@ -770,7 +770,8 @@ func (e *OpenAIEmbedder) Model() string {
 // NewEmbedder creates an embedder based on the provider specified in config.
 //
 // Supported providers:
-//   - "ollama": Local open-source models
+//   - "local": Local GGUF models via llama.cpp (GPU-accelerated)
+//   - "ollama": External Ollama server
 //   - "openai": OpenAI cloud API
 //
 // This is a convenience function for dynamic provider selection.
@@ -778,13 +779,20 @@ func (e *OpenAIEmbedder) Model() string {
 // Example:
 //
 //	// Dynamic provider selection
-//	provider := os.Getenv("EMBEDDING_PROVIDER") // "ollama" or "openai"
+//	provider := os.Getenv("EMBEDDING_PROVIDER") // "local", "ollama", or "openai"
 //
 //	var config *embed.Config
-//	if provider == "openai" {
+//	switch provider {
+//	case "local":
+//		config = &embed.Config{
+//			Provider:   "local",
+//			Model:      "bge-m3",
+//			Dimensions: 1024,
+//		}
+//	case "openai":
 //		apiKey := os.Getenv("OPENAI_API_KEY")
 //		config = embed.DefaultOpenAIConfig(apiKey)
-//	} else {
+//	default:
 //		config = embed.DefaultOllamaConfig()
 //	}
 //
@@ -797,9 +805,11 @@ func (e *OpenAIEmbedder) Model() string {
 //	vec, err := embedder.Embed(ctx, "test")
 //
 // Returns an Embedder interface, or an error if the provider is unknown or
-// configuration is invalid (e.g., OpenAI without API key).
+// configuration is invalid (e.g., OpenAI without API key, local without model).
 func NewEmbedder(config *Config) (Embedder, error) {
 	switch config.Provider {
+	case "local":
+		return NewLocalGGUF(config)
 	case "ollama":
 		return NewOllama(config), nil
 	case "openai":
@@ -808,6 +818,6 @@ func NewEmbedder(config *Config) (Embedder, error) {
 		}
 		return NewOpenAI(config), nil
 	default:
-		return nil, fmt.Errorf("unknown provider: %s", config.Provider)
+		return nil, fmt.Errorf("unknown provider: %s (supported: local, ollama, openai)", config.Provider)
 	}
 }

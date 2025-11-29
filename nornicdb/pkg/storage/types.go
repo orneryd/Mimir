@@ -48,6 +48,7 @@
 package storage
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"time"
@@ -55,12 +56,13 @@ import (
 
 // Common errors
 var (
-	ErrNotFound       = errors.New("not found")
-	ErrAlreadyExists  = errors.New("already exists")
-	ErrInvalidID      = errors.New("invalid id")
-	ErrInvalidData    = errors.New("invalid data")
-	ErrInvalidEdge    = errors.New("invalid edge: start or end node not found")
-	ErrStorageClosed  = errors.New("storage closed")
+	ErrNotFound         = errors.New("not found")
+	ErrAlreadyExists    = errors.New("already exists")
+	ErrInvalidID        = errors.New("invalid id")
+	ErrInvalidData      = errors.New("invalid data")
+	ErrInvalidEdge      = errors.New("invalid edge: start or end node not found")
+	ErrStorageClosed    = errors.New("storage closed")
+	ErrIterationStopped = errors.New("iteration stopped") // Sentinel to stop streaming early
 )
 
 // NodeID is a strongly-typed unique identifier for graph nodes.
@@ -177,12 +179,13 @@ type EdgeID string
 //   - Extensions stored with "_" prefix in Neo4j exports
 //
 // Thread Safety:
-//   Node structs are NOT thread-safe. The storage engine handles concurrency.
+//
+//	Node structs are NOT thread-safe. The storage engine handles concurrency.
 type Node struct {
-	ID         NodeID            `json:"id"`
-	Labels     []string          `json:"labels"`
-	Properties map[string]any    `json:"properties"`
-	
+	ID         NodeID         `json:"id"`
+	Labels     []string       `json:"labels"`
+	Properties map[string]any `json:"properties"`
+
 	// NornicDB extensions
 	CreatedAt    time.Time `json:"-"`
 	UpdatedAt    time.Time `json:"-"`
@@ -288,14 +291,15 @@ type Node struct {
 //   - Direction is always preserved (Neo4j requirement)
 //
 // Thread Safety:
-//   Edge structs are NOT thread-safe. The storage engine handles concurrency.
+//
+//	Edge structs are NOT thread-safe. The storage engine handles concurrency.
 type Edge struct {
-	ID         EdgeID            `json:"id"`
-	StartNode  NodeID            `json:"startNode"`
-	EndNode    NodeID            `json:"endNode"`
-	Type       string            `json:"type"`
-	Properties map[string]any    `json:"properties"`
-	
+	ID         EdgeID         `json:"id"`
+	StartNode  NodeID         `json:"startNode"`
+	EndNode    NodeID         `json:"endNode"`
+	Type       string         `json:"type"`
+	Properties map[string]any `json:"properties"`
+
 	// NornicDB extensions
 	CreatedAt     time.Time `json:"-"`
 	UpdatedAt     time.Time `json:"-"`
@@ -352,13 +356,13 @@ type Engine interface {
 	GetNode(id NodeID) (*Node, error)
 	UpdateNode(node *Node) error
 	DeleteNode(id NodeID) error
-	
-	// Edge operations  
+
+	// Edge operations
 	CreateEdge(edge *Edge) error
 	GetEdge(id EdgeID) (*Edge, error)
 	UpdateEdge(edge *Edge) error
 	DeleteEdge(id EdgeID) error
-	
+
 	// Query operations
 	GetNodesByLabel(label string) ([]*Node, error)
 	GetOutgoingEdges(nodeID NodeID) ([]*Edge, error)
@@ -368,21 +372,25 @@ type Engine interface {
 	AllNodes() ([]*Node, error)
 	AllEdges() ([]*Edge, error)
 	GetAllNodes() []*Node
-	
+
 	// Degree operations (for graph algorithms)
 	GetInDegree(nodeID NodeID) int
 	GetOutDegree(nodeID NodeID) int
-	
+
 	// Schema operations
 	GetSchema() *SchemaManager
-	
+
 	// Bulk operations (for import)
 	BulkCreateNodes(nodes []*Node) error
 	BulkCreateEdges(edges []*Edge) error
-	
+
+	// Bulk delete operations (for async flush performance)
+	BulkDeleteNodes(ids []NodeID) error
+	BulkDeleteEdges(ids []EdgeID) error
+
 	// Lifecycle
 	Close() error
-	
+
 	// Stats
 	NodeCount() (int64, error)
 	EdgeCount() (int64, error)
@@ -397,9 +405,9 @@ type Neo4jExport struct {
 
 // Neo4jNode is the Neo4j JSON export format for nodes.
 type Neo4jNode struct {
-	ID         string            `json:"id"`
-	Labels     []string          `json:"labels"`
-	Properties map[string]any    `json:"properties"`
+	ID         string         `json:"id"`
+	Labels     []string       `json:"labels"`
+	Properties map[string]any `json:"properties"`
 }
 
 // Neo4jNodeRef is a reference to a node in Neo4j relationship format.
@@ -411,24 +419,24 @@ type Neo4jNodeRef struct {
 // Neo4jRelationship is the Neo4j JSON export format for relationships.
 // Supports both flat format (startNode/endNode strings) and APOC format (start/end objects).
 type Neo4jRelationship struct {
-	ID         string            `json:"id"`
-	Type       string            `json:"type"`
-	Properties map[string]any    `json:"properties"`
-	
+	ID         string         `json:"id"`
+	Type       string         `json:"type"`
+	Properties map[string]any `json:"properties"`
+
 	// Flat format (neo4j-admin dump)
-	StartNode  string            `json:"startNode,omitempty"`
-	EndNode    string            `json:"endNode,omitempty"`
-	
+	StartNode string `json:"startNode,omitempty"`
+	EndNode   string `json:"endNode,omitempty"`
+
 	// APOC format (apoc.export.json)
-	Start      Neo4jNodeRef      `json:"start,omitempty"`
-	End        Neo4jNodeRef      `json:"end,omitempty"`
+	Start Neo4jNodeRef `json:"start,omitempty"`
+	End   Neo4jNodeRef `json:"end,omitempty"`
 }
 
 // GetStartID returns the start node ID supporting both Neo4j export formats.
 //
 // Neo4j exports can use two formats:
-//   1. Flat format: startNode/endNode as strings (neo4j-admin dump)
-//   2. APOC format: start/end as objects (apoc.export.json)
+//  1. Flat format: startNode/endNode as strings (neo4j-admin dump)
+//  2. APOC format: start/end as objects (apoc.export.json)
 //
 // This method abstracts the difference, always returning the start node ID.
 //
@@ -491,13 +499,14 @@ func (r *Neo4jRelationship) GetEndID() string {
 //	// CALL apoc.import.json("file:///neo4j-export.json")
 //
 // NornicDB extensions are preserved as properties:
-//   _decayScore, _lastAccessed, _accessCount, _confidence, _autoGenerated
+//
+//	_decayScore, _lastAccessed, _accessCount, _confidence, _autoGenerated
 func ToNeo4jExport(nodes []*Node, edges []*Edge) *Neo4jExport {
 	export := &Neo4jExport{
 		Nodes:         make([]Neo4jNode, len(nodes)),
 		Relationships: make([]Neo4jRelationship, len(edges)),
 	}
-	
+
 	for i, n := range nodes {
 		export.Nodes[i] = Neo4jNode{
 			ID:         string(n.ID),
@@ -505,7 +514,7 @@ func ToNeo4jExport(nodes []*Node, edges []*Edge) *Neo4jExport {
 			Properties: n.mergeInternalProperties(),
 		}
 	}
-	
+
 	for i, e := range edges {
 		props := make(map[string]any)
 		for k, v := range e.Properties {
@@ -521,7 +530,7 @@ func ToNeo4jExport(nodes []*Node, edges []*Edge) *Neo4jExport {
 		if !e.CreatedAt.IsZero() {
 			props["_createdAt"] = e.CreatedAt.Unix()
 		}
-		
+
 		export.Relationships[i] = Neo4jRelationship{
 			ID:         string(e.ID),
 			StartNode:  string(e.StartNode),
@@ -530,7 +539,7 @@ func ToNeo4jExport(nodes []*Node, edges []*Edge) *Neo4jExport {
 			Properties: props,
 		}
 	}
-	
+
 	return export
 }
 
@@ -568,14 +577,14 @@ func ToNeo4jExport(nodes []*Node, edges []*Edge) *Neo4jExport {
 func FromNeo4jExport(export *Neo4jExport) ([]*Node, []*Edge) {
 	nodes := make([]*Node, len(export.Nodes))
 	edges := make([]*Edge, len(export.Relationships))
-	
+
 	for i, n := range export.Nodes {
 		// Copy properties
 		props := make(map[string]any)
 		for k, v := range n.Properties {
 			props[k] = v
 		}
-		
+
 		node := &Node{
 			ID:         NodeID(n.ID),
 			Labels:     n.Labels,
@@ -586,14 +595,14 @@ func FromNeo4jExport(export *Neo4jExport) ([]*Node, []*Edge) {
 		node.ExtractInternalProperties()
 		nodes[i] = node
 	}
-	
+
 	for i, r := range export.Relationships {
 		// Copy properties
 		props := make(map[string]any)
 		for k, v := range r.Properties {
 			props[k] = v
 		}
-		
+
 		edge := &Edge{
 			ID:         EdgeID(r.ID),
 			StartNode:  NodeID(r.GetStartID()),
@@ -601,7 +610,7 @@ func FromNeo4jExport(export *Neo4jExport) ([]*Node, []*Edge) {
 			Type:       r.Type,
 			Properties: props,
 		}
-		
+
 		// Extract edge-specific internal properties
 		if conf, ok := props["_confidence"].(float64); ok {
 			edge.Confidence = conf
@@ -615,10 +624,10 @@ func FromNeo4jExport(export *Neo4jExport) ([]*Node, []*Edge) {
 			edge.CreatedAt = time.Unix(int64(created), 0)
 			delete(edge.Properties, "_createdAt")
 		}
-		
+
 		edges[i] = edge
 	}
-	
+
 	return nodes, edges
 }
 
@@ -638,14 +647,14 @@ func (n *Node) mergeInternalProperties() map[string]any {
 	for k, v := range n.Properties {
 		props[k] = v
 	}
-	
+
 	// Add internal properties with _ prefix (Neo4j convention for system props)
 	props["_createdAt"] = n.CreatedAt.Unix()
 	props["_updatedAt"] = n.UpdatedAt.Unix()
 	props["_decayScore"] = n.DecayScore
 	props["_lastAccessed"] = n.LastAccessed.Unix()
 	props["_accessCount"] = n.AccessCount
-	
+
 	return props
 }
 
@@ -654,7 +663,7 @@ func (n *Node) ExtractInternalProperties() {
 	if n.Properties == nil {
 		return
 	}
-	
+
 	if v, ok := n.Properties["_createdAt"].(float64); ok {
 		n.CreatedAt = time.Unix(int64(v), 0)
 		delete(n.Properties, "_createdAt")
@@ -675,4 +684,207 @@ func (n *Node) ExtractInternalProperties() {
 		n.AccessCount = int64(v)
 		delete(n.Properties, "_accessCount")
 	}
+}
+
+// =============================================================================
+// STREAMING INTERFACE
+// =============================================================================
+
+// StreamingEngine extends Engine with streaming iteration support.
+// This is optional - engines that don't support streaming will use
+// the default AllNodes/AllEdges with chunked processing.
+type StreamingEngine interface {
+	Engine
+
+	// StreamNodes iterates over all nodes without loading all into memory.
+	// The callback is called for each node. Return an error to stop iteration.
+	// Returns nil on successful completion, context.Canceled on cancellation.
+	StreamNodes(ctx context.Context, fn func(node *Node) error) error
+
+	// StreamEdges iterates over all edges without loading all into memory.
+	StreamEdges(ctx context.Context, fn func(edge *Edge) error) error
+
+	// StreamNodeChunks iterates over nodes in chunks for batch processing.
+	// More efficient than StreamNodes when processing in batches.
+	StreamNodeChunks(ctx context.Context, chunkSize int, fn func(nodes []*Node) error) error
+}
+
+// NodeVisitor is a function called for each node during streaming.
+type NodeVisitor func(node *Node) error
+
+// EdgeVisitor is a function called for each edge during streaming.
+type EdgeVisitor func(edge *Edge) error
+
+// StreamNodesWithFallback provides streaming iteration with fallback.
+// If the engine supports StreamingEngine, it uses that.
+// Otherwise, it loads all nodes but processes them in chunks.
+func StreamNodesWithFallback(ctx context.Context, engine Engine, chunkSize int, fn NodeVisitor) error {
+	// Try streaming interface first
+	if streamer, ok := engine.(StreamingEngine); ok {
+		return streamer.StreamNodes(ctx, fn)
+	}
+
+	// Fallback: load all but process in chunks to allow GC between
+	nodes, err := engine.AllNodes()
+	if err != nil {
+		return err
+	}
+
+	for i, node := range nodes {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		if err := fn(node); err != nil {
+			return err
+		}
+
+		// Nil out the reference to allow GC
+		nodes[i] = nil
+
+		// Hint GC every chunk
+		if chunkSize > 0 && (i+1)%chunkSize == 0 {
+			// runtime.GC() // Optional: enable for aggressive GC
+		}
+	}
+
+	return nil
+}
+
+// StreamEdgesWithFallback provides streaming iteration with fallback.
+func StreamEdgesWithFallback(ctx context.Context, engine Engine, chunkSize int, fn EdgeVisitor) error {
+	// Try streaming interface first
+	if streamer, ok := engine.(StreamingEngine); ok {
+		return streamer.StreamEdges(ctx, fn)
+	}
+
+	// Fallback: load all but process in chunks
+	edges, err := engine.AllEdges()
+	if err != nil {
+		return err
+	}
+
+	for i, edge := range edges {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		if err := fn(edge); err != nil {
+			return err
+		}
+
+		// Nil out the reference to allow GC
+		edges[i] = nil
+	}
+
+	return nil
+}
+
+// NodeNeedsEmbedding checks if a node needs an embedding to be generated.
+// Returns true if the node should have an embedding generated, false if it should be skipped.
+//
+// A node is skipped (returns false) if:
+//   - It has an internal label (starts with '_')
+//   - It already has an embedding
+//   - It has the "embedding_skipped" property set
+//   - It has "has_embedding" property explicitly set to false
+//
+// Example:
+//
+//	for _, node := range nodes {
+//	    if storage.NodeNeedsEmbedding(node) {
+//	        generateEmbedding(node)
+//	    }
+//	}
+func NodeNeedsEmbedding(node *Node) bool {
+	if node == nil {
+		return false
+	}
+
+	// Skip internal nodes (labels starting with _)
+	for _, label := range node.Labels {
+		if len(label) > 0 && label[0] == '_' {
+			return false
+		}
+	}
+
+	// Skip if already has embedding
+	if len(node.Embedding) > 0 {
+		return false
+	}
+
+	// Skip if already processed (marked as skipped)
+	if _, skipped := node.Properties["embedding_skipped"]; skipped {
+		return false
+	}
+
+	// Skip if explicitly marked as not needing embedding
+	if hasEmbed, ok := node.Properties["has_embedding"].(bool); ok && !hasEmbed {
+		return false
+	}
+
+	return true
+}
+
+// CountNodesWithLabel counts nodes with a specific label using streaming.
+func CountNodesWithLabel(ctx context.Context, engine Engine, label string) (int64, error) {
+	var count int64
+
+	err := StreamNodesWithFallback(ctx, engine, 1000, func(node *Node) error {
+		for _, l := range node.Labels {
+			if l == label {
+				count++
+				break
+			}
+		}
+		return nil
+	})
+
+	return count, err
+}
+
+// CollectLabels collects all unique labels using streaming.
+func CollectLabels(ctx context.Context, engine Engine) ([]string, error) {
+	labelSet := make(map[string]struct{})
+
+	err := StreamNodesWithFallback(ctx, engine, 1000, func(node *Node) error {
+		for _, l := range node.Labels {
+			labelSet[l] = struct{}{}
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	labels := make([]string, 0, len(labelSet))
+	for l := range labelSet {
+		labels = append(labels, l)
+	}
+	return labels, nil
+}
+
+// CollectEdgeTypes collects all unique edge types using streaming.
+func CollectEdgeTypes(ctx context.Context, engine Engine) ([]string, error) {
+	typeSet := make(map[string]struct{})
+
+	err := StreamEdgesWithFallback(ctx, engine, 1000, func(edge *Edge) error {
+		typeSet[edge.Type] = struct{}{}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	types := make([]string, 0, len(typeSet))
+	for t := range typeSet {
+		types = append(types, t)
+	}
+	return types, nil
 }

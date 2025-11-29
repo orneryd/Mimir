@@ -418,6 +418,85 @@ func TestBadgerEngine_DeleteEdge(t *testing.T) {
 	})
 }
 
+func TestBadgerEngine_BulkDeleteNodes(t *testing.T) {
+	engine := createTestBadgerEngine(t)
+
+	// Create multiple nodes
+	for i := 0; i < 10; i++ {
+		node := &Node{
+			ID:     NodeID(fmt.Sprintf("bulk-del-node-%d", i)),
+			Labels: []string{"BulkTest"},
+		}
+		require.NoError(t, engine.CreateNode(node))
+	}
+
+	count, _ := engine.NodeCount()
+	assert.Equal(t, int64(10), count)
+
+	t.Run("deletes multiple nodes in single transaction", func(t *testing.T) {
+		ids := []NodeID{"bulk-del-node-0", "bulk-del-node-1", "bulk-del-node-2"}
+		err := engine.BulkDeleteNodes(ids)
+		require.NoError(t, err)
+
+		count, _ := engine.NodeCount()
+		assert.Equal(t, int64(7), count)
+
+		// Verify nodes are gone
+		_, err = engine.GetNode("bulk-del-node-0")
+		assert.ErrorIs(t, err, ErrNotFound)
+	})
+
+	t.Run("handles empty slice", func(t *testing.T) {
+		err := engine.BulkDeleteNodes([]NodeID{})
+		require.NoError(t, err)
+	})
+
+	t.Run("continues on not found", func(t *testing.T) {
+		ids := []NodeID{"nonexistent", "bulk-del-node-3", "also-nonexistent"}
+		err := engine.BulkDeleteNodes(ids)
+		require.NoError(t, err) // Should not error
+
+		_, err = engine.GetNode("bulk-del-node-3")
+		assert.ErrorIs(t, err, ErrNotFound)
+	})
+}
+
+func TestBadgerEngine_BulkDeleteEdges(t *testing.T) {
+	engine := createTestBadgerEngine(t)
+
+	// Create nodes
+	require.NoError(t, engine.CreateNode(&Node{ID: "n1"}))
+	require.NoError(t, engine.CreateNode(&Node{ID: "n2"}))
+
+	// Create multiple edges
+	for i := 0; i < 10; i++ {
+		edge := &Edge{
+			ID:        EdgeID(fmt.Sprintf("bulk-del-edge-%d", i)),
+			StartNode: "n1",
+			EndNode:   "n2",
+			Type:      "TEST",
+		}
+		require.NoError(t, engine.CreateEdge(edge))
+	}
+
+	count, _ := engine.EdgeCount()
+	assert.Equal(t, int64(10), count)
+
+	t.Run("deletes multiple edges in single transaction", func(t *testing.T) {
+		ids := []EdgeID{"bulk-del-edge-0", "bulk-del-edge-1", "bulk-del-edge-2"}
+		err := engine.BulkDeleteEdges(ids)
+		require.NoError(t, err)
+
+		count, _ := engine.EdgeCount()
+		assert.Equal(t, int64(7), count)
+	})
+
+	t.Run("handles empty slice", func(t *testing.T) {
+		err := engine.BulkDeleteEdges([]EdgeID{})
+		require.NoError(t, err)
+	})
+}
+
 // ============================================================================
 // Query Tests
 // ============================================================================

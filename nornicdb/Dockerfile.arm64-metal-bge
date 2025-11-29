@@ -1,0 +1,160 @@
+# NornicDB Docker Image with Embedded BGE-M3 Model for ARM64/Metal
+# Self-contained image with local GGUF embedding - no external services required
+#
+# Build: docker build -f Dockerfile.arm64-metal-bge -t timothyswt/nornicdb-arm64-metal-bge:latest .
+# Run:   docker run -p 7474:7474 -p 7687:7687 timothyswt/nornicdb-arm64-metal-bge:latest
+
+# =============================================================================
+# Stage 1: Build the UI
+# =============================================================================
+FROM node:20-alpine AS ui-builder
+
+WORKDIR /ui
+RUN npm config set registry https://registry.npmjs.org/
+COPY ui/package.json ui/package-lock.json* ./
+RUN npm ci 2>/dev/null || npm install --legacy-peer-deps
+COPY ui/ .
+RUN npm run build
+
+# =============================================================================
+# Stage 2: Build llama.cpp static libraries for ARM64
+# =============================================================================
+FROM debian:bookworm-slim AS llama-builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    git \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Clone and build llama.cpp
+ARG LLAMA_VERSION=b4535
+WORKDIR /llama
+RUN git clone --depth 1 --branch ${LLAMA_VERSION} https://github.com/ggerganov/llama.cpp.git .
+
+# Build static library optimized for ARM64
+ARG LLAMA_CMAKE_C_FLAGS="-mcpu=generic"
+ARG LLAMA_CMAKE_CXX_FLAGS="-mcpu=generic"
+ARG LLAMA_NATIVE=OFF
+ARG LLAMA_EXTRA_CMAKE_ARGS=""
+
+RUN echo "Building llama.cpp with:" && \
+    echo "  LLAMA_CMAKE_C_FLAGS=${LLAMA_CMAKE_C_FLAGS}" && \
+    echo "  LLAMA_CMAKE_CXX_FLAGS=${LLAMA_CMAKE_CXX_FLAGS}" && \
+    echo "  LLAMA_NATIVE=${LLAMA_NATIVE}" && \
+    echo "  LLAMA_EXTRA_CMAKE_ARGS=${LLAMA_EXTRA_CMAKE_ARGS}" && \
+    cmake -B build \
+    -DLLAMA_STATIC=ON \
+    -DBUILD_SHARED_LIBS=OFF \
+    -DLLAMA_BUILD_TESTS=OFF \
+    -DLLAMA_BUILD_EXAMPLES=OFF \
+    -DLLAMA_BUILD_SERVER=OFF \
+    -DGGML_NATIVE=${LLAMA_NATIVE} \
+    -DGGML_OPENMP=OFF \
+    -DCMAKE_C_FLAGS="${LLAMA_CMAKE_C_FLAGS}" \
+    -DCMAKE_CXX_FLAGS="${LLAMA_CMAKE_CXX_FLAGS}" \
+    ${LLAMA_EXTRA_CMAKE_ARGS} \
+    && cmake --build build --config Release -j$(nproc)
+
+# Combine all static libraries into one
+RUN set -e && \
+    mkdir -p /llama/lib && \
+    find build -name "*.a" -exec cp {} /llama/lib/ \; && \
+    echo "Found libraries:" && ls -la /llama/lib/*.a && \
+    test -f /llama/lib/libllama.a || (echo "ERROR: libllama.a not found" && exit 1) && \
+    echo "CREATE /llama/lib/libllama_combined.a" > /tmp/ar_script.mri && \
+    for lib in /llama/lib/lib*.a; do \
+        echo "ADDLIB $lib" >> /tmp/ar_script.mri; \
+    done && \
+    echo "SAVE" >> /tmp/ar_script.mri && \
+    echo "END" >> /tmp/ar_script.mri && \
+    echo "Combining libraries:" && cat /tmp/ar_script.mri && \
+    ar -M < /tmp/ar_script.mri && \
+    echo "Created combined library:" && ls -lh /llama/lib/libllama_combined.a
+
+# =============================================================================
+# Stage 3: Build NornicDB with CGO + localllm
+# =============================================================================
+FROM golang:1.23-bookworm AS builder
+
+WORKDIR /build
+
+# Install CGO dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy llama.cpp artifacts from llama-builder
+ARG TARGETARCH=arm64
+COPY --from=llama-builder /llama/lib/libllama_combined.a /build/lib/llama/libllama_linux_arm64.a
+COPY --from=llama-builder /llama/include/llama.h /build/lib/llama/
+COPY --from=llama-builder /llama/ggml/include/*.h /build/lib/llama/
+
+# Copy go mod files and download dependencies
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Copy built UI from ui-builder stage
+COPY --from=ui-builder /ui/dist ./ui/dist
+
+# Build with CGO enabled and localllm tag
+RUN CGO_ENABLED=1 GOOS=linux go build \
+    -tags=localllm \
+    -ldflags="-s -w -linkmode external -extldflags '-static'" \
+    -o nornicdb ./cmd/nornicdb
+
+# =============================================================================
+# Stage 4: Runtime with embedded BGE-M3 model
+# =============================================================================
+FROM debian:bookworm-slim
+
+WORKDIR /app
+
+# Install minimal runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    tzdata \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy binary from builder
+COPY --from=builder /build/nornicdb /app/nornicdb
+
+# Copy entrypoint script
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+
+# Create directories - models in /app/models (embedded), data in /data (volume)
+RUN mkdir -p /data /app/models
+
+# Copy the BGE-M3 model into the image (from models/ dir, not data/ which is dockerignored)
+COPY models/bge-m3.gguf /app/models/bge-m3.gguf
+
+# Expose ports
+EXPOSE 7474 7687
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+  CMD wget --spider -q http://localhost:7474/health || exit 1
+
+# Environment variables - models in /app/models (embedded in image)
+ENV NORNICDB_DATA_DIR=/data \
+    NORNICDB_HTTP_PORT=7474 \
+    NORNICDB_BOLT_PORT=7687 \
+    NORNICDB_EMBEDDING_PROVIDER=local \
+    NORNICDB_EMBEDDING_MODEL=bge-m3 \
+    NORNICDB_EMBEDDING_DIMENSIONS=1024 \
+    NORNICDB_MODELS_DIR=/app/models \
+    NORNICDB_EMBEDDING_GPU_LAYERS=0 \
+    NORNICDB_EMBEDDING_CACHE_SIZE=10000 \
+    NORNICDB_NO_AUTH=true
+
+# Entry point
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
+CMD []
+

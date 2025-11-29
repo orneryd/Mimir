@@ -38,6 +38,7 @@ func setupTestServer(t *testing.T) (*Server, *auth.Authenticator) {
 	config := nornicdb.DefaultConfig()
 	config.DecayEnabled = false
 	config.AutoLinksEnabled = false
+	config.AsyncWritesEnabled = false // Disable async writes for predictable test behavior (200 OK vs 202 Accepted)
 
 	db, err := nornicdb.Open(tmpDir, config)
 	if err != nil {

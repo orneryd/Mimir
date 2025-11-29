@@ -10,9 +10,9 @@ set CGO_ENABLED=1
 set CC=cl
 set CXX=cl
 
-REM Build with cuda tag
+REM Build with cuda and localllm tags for GPU-accelerated local embeddings
 echo Building NornicDB with CUDA support...
-go build -tags cuda -o bin\nornicdb.exe .\cmd\nornicdb
+go build -tags "cuda localllm" -o bin\nornicdb.exe .\cmd\nornicdb
 if %ERRORLEVEL% NEQ 0 (
     echo CUDA build failed!
     exit /b 1
@@ -26,5 +26,5 @@ if %ERRORLEVEL% NEQ 0 (
 
 echo.
 echo Build successful!
-echo   bin\nornicdb.exe (with CUDA)
+echo   bin\nornicdb.exe (with CUDA + local LLM support)
 echo   bin\nornicdb-bolt.exe
