@@ -1069,12 +1069,36 @@ func (e *StorageExecutor) executeMatchCreateBlock(ctx context.Context, block str
 	matchPart := strings.TrimSpace(block[:createIdx])
 	createPart := strings.TrimSpace(block[createIdx:]) // Keep "CREATE" for splitting
 
+	// Find WITH clause (for MATCH...CREATE...WITH...DELETE pattern)
+	withIdx := findKeywordIndex(createPart, "WITH")
+	deleteIdx := findKeywordIndex(createPart, "DELETE")
+	var deleteTarget string
+	hasWithDelete := withIdx > 0 && deleteIdx > withIdx
+
 	// Find RETURN clause if present (only in last block typically)
 	returnIdx := findKeywordIndex(createPart, "RETURN")
 	var returnPart string
 	if returnIdx > 0 {
 		returnPart = strings.TrimSpace(createPart[returnIdx+6:])
-		createPart = strings.TrimSpace(createPart[:returnIdx])
+		if hasWithDelete {
+			// WITH...DELETE...RETURN - extract delete target and strip
+			withDeletePart := createPart[withIdx:returnIdx]
+			deletePartIdx := findKeywordIndex(withDeletePart, "DELETE")
+			if deletePartIdx > 0 {
+				deleteTarget = strings.TrimSpace(withDeletePart[deletePartIdx+6:])
+			}
+			createPart = strings.TrimSpace(createPart[:withIdx])
+		} else {
+			createPart = strings.TrimSpace(createPart[:returnIdx])
+		}
+	} else if hasWithDelete {
+		// WITH...DELETE without RETURN
+		withDeletePart := createPart[withIdx:]
+		deletePartIdx := findKeywordIndex(withDeletePart, "DELETE")
+		if deletePartIdx > 0 {
+			deleteTarget = strings.TrimSpace(withDeletePart[deletePartIdx+6:])
+		}
+		createPart = strings.TrimSpace(createPart[:withIdx])
 	}
 
 	// Parse all node patterns from MATCH clause and find matching nodes
@@ -1089,8 +1113,8 @@ func (e *StorageExecutor) executeMatchCreateBlock(ctx context.Context, block str
 	}
 
 	// Split by MATCH keyword to handle comma-separated patterns in MATCH
-	// Uses optimized string-based splitting (~8x faster than regex)
-	matchClauses := SplitByMatch(matchPart)
+	// Uses pre-compiled matchKeywordPattern from regex_patterns.go
+	matchClauses := matchKeywordPattern.Split(matchPart, -1)
 
 	for _, clause := range matchClauses {
 		clause = strings.TrimSpace(clause)
@@ -1137,8 +1161,8 @@ func (e *StorageExecutor) executeMatchCreateBlock(ctx context.Context, block str
 	}
 
 	// Split CREATE part into individual CREATE statements
-	// Uses optimized string-based splitting (~8x faster than regex)
-	createClauses := SplitByCreate(createPart)
+	// Uses pre-compiled createKeywordPattern from regex_patterns.go
+	createClauses := createKeywordPattern.Split(createPart, -1)
 
 	for _, clause := range createClauses {
 		clause = strings.TrimSpace(clause)
@@ -1178,6 +1202,32 @@ func (e *StorageExecutor) executeMatchCreateBlock(ctx context.Context, block str
 		allEdgeVars[k] = v
 	}
 
+	// Execute DELETE if present (MATCH...CREATE...WITH...DELETE pattern)
+	if deleteTarget != "" {
+		if edge, exists := edgeVars[deleteTarget]; exists {
+			if err := e.storage.DeleteEdge(edge.ID); err == nil {
+				result.Stats.RelationshipsDeleted++
+			}
+		} else if node, exists := nodeVars[deleteTarget]; exists {
+			// Delete connected edges first
+			outEdges, _ := e.storage.GetOutgoingEdges(node.ID)
+			inEdges, _ := e.storage.GetIncomingEdges(node.ID)
+			for _, edge := range outEdges {
+				if err := e.storage.DeleteEdge(edge.ID); err == nil {
+					result.Stats.RelationshipsDeleted++
+				}
+			}
+			for _, edge := range inEdges {
+				if err := e.storage.DeleteEdge(edge.ID); err == nil {
+					result.Stats.RelationshipsDeleted++
+				}
+			}
+			if err := e.storage.DeleteNode(node.ID); err == nil {
+				result.Stats.NodesDeleted++
+			}
+		}
+	}
+
 	// Handle RETURN clause
 	if returnPart != "" {
 		returnItems := e.parseReturnItems(returnPart)
@@ -1189,6 +1239,13 @@ func (e *StorageExecutor) executeMatchCreateBlock(ctx context.Context, block str
 				result.Columns[i] = item.alias
 			} else {
 				result.Columns[i] = item.expr
+			}
+
+			// Handle count() after DELETE
+			upperExpr := strings.ToUpper(item.expr)
+			if strings.HasPrefix(upperExpr, "COUNT(") && deleteTarget != "" {
+				row[i] = int64(1) // count of deleted items
+				continue
 			}
 
 			// Find variable that matches

@@ -323,12 +323,11 @@ func (e *StorageExecutor) executeAggregation(nodes []*storage.Node, variable str
 					row[i] = int64(len(groupNodes))
 				} else {
 					// COUNT(n.property) - count non-null values
-					// Uses optimized string parser (~5x faster than regex)
-					_, prop := ParseAggregationProperty(item.expr)
-					if prop != "" {
+					propMatch := countPropPattern.FindStringSubmatch(item.expr)
+					if len(propMatch) == 3 {
 						count := int64(0)
 						for _, node := range groupNodes {
-							if _, exists := node.Properties[prop]; exists {
+							if _, exists := node.Properties[propMatch[2]]; exists {
 								count++
 							}
 						}
@@ -339,12 +338,11 @@ func (e *StorageExecutor) executeAggregation(nodes []*storage.Node, variable str
 				}
 
 			case strings.HasPrefix(upperExpr, "SUM("):
-				// Uses optimized string parser (~5x faster than regex)
-				_, prop := ParseAggregationProperty(item.expr)
-				if prop != "" {
+				propMatch := sumPropPattern.FindStringSubmatch(item.expr)
+				if len(propMatch) == 3 {
 					sum := float64(0)
 					for _, node := range groupNodes {
-						if val, exists := node.Properties[prop]; exists {
+						if val, exists := node.Properties[propMatch[2]]; exists {
 							if num, ok := toFloat64(val); ok {
 								sum += num
 							}
@@ -356,13 +354,12 @@ func (e *StorageExecutor) executeAggregation(nodes []*storage.Node, variable str
 				}
 
 			case strings.HasPrefix(upperExpr, "AVG("):
-				// Uses optimized string parser (~5x faster than regex)
-				_, prop := ParseAggregationProperty(item.expr)
-				if prop != "" {
+				propMatch := avgPropPattern.FindStringSubmatch(item.expr)
+				if len(propMatch) == 3 {
 					sum := float64(0)
 					count := 0
 					for _, node := range groupNodes {
-						if val, exists := node.Properties[prop]; exists {
+						if val, exists := node.Properties[propMatch[2]]; exists {
 							if num, ok := toFloat64(val); ok {
 								sum += num
 								count++
@@ -379,12 +376,11 @@ func (e *StorageExecutor) executeAggregation(nodes []*storage.Node, variable str
 				}
 
 			case strings.HasPrefix(upperExpr, "MIN("):
-				// Uses optimized string parser (~5x faster than regex)
-				_, prop := ParseAggregationProperty(item.expr)
-				if prop != "" {
+				propMatch := minPropPattern.FindStringSubmatch(item.expr)
+				if len(propMatch) == 3 {
 					var min *float64
 					for _, node := range groupNodes {
-						if val, exists := node.Properties[prop]; exists {
+						if val, exists := node.Properties[propMatch[2]]; exists {
 							if num, ok := toFloat64(val); ok {
 								if min == nil || num < *min {
 									minVal := num
@@ -403,12 +399,11 @@ func (e *StorageExecutor) executeAggregation(nodes []*storage.Node, variable str
 				}
 
 			case strings.HasPrefix(upperExpr, "MAX("):
-				// Uses optimized string parser (~5x faster than regex)
-				_, prop := ParseAggregationProperty(item.expr)
-				if prop != "" {
+				propMatch := maxPropPattern.FindStringSubmatch(item.expr)
+				if len(propMatch) == 3 {
 					var max *float64
 					for _, node := range groupNodes {
-						if val, exists := node.Properties[prop]; exists {
+						if val, exists := node.Properties[propMatch[2]]; exists {
 							if num, ok := toFloat64(val); ok {
 								if max == nil || num > *max {
 									maxVal := num
@@ -427,14 +422,13 @@ func (e *StorageExecutor) executeAggregation(nodes []*storage.Node, variable str
 				}
 
 			case strings.HasPrefix(upperExpr, "COLLECT("):
-				// Uses optimized string parser (~5x faster than regex)
-				aggResult := ParseAggregation(item.expr)
+				propMatch := collectPropPattern.FindStringSubmatch(item.expr)
 				collected := make([]interface{}, 0)
-				if aggResult != nil {
+				if len(propMatch) >= 2 {
 					for _, node := range groupNodes {
-						if aggResult.Property != "" {
+						if len(propMatch) == 3 && propMatch[2] != "" {
 							// COLLECT(n.property)
-							if val, exists := node.Properties[aggResult.Property]; exists {
+							if val, exists := node.Properties[propMatch[2]]; exists {
 								collected = append(collected, val)
 							}
 						} else {
@@ -498,12 +492,11 @@ func (e *StorageExecutor) executeAggregationSingleGroup(nodes []*storage.Node, v
 			if strings.Contains(upperExpr, "*") || strings.Contains(upperExpr, "("+upperVariable+")") {
 				row[i] = int64(len(nodes))
 			} else {
-				// Uses optimized string parser (~5x faster than regex)
-				_, prop := ParseAggregationProperty(item.expr)
-				if prop != "" {
+				propMatch := countPropPattern.FindStringSubmatch(item.expr)
+				if len(propMatch) == 3 {
 					count := int64(0)
 					for _, node := range nodes {
-						if _, exists := node.Properties[prop]; exists {
+						if _, exists := node.Properties[propMatch[2]]; exists {
 							count++
 						}
 					}
@@ -514,12 +507,11 @@ func (e *StorageExecutor) executeAggregationSingleGroup(nodes []*storage.Node, v
 			}
 
 		case strings.HasPrefix(upperExpr, "SUM("):
-			// Uses optimized string parser (~5x faster than regex)
-			_, prop := ParseAggregationProperty(item.expr)
-			if prop != "" {
+			propMatch := sumPropPattern.FindStringSubmatch(item.expr)
+			if len(propMatch) == 3 {
 				sum := float64(0)
 				for _, node := range nodes {
-					if val, exists := node.Properties[prop]; exists {
+					if val, exists := node.Properties[propMatch[2]]; exists {
 						if num, ok := toFloat64(val); ok {
 							sum += num
 						}
@@ -531,13 +523,12 @@ func (e *StorageExecutor) executeAggregationSingleGroup(nodes []*storage.Node, v
 			}
 
 		case strings.HasPrefix(upperExpr, "AVG("):
-			// Uses optimized string parser (~5x faster than regex)
-			_, prop := ParseAggregationProperty(item.expr)
-			if prop != "" {
+			propMatch := avgPropPattern.FindStringSubmatch(item.expr)
+			if len(propMatch) == 3 {
 				sum := float64(0)
 				count := 0
 				for _, node := range nodes {
-					if val, exists := node.Properties[prop]; exists {
+					if val, exists := node.Properties[propMatch[2]]; exists {
 						if num, ok := toFloat64(val); ok {
 							sum += num
 							count++
@@ -554,12 +545,11 @@ func (e *StorageExecutor) executeAggregationSingleGroup(nodes []*storage.Node, v
 			}
 
 		case strings.HasPrefix(upperExpr, "MIN("):
-			// Uses optimized string parser (~5x faster than regex)
-			_, prop := ParseAggregationProperty(item.expr)
-			if prop != "" {
+			propMatch := minPropPattern.FindStringSubmatch(item.expr)
+			if len(propMatch) == 3 {
 				var min *float64
 				for _, node := range nodes {
-					if val, exists := node.Properties[prop]; exists {
+					if val, exists := node.Properties[propMatch[2]]; exists {
 						if num, ok := toFloat64(val); ok {
 							if min == nil || num < *min {
 								minVal := num
@@ -578,12 +568,11 @@ func (e *StorageExecutor) executeAggregationSingleGroup(nodes []*storage.Node, v
 			}
 
 		case strings.HasPrefix(upperExpr, "MAX("):
-			// Uses optimized string parser (~5x faster than regex)
-			_, prop := ParseAggregationProperty(item.expr)
-			if prop != "" {
+			propMatch := maxPropPattern.FindStringSubmatch(item.expr)
+			if len(propMatch) == 3 {
 				var max *float64
 				for _, node := range nodes {
-					if val, exists := node.Properties[prop]; exists {
+					if val, exists := node.Properties[propMatch[2]]; exists {
 						if num, ok := toFloat64(val); ok {
 							if max == nil || num > *max {
 								maxVal := num
@@ -603,13 +592,12 @@ func (e *StorageExecutor) executeAggregationSingleGroup(nodes []*storage.Node, v
 
 		// Handle COLLECT(DISTINCT n.property)
 		case strings.HasPrefix(upperExpr, "COLLECT(") && strings.Contains(upperExpr, "DISTINCT"):
-			// Uses optimized string parser (~5x faster than regex)
-			aggResult := ParseAggregation(item.expr)
+			propMatch := collectDistinctPropPattern.FindStringSubmatch(item.expr)
 			seen := make(map[interface{}]bool)
 			collected := make([]interface{}, 0)
-			if aggResult != nil && aggResult.Property != "" {
+			if len(propMatch) == 3 {
 				for _, node := range nodes {
-					if val, exists := node.Properties[aggResult.Property]; exists && val != nil {
+					if val, exists := node.Properties[propMatch[2]]; exists && val != nil {
 						if !seen[val] {
 							seen[val] = true
 							collected = append(collected, val)
@@ -620,13 +608,12 @@ func (e *StorageExecutor) executeAggregationSingleGroup(nodes []*storage.Node, v
 			row[i] = collected
 
 		case strings.HasPrefix(upperExpr, "COLLECT("):
-			// Uses optimized string parser (~5x faster than regex)
-			aggResult := ParseAggregation(item.expr)
+			propMatch := collectPropPattern.FindStringSubmatch(item.expr)
 			collected := make([]interface{}, 0)
-			if aggResult != nil {
+			if len(propMatch) >= 2 {
 				for _, node := range nodes {
-					if aggResult.Property != "" {
-						if val, exists := node.Properties[aggResult.Property]; exists {
+					if len(propMatch) == 3 && propMatch[2] != "" {
+						if val, exists := node.Properties[propMatch[2]]; exists {
 							collected = append(collected, val)
 						}
 					} else {
@@ -918,7 +905,7 @@ func (e *StorageExecutor) executeMatchWithClause(ctx context.Context, cypher str
 }
 
 // evaluateSumArithmetic handles expressions like SUM(n.a) + SUM(n.b)
-// Uses optimized string parser (~5x faster than regex)
+// Uses pre-compiled sumPropPattern from regex_patterns.go
 func (e *StorageExecutor) evaluateSumArithmetic(expr string, nodes []*storage.Node, variable string) float64 {
 	// Split by + and - operators (respecting parentheses)
 	parts := splitArithmeticExpression(expr)
@@ -941,11 +928,10 @@ func (e *StorageExecutor) evaluateSumArithmetic(expr string, nodes []*storage.No
 		upperPart := strings.ToUpper(part)
 
 		if strings.HasPrefix(upperPart, "SUM(") {
-			// Uses optimized string parser (~5x faster than regex)
-			_, prop := ParseAggregationProperty(part)
-			if prop != "" {
+			propMatch := sumPropPattern.FindStringSubmatch(part)
+			if len(propMatch) == 3 {
 				for _, node := range nodes {
-					if val, exists := node.Properties[prop]; exists {
+					if val, exists := node.Properties[propMatch[2]]; exists {
 						if num, ok := toFloat64(val); ok {
 							value += num
 						}

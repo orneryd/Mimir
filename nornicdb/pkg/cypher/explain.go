@@ -420,19 +420,19 @@ func (e *StorageExecutor) analyzeLimitSkip(query string) *PlanOperator {
 		Arguments:    make(map[string]interface{}),
 	}
 
-	// Extract LIMIT value - using optimized string parsing (~6x faster than regex)
-	if limitStr := ExtractLimitString(query); limitStr != "" {
-		op.Arguments["limit"] = limitStr
-		op.Description = fmt.Sprintf("Limit to %s rows", limitStr)
+	// Extract LIMIT value
+	if matches := limitPattern.FindStringSubmatch(query); matches != nil {
+		op.Arguments["limit"] = matches[1]
+		op.Description = fmt.Sprintf("Limit to %s rows", matches[1])
 	}
 
-	// Extract SKIP value - using optimized string parsing (~6x faster than regex)
-	if skipStr := ExtractSkipString(query); skipStr != "" {
-		op.Arguments["skip"] = skipStr
+	// Extract SKIP value
+	if matches := skipPattern.FindStringSubmatch(query); matches != nil {
+		op.Arguments["skip"] = matches[1]
 		if op.Description != "" {
-			op.Description += fmt.Sprintf(", skip %s", skipStr)
+			op.Description += fmt.Sprintf(", skip %s", matches[1])
 		} else {
-			op.Description = fmt.Sprintf("Skip %s rows", skipStr)
+			op.Description = fmt.Sprintf("Skip %s rows", matches[1])
 		}
 	}
 

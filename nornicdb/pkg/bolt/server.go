@@ -349,16 +349,16 @@ func DefaultConfig() *Config {
 //	// Create storage engine
 //	storage := storage.NewBadgerEngine("./data/nornicdb")
 //	defer storage.Close()
-//	
+//
 //	// Create Cypher executor
 //	cypherExec := cypher.NewStorageExecutor(storage)
-//	
+//
 //	// Create Bolt server
 //	config := bolt.DefaultConfig()
 //	config.Port = 7687
-//	
+//
 //	server := bolt.New(config, cypherExec)
-//	
+//
 //	// Start server (blocks until shutdown)
 //	log.Fatal(server.ListenAndServe())
 //
@@ -370,10 +370,10 @@ func DefaultConfig() *Config {
 //	config.ReadBufferSize = 8192    // 8KB buffer
 //	config.WriteBufferSize = 8192
 //	config.IdleTimeout = 10 * time.Minute
-//	
+//
 //	executor := cypher.NewStorageExecutor(storage)
 //	server := bolt.New(config, executor)
-//	
+//
 //	// Graceful shutdown
 //	go func() {
 //		sigChan := make(chan os.Signal, 1)
@@ -382,7 +382,7 @@ func DefaultConfig() *Config {
 //		log.Println("Shutting down Bolt server...")
 //		server.Close()
 //	}()
-//	
+//
 //	if err := server.ListenAndServe(); err != nil {
 //		log.Fatal(err)
 //	}
@@ -395,30 +395,30 @@ func DefaultConfig() *Config {
 //		auth  *auth.Authenticator
 //		audit *audit.Logger
 //	}
-//	
+//
 //	func (e *AuthExecutor) Execute(ctx context.Context, query string, params map[string]any) (*bolt.QueryResult, error) {
 //		// Extract user from context
 //		user := ctx.Value("user").(string)
-//		
+//
 //		// Audit log
 //		e.audit.LogDataAccess(user, user, "query", query, "EXECUTE", true, "")
-//		
+//
 //		// Execute query
 //		result, err := e.inner.Execute(ctx, query, params)
-//		
+//
 //		// Convert to Bolt result format
 //		return &bolt.QueryResult{
 //			Columns: result.Fields,
 //			Rows:    result.Records,
 //		}, err
 //	}
-//	
+//
 //	executor := &AuthExecutor{
 //		inner: cypher.NewStorageExecutor(storage),
 //		auth:  authenticator,
 //		audit: auditLogger,
 //	}
-//	
+//
 //	server := bolt.New(bolt.DefaultConfig(), executor)
 //	server.ListenAndServe()
 //
@@ -428,24 +428,24 @@ func DefaultConfig() *Config {
 //		// In-memory storage for tests
 //		storage := storage.NewMemoryEngine()
 //		executor := cypher.NewStorageExecutor(storage)
-//		
+//
 //		// Bolt server on random port
 //		config := bolt.DefaultConfig()
 //		config.Port = 0 // OS assigns random available port
-//		
+//
 //		server := bolt.New(config, executor)
-//		
+//
 //		// Start server in background
 //		go server.ListenAndServe()
 //		defer server.Close()
-//		
+//
 //		// Connect with Neo4j driver
 //		driver, _ := neo4j.NewDriver(
 //			fmt.Sprintf("bolt://localhost:%d", server.Port()),
 //			neo4j.NoAuth(),
 //		)
 //		defer driver.Close()
-//		
+//
 //		// Run test queries
 //		session := driver.NewSession(neo4j.SessionConfig{})
 //		result, _ := session.Run("CREATE (n:Test {value: 42}) RETURN n", nil)
@@ -461,16 +461,16 @@ func DefaultConfig() *Config {
 //   - The Bolt server translates between them!
 //
 // Why do we need this translator?
-//   1. Neo4j drivers already exist (Python, Java, JavaScript, Go, etc.)
-//   2. Tools like Neo4j Browser, Bloom, and Cypher Shell work out of the box
-//   3. No need to write new drivers for every programming language
+//  1. Neo4j drivers already exist (Python, Java, JavaScript, Go, etc.)
+//  2. Tools like Neo4j Browser, Bloom, and Cypher Shell work out of the box
+//  3. No need to write new drivers for every programming language
 //
 // How it works:
-//   1. Driver connects: "Hi, I speak Bolt 4.3"
-//   2. Server responds: "Cool, I understand Bolt 4.3"
-//   3. Driver sends: "RUN: MATCH (n) RETURN n LIMIT 10"
-//   4. Server executes Cypher and sends back results
-//   5. Driver receives results in Bolt format
+//  1. Driver connects: "Hi, I speak Bolt 4.3"
+//  2. Server responds: "Cool, I understand Bolt 4.3"
+//  3. Driver sends: "RUN: MATCH (n) RETURN n LIMIT 10"
+//  4. Server executes Cypher and sends back results
+//  5. Driver receives results in Bolt format
 //
 // Real-world analogy:
 //   - HTTP is like writing letters (text-based, verbose)
@@ -498,7 +498,8 @@ func DefaultConfig() *Config {
 //   - Binary PackStream is ~40% smaller than JSON
 //
 // Thread Safety:
-//   Server handles concurrent connections safely.
+//
+//	Server handles concurrent connections safely.
 func New(config *Config, executor QueryExecutor) *Server {
 	if config == nil {
 		config = DefaultConfig()
@@ -765,7 +766,7 @@ func (s *Session) handleRun(data []byte) error {
 	}
 
 	// Log query if enabled
-	if s.server.config.LogQueries {
+	if s.server != nil && s.server.config.LogQueries {
 		remoteAddr := "unknown"
 		if s.conn != nil {
 			remoteAddr = s.conn.RemoteAddr().String()
@@ -781,7 +782,7 @@ func (s *Session) handleRun(data []byte) error {
 	ctx := context.Background()
 	result, err := s.executor.Execute(ctx, query, params)
 	if err != nil {
-		if s.server.config.LogQueries {
+		if s.server != nil && s.server.config.LogQueries {
 			fmt.Printf("[BOLT] ERROR: %v\n", err)
 		}
 		return s.sendFailure("Neo.ClientError.Statement.SyntaxError", err.Error())

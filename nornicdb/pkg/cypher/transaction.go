@@ -177,9 +177,20 @@ func (e *StorageExecutor) executeQueryAgainstStorage(ctx context.Context, cypher
 		return e.executeCompoundCreateWithDelete(ctx, cypher)
 	}
 
+	// Check for MATCH...CREATE...WITH...DELETE pattern (special handling)
+	// This MUST come before the generic DELETE check below
+	if strings.HasPrefix(upper, "MATCH") &&
+		findKeywordIndex(cypher, "CREATE") > 0 &&
+		findKeywordIndex(cypher, "WITH") > 0 &&
+		findKeywordIndex(cypher, "DELETE") > 0 {
+		return e.executeCompoundMatchCreate(ctx, cypher)
+	}
+
 	// Check for DELETE queries (MATCH...DELETE, DETACH DELETE)
-	if strings.Contains(normalizedUpper, " DELETE ") || strings.HasSuffix(normalizedUpper, " DELETE") ||
-		strings.Contains(normalizedUpper, "DETACH DELETE") {
+	// But NOT if it's a MATCH...CREATE...DELETE pattern (handled above)
+	hasCreate := findKeywordIndex(cypher, "CREATE") > 0
+	if !hasCreate && (strings.Contains(normalizedUpper, " DELETE ") || strings.HasSuffix(normalizedUpper, " DELETE") ||
+		strings.Contains(normalizedUpper, "DETACH DELETE")) {
 		return e.executeDelete(ctx, cypher)
 	}
 
