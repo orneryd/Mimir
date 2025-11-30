@@ -12,6 +12,7 @@
 package storage
 
 import (
+	"strings"
 	"sync"
 	"time"
 )
@@ -97,50 +98,46 @@ func (ae *AsyncEngine) flushLoop() {
 
 // Flush writes all pending changes to the underlying engine.
 // Uses batched operations for better performance - all deletes in one transaction.
+//
+// CRITICAL: We hold the lock for the ENTIRE duration to prevent race conditions.
+// Without this, reads between "clear cache" and "write to engine" would see no data.
 func (ae *AsyncEngine) Flush() error {
 	ae.mu.Lock()
-
-	// Snapshot pending changes
-	nodes := ae.nodeCache
-	edges := ae.edgeCache
-	delNodes := ae.deleteNodes
-	delEdges := ae.deleteEdges
-
-	// Reset caches
-	ae.nodeCache = make(map[NodeID]*Node)
-	ae.edgeCache = make(map[EdgeID]*Edge)
-	ae.deleteNodes = make(map[NodeID]bool)
-	ae.deleteEdges = make(map[EdgeID]bool)
-
-	ae.mu.Unlock()
+	defer ae.mu.Unlock()
 
 	// Nothing to flush
-	if len(nodes) == 0 && len(edges) == 0 && len(delNodes) == 0 && len(delEdges) == 0 {
+	if len(ae.nodeCache) == 0 && len(ae.edgeCache) == 0 && len(ae.deleteNodes) == 0 && len(ae.deleteEdges) == 0 {
 		return nil
 	}
 
 	ae.totalFlushes++
 
+	// Snapshot pending changes (we'll clear these AFTER successful writes)
+	nodesToWrite := ae.nodeCache
+	edgesToWrite := ae.edgeCache
+	nodesToDelete := ae.deleteNodes
+	edgesToDelete := ae.deleteEdges
+
 	// Apply bulk deletes first (SINGLE transaction instead of N transactions!)
-	if len(delNodes) > 0 {
-		nodeIDs := make([]NodeID, 0, len(delNodes))
-		for id := range delNodes {
+	if len(nodesToDelete) > 0 {
+		nodeIDs := make([]NodeID, 0, len(nodesToDelete))
+		for id := range nodesToDelete {
 			nodeIDs = append(nodeIDs, id)
 		}
 		ae.engine.BulkDeleteNodes(nodeIDs) // Best effort - ignore errors
 	}
-	if len(delEdges) > 0 {
-		edgeIDs := make([]EdgeID, 0, len(delEdges))
-		for id := range delEdges {
+	if len(edgesToDelete) > 0 {
+		edgeIDs := make([]EdgeID, 0, len(edgesToDelete))
+		for id := range edgesToDelete {
 			edgeIDs = append(edgeIDs, id)
 		}
 		ae.engine.BulkDeleteEdges(edgeIDs) // Best effort - ignore errors
 	}
 
 	// Apply creates/updates
-	for _, node := range nodes {
+	for _, node := range nodesToWrite {
 		// Check if this was also deleted
-		if delNodes[node.ID] {
+		if nodesToDelete[node.ID] {
 			continue
 		}
 		// Try create, if exists do update
@@ -148,14 +145,20 @@ func (ae *AsyncEngine) Flush() error {
 			ae.engine.UpdateNode(node)
 		}
 	}
-	for _, edge := range edges {
-		if delEdges[edge.ID] {
+	for _, edge := range edgesToWrite {
+		if edgesToDelete[edge.ID] {
 			continue
 		}
 		if err := ae.engine.CreateEdge(edge); err != nil {
 			ae.engine.UpdateEdge(edge)
 		}
 	}
+
+	// NOW clear the caches - data is safely in the underlying engine
+	ae.nodeCache = make(map[NodeID]*Node)
+	ae.edgeCache = make(map[EdgeID]*Edge)
+	ae.deleteNodes = make(map[NodeID]bool)
+	ae.deleteEdges = make(map[EdgeID]bool)
 
 	return nil
 }
@@ -267,25 +270,32 @@ func (ae *AsyncEngine) GetEdge(id EdgeID) (*Edge, error) {
 }
 
 // GetNodesByLabel checks cache and merges with engine results.
+// Uses case-insensitive label matching for Neo4j compatibility.
+// NOTE: We hold the read lock for the ENTIRE operation to prevent race conditions
+// with Flush() which clears the cache after writing to the engine.
 func (ae *AsyncEngine) GetNodesByLabel(label string) ([]*Node, error) {
 	ae.mu.RLock()
+	defer ae.mu.RUnlock()
+
 	cachedNodes := make([]*Node, 0)
 	deletedIDs := make(map[NodeID]bool)
+
+	// Normalize label for case-insensitive matching (Neo4j compatible)
+	normalLabel := strings.ToLower(label)
 
 	for id := range ae.deleteNodes {
 		deletedIDs[id] = true
 	}
 	for _, node := range ae.nodeCache {
 		for _, l := range node.Labels {
-			if l == label {
+			if strings.ToLower(l) == normalLabel { // Case-insensitive comparison
 				cachedNodes = append(cachedNodes, node)
 				break
 			}
 		}
 	}
-	ae.mu.RUnlock()
 
-	// Get from engine
+	// Get from engine (still under lock to prevent Flush race)
 	engineNodes, err := ae.engine.GetNodesByLabel(label)
 	if err != nil {
 		return cachedNodes, nil // Return cache-only on error
@@ -312,8 +322,12 @@ func (ae *AsyncEngine) GetNodesByLabel(label string) ([]*Node, error) {
 }
 
 // AllNodes returns merged view of cache and engine.
+// NOTE: We hold the read lock for the ENTIRE operation to prevent race conditions
+// with Flush() which clears the cache after writing to the engine.
 func (ae *AsyncEngine) AllNodes() ([]*Node, error) {
 	ae.mu.RLock()
+	defer ae.mu.RUnlock()
+
 	cachedNodes := make([]*Node, 0, len(ae.nodeCache))
 	deletedIDs := make(map[NodeID]bool)
 
@@ -323,7 +337,6 @@ func (ae *AsyncEngine) AllNodes() ([]*Node, error) {
 	for _, node := range ae.nodeCache {
 		cachedNodes = append(cachedNodes, node)
 	}
-	ae.mu.RUnlock()
 
 	engineNodes, err := ae.engine.AllNodes()
 	if err != nil {
@@ -348,8 +361,12 @@ func (ae *AsyncEngine) AllNodes() ([]*Node, error) {
 }
 
 // AllEdges returns merged view of cache and engine.
+// NOTE: We hold the read lock for the ENTIRE operation to prevent race conditions
+// with Flush() which clears the cache after writing to the engine.
 func (ae *AsyncEngine) AllEdges() ([]*Edge, error) {
 	ae.mu.RLock()
+	defer ae.mu.RUnlock()
+
 	cachedEdges := make([]*Edge, 0, len(ae.edgeCache))
 	deletedIDs := make(map[EdgeID]bool)
 
@@ -359,7 +376,6 @@ func (ae *AsyncEngine) AllEdges() ([]*Edge, error) {
 	for _, edge := range ae.edgeCache {
 		cachedEdges = append(cachedEdges, edge)
 	}
-	ae.mu.RUnlock()
 
 	engineEdges, err := ae.engine.AllEdges()
 	if err != nil {
