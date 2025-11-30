@@ -1,18 +1,16 @@
 {
   "name": "nornicdb",
   "version": "0.1.0",
-  "description": "Neo4j-compatible in-memory graph database with GPU acceleration",
+  "description": "Neo4j-compatible graph database with GPU acceleration and persistent storage",
   "scripts": {
     "start": "go run ./cmd/nornicdb serve --no-auth",
     "start:ui": "go run ./cmd/nornicdb serve --http-port 7474 --bolt-port 7687",
     "db": "go run ./cmd/nornicdb serve",
     "db:noauth": "go run ./cmd/nornicdb serve --no-auth",
-    "db:bolt": "go run ./cmd/nornicdb-bolt",
-    "db:build": "go build -o bin/nornicdb ./cmd/nornicdb && go build -o bin/nornicdb-bolt ./cmd/nornicdb-bolt",
-    "db:build:cuda": "set CGO_ENABLED=1 && go build -tags cuda -o bin/nornicdb ./cmd/nornicdb && go build -o bin/nornicdb-bolt ./cmd/nornicdb-bolt",
+    "db:build": "go build -o bin/nornicdb ./cmd/nornicdb",
+    "db:build:cuda": "CGO_ENABLED=1 go build -tags cuda -o bin/nornicdb ./cmd/nornicdb",
     "db:start": "npm run db:build && ./bin/nornicdb serve",
     "db:dev": "go run ./cmd/nornicdb serve --bolt-port 7687 --http-port 7474",
-    "db:bolt-only": "go run ./cmd/nornicdb-bolt -port 7687",
     "test": "go test ./...",
     "test:coverage": "go test -coverprofile=coverage.out ./... && go tool cover -html=coverage.out",
     "test:cypher": "go test -v ./pkg/cypher/",
@@ -30,7 +28,7 @@
     "bolt-protocol",
     "cypher",
     "gpu-acceleration",
-    "in-memory-database"
+    "persistent-storage"
   ],
   "author": "",
   "license": "MIT"
