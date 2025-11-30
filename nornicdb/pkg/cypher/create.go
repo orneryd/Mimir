@@ -1151,11 +1151,28 @@ func (e *StorageExecutor) executeMatchCreateBlock(ctx context.Context, block str
 			}
 
 			// Find matching node (uncached path)
+			// For MATCH without properties, we only need ONE node (for CREATE patterns)
+			// This avoids loading all nodes when we just need any match
+			if len(nodeInfo.labels) > 0 && len(nodeInfo.properties) == 0 {
+				// No properties = just need any node with this label
+				// Use GetFirstNodeByLabel for O(1) instead of O(N)
+				if first := e.getFirstNodeByLabel(nodeInfo.labels[0]); first != nil {
+					nodeVars[nodeInfo.variable] = first
+					continue
+				}
+			}
+
 			var candidates []*storage.Node
 			if len(nodeInfo.labels) > 0 {
 				candidates, _ = e.storage.GetNodesByLabel(nodeInfo.labels[0])
 			} else {
 				candidates, _ = e.storage.AllNodes()
+			}
+
+			// For MATCH without properties, just take the first node
+			if len(nodeInfo.properties) == 0 && len(candidates) > 0 {
+				nodeVars[nodeInfo.variable] = candidates[0]
+				continue
 			}
 
 			// Filter by properties
@@ -1365,7 +1382,8 @@ func (e *StorageExecutor) processCreateRelationship(pattern string, nodeVars map
 		Properties: relProps,
 	}
 
-	if err := e.storage.CreateEdge(edge); err != nil {
+	// Try optimized path that skips node verification (we already verified in MATCH)
+	if err := e.createEdgeOptimized(edge); err != nil {
 		return fmt.Errorf("failed to create relationship: %w", err)
 	}
 

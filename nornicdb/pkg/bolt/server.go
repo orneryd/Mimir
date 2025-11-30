@@ -131,6 +131,24 @@ import (
 	"sync/atomic"
 )
 
+// Buffer pools to reduce allocations in hot paths
+var (
+	// Pool for message buffers (typically <64KB)
+	messageBufferPool = sync.Pool{
+		New: func() any {
+			buf := make([]byte, 0, 4096)
+			return &buf
+		},
+	}
+	// Pool for small fixed-size buffers (headers, etc.)
+	smallBufferPool = sync.Pool{
+		New: func() any {
+			buf := make([]byte, 64)
+			return &buf
+		},
+	}
+)
+
 // Protocol versions supported
 const (
 	BoltV4_4 = 0x0404 // Bolt 4.4
@@ -686,12 +704,22 @@ func (s *Session) handshake() error {
 // handleMessage handles a single Bolt message.
 // Bolt messages can span multiple chunks - we read until we get a 0-size chunk.
 func (s *Session) handleMessage() error {
-	var message []byte
+	// Get pooled buffer for message assembly
+	bufPtr := messageBufferPool.Get().(*[]byte)
+	message := (*bufPtr)[:0]
+	defer func() {
+		*bufPtr = message[:0]
+		messageBufferPool.Put(bufPtr)
+	}()
+
+	// Get pooled buffer for header reads
+	headerBufPtr := smallBufferPool.Get().(*[]byte)
+	header := (*headerBufPtr)[:2]
+	defer smallBufferPool.Put(headerBufPtr)
 
 	// Read chunks until we get a zero-size chunk (message terminator)
 	for {
 		// Read chunk header (2 bytes: size)
-		header := make([]byte, 2)
 		if _, err := io.ReadFull(s.conn, header); err != nil {
 			return err
 		}
@@ -702,13 +730,19 @@ func (s *Session) handleMessage() error {
 			break
 		}
 
-		// Read chunk data
-		chunk := make([]byte, size)
-		if _, err := io.ReadFull(s.conn, chunk); err != nil {
-			return err
+		// Ensure message buffer has capacity
+		if cap(message) < len(message)+size {
+			newBuf := make([]byte, len(message), len(message)+size+4096)
+			copy(newBuf, message)
+			message = newBuf
 		}
 
-		message = append(message, chunk...)
+		// Read chunk data directly into message buffer
+		start := len(message)
+		message = message[:start+size]
+		if _, err := io.ReadFull(s.conn, message[start:]); err != nil {
+			return err
+		}
 	}
 
 	if len(message) == 0 {
@@ -1107,15 +1141,27 @@ func (s *Session) sendFailure(code, message string) error {
 // Consolidates header + data + terminator into single Write for performance.
 func (s *Session) sendChunk(data []byte) error {
 	size := len(data)
+	totalSize := 2 + len(data) + 2
 
-	// Single buffer: header (2) + data + terminator (2)
-	buf := make([]byte, 2+len(data)+2)
+	// Get pooled buffer or allocate if too small
+	bufPtr := messageBufferPool.Get().(*[]byte)
+	buf := *bufPtr
+	if cap(buf) < totalSize {
+		buf = make([]byte, totalSize)
+	} else {
+		buf = buf[:totalSize]
+	}
+
 	buf[0] = byte(size >> 8)
 	buf[1] = byte(size)
 	copy(buf[2:], data)
-	// buf[2+len(data)] and buf[2+len(data)+1] are already 0x00 (zero terminator)
+	buf[2+len(data)] = 0x00
+	buf[2+len(data)+1] = 0x00
 
 	_, err := s.conn.Write(buf)
+
+	*bufPtr = buf[:0]
+	messageBufferPool.Put(bufPtr)
 	return err
 }
 

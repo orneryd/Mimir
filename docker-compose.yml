@@ -3,8 +3,8 @@ services:
     image: neo4j:5.15-community
     container_name: neo4j_db
     ports:
-      - "7474:7474"  # HTTP Browser UI
-      - "7687:7687"  # Bolt protocol
+      - "7475:7474"  # HTTP Browser UI
+      - "7688:7687"  # Bolt protocol
     volumes:
       - ./data/neo4j:/data
       - ./logs/neo4j:/logs
@@ -25,26 +25,26 @@ services:
     networks:
       - mcp_network
 
-  copilot-api:
-    image: timothyswt/copilot-api:latest
-    container_name: copilot_api_server
-    ports:
-      - "4141:4141"  # Fixed: copilot-api listens on 4141, not 3000
-    volumes:
-      - ./copilot-data:/root/.local/share/copilot-api  # Persist GitHub token
-    environment:
-      - NODE_ENV=production
-      # Remove PORT=3000, the app uses 4141 by default
-    restart: unless-stopped
-    healthcheck:
-      # Use CMD-SHELL so shell operators (||) work and allow a proper HTTP probe
-      test: ["CMD-SHELL", "wget --spider -q http://localhost:4141/ || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 15s
-    networks:
-      - mcp_network
+  # copilot-api:
+  #   image: timothyswt/copilot-api:latest
+  #   container_name: copilot_api_server
+  #   ports:
+  #     - "4141:4141"  # Fixed: copilot-api listens on 4141, not 3000
+  #   volumes:
+  #     - ./copilot-data:/root/.local/share/copilot-api  # Persist GitHub token
+  #   environment:
+  #     - NODE_ENV=production
+  #     # Remove PORT=3000, the app uses 4141 by default
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     # Use CMD-SHELL so shell operators (||) work and allow a proper HTTP probe
+  #     test: ["CMD-SHELL", "wget --spider -q http://localhost:4141/ || exit 1"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 5
+  #     start_period: 15s
+  #   networks:
+  #     - mcp_network
 
 # Ollama (Legacy - kept for reference, can be removed)
   # ollama:
@@ -85,54 +85,54 @@ services:
   #             capabilities: [gpu]
 
   # llama.cpp server - OpenAI-compatible embeddings
-  llama-server:
-    image: ghcr.io/ggml-org/llama.cpp:server-cuda
-    container_name: llama_server
-    ports:
-      - "11434:8080"  # External 11434 -> Internal 8080 (llama.cpp default)
-    volumes:
-      - type: bind
-        source: ollama_models
-        target: /models
-        read_only: true
-    environment:
-      # Model Configuration - using mxbai-embed-large
-      - LLAMA_ARG_MODEL=/models/models/blobs/sha256-819c2adf5ce6df2b6bd2ae4ca90d2a69f060afeb438d0c171db57daa02e39c3d
-      - LLAMA_ARG_ALIAS=mxbai-embed-large
+  # llama-server:
+  #   image: ghcr.io/ggml-org/llama.cpp:server-cuda
+  #   container_name: llama_server
+  #   ports:
+  #     - "11434:8080"  # External 11434 -> Internal 8080 (llama.cpp default)
+  #   volumes:
+  #     - type: bind
+  #       source: ollama_models
+  #       target: /models
+  #       read_only: true
+  #   environment:
+  #     # Model Configuration - using mxbai-embed-large
+  #     - LLAMA_ARG_MODEL=/models/models/blobs/sha256-819c2adf5ce6df2b6bd2ae4ca90d2a69f060afeb438d0c171db57daa02e39c3d
+  #     - LLAMA_ARG_ALIAS=mxbai-embed-large
       
-      # Server Configuration
-      - LLAMA_ARG_HOST=0.0.0.0
-      - LLAMA_ARG_PORT=8080
-      - LLAMA_ARG_CTX_SIZE=2048
-      - LLAMA_ARG_N_PARALLEL=4
+  #     # Server Configuration
+  #     - LLAMA_ARG_HOST=0.0.0.0
+  #     - LLAMA_ARG_PORT=8080
+  #     - LLAMA_ARG_CTX_SIZE=2048
+  #     - LLAMA_ARG_N_PARALLEL=4
       
-      # Embeddings-specific
-      - LLAMA_ARG_EMBEDDINGS=true
-      - LLAMA_ARG_POOLING=mean
+  #     # Embeddings-specific
+  #     - LLAMA_ARG_EMBEDDINGS=true
+  #     - LLAMA_ARG_POOLING=mean
       
-      # Performance
-      - LLAMA_ARG_THREADS=-1
-      - LLAMA_ARG_NO_MMAP=false
+  #     # Performance
+  #     - LLAMA_ARG_THREADS=-1
+  #     - LLAMA_ARG_NO_MMAP=false
       
-      # GPU support
-      - LLAMA_ARG_N_GPU_LAYERS=99
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    networks:
-      - mcp_network
-    # Uncomment if you have GPU support (NVIDIA)
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+  #     # GPU support
+  #     - LLAMA_ARG_N_GPU_LAYERS=99
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 30s
+  #   networks:
+  #     - mcp_network
+  #   # Uncomment if you have GPU support (NVIDIA)
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu]
 
   # Vision-Language server for image description (qwen2.5-vl via llama.cpp)
   # Generates text descriptions of images, which are then embedded by text model
@@ -173,138 +173,138 @@ services:
   #   #           count: 1
   #   #           capabilities: [gpu]
 
-  mimir-server:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      tags:
-        - mimir-server:${VERSION:-1.0.0}
-        - mimir-server:latest
-    image: mimir-server:${VERSION:-1.0.0}
-    container_name: mimir_server
-    restart: unless-stopped
-    environment:
-      # Database Configuration
-      - NEO4J_URI=bolt://neo4j:7687
-      - NEO4J_USER=neo4j
-      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-password}
+  # mimir-server:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #     tags:
+  #       - mimir-server:${VERSION:-1.0.0}
+  #       - mimir-server:latest
+  #   image: mimir-server:${VERSION:-1.0.0}
+  #   container_name: mimir_server
+  #   restart: unless-stopped
+  #   environment:
+  #     # Database Configuration
+  #     - NEO4J_URI=bolt://neo4j:7687
+  #     - NEO4J_USER=neo4j
+  #     - NEO4J_PASSWORD=${NEO4J_PASSWORD:-password}
       
-      # Server Configuration
-      - NODE_ENV=production
-      - PORT=3000
-      # - NODE_TLS_REJECT_UNAUTHORIZED=${NODE_TLS_REJECT_UNAUTHORIZED:-1}
+  #     # Server Configuration
+  #     - NODE_ENV=production
+  #     - PORT=3000
+  #     # - NODE_TLS_REJECT_UNAUTHORIZED=${NODE_TLS_REJECT_UNAUTHORIZED:-1}
       
-      # Workspace Configuration
-      - WORKSPACE_ROOT=/workspace
-      - HOST_WORKSPACE_ROOT=${HOST_WORKSPACE_ROOT:-~/src}  # Pass through from host
-      - HOST_HOME=${HOME}  # Host's home directory for expanding ~ in HOST_WORKSPACE_ROOT
+  #     # Workspace Configuration
+  #     - WORKSPACE_ROOT=/workspace
+  #     - HOST_WORKSPACE_ROOT=${HOST_WORKSPACE_ROOT:-~/src}  # Pass through from host
+  #     - HOST_HOME=${HOME}  # Host's home directory for expanding ~ in HOST_WORKSPACE_ROOT
       
-      # LLM API Configuration (Copilot - OpenAI-compatible)
-      - MIMIR_DEFAULT_PROVIDER=${MIMIR_DEFAULT_PROVIDER:-copilot}
-      - MIMIR_LLM_API=${MIMIR_LLM_API:-http://copilot-api:4141/v1}
-      - MIMIR_LLM_API_PATH=${MIMIR_LLM_API_PATH:-/chat/completions}
-      - MIMIR_LLM_API_MODELS_PATH=${MIMIR_LLM_API_MODELS_PATH:-/models}
-      - MIMIR_LLM_API_KEY=${MIMIR_LLM_API_KEY:-dummy-key-for-proxy}
+  #     # LLM API Configuration (Copilot - OpenAI-compatible)
+  #     - MIMIR_DEFAULT_PROVIDER=${MIMIR_DEFAULT_PROVIDER:-copilot}
+  #     - MIMIR_LLM_API=${MIMIR_LLM_API:-http://copilot-api:4141/v1}
+  #     - MIMIR_LLM_API_PATH=${MIMIR_LLM_API_PATH:-/chat/completions}
+  #     - MIMIR_LLM_API_MODELS_PATH=${MIMIR_LLM_API_MODELS_PATH:-/models}
+  #     - MIMIR_LLM_API_KEY=${MIMIR_LLM_API_KEY:-dummy-key-for-proxy}
       
-      # PCTX Integration (Code Mode for 90-98% token reduction)
-      - PCTX_URL=${PCTX_URL:-http://host.docker.internal:8080}
-      - PCTX_ENABLED=${PCTX_ENABLED:-false}
+  #     # PCTX Integration (Code Mode for 90-98% token reduction)
+  #     - PCTX_URL=${PCTX_URL:-http://host.docker.internal:8080}
+  #     - PCTX_ENABLED=${PCTX_ENABLED:-false}
       
-      # Provider and Model Configuration (100% dynamic - no config file needed)
-      - MIMIR_DEFAULT_MODEL=${MIMIR_DEFAULT_MODEL:-gpt-4.1}
+  #     # Provider and Model Configuration (100% dynamic - no config file needed)
+  #     - MIMIR_DEFAULT_MODEL=${MIMIR_DEFAULT_MODEL:-gpt-4.1}
       
-      # Per-Agent Model Configuration (optional overrides)
-      - MIMIR_PM_MODEL=${MIMIR_PM_MODEL:-gpt-4.1}
-      - MIMIR_WORKER_MODEL=${MIMIR_WORKER_MODEL:-gpt-4.1}
-      - MIMIR_QC_MODEL=${MIMIR_QC_MODEL:-gpt-4.1}
+  #     # Per-Agent Model Configuration (optional overrides)
+  #     - MIMIR_PM_MODEL=${MIMIR_PM_MODEL:-gpt-4.1}
+  #     - MIMIR_WORKER_MODEL=${MIMIR_WORKER_MODEL:-gpt-4.1}
+  #     - MIMIR_QC_MODEL=${MIMIR_QC_MODEL:-gpt-4.1}
       
-      # Context Window Configuration
-      - MIMIR_DEFAULT_CONTEXT_WINDOW=${MIMIR_DEFAULT_CONTEXT_WINDOW:-128000}
+  #     # Context Window Configuration
+  #     - MIMIR_DEFAULT_CONTEXT_WINDOW=${MIMIR_DEFAULT_CONTEXT_WINDOW:-128000}
       
-      # Embeddings API Configuration (llama.cpp server - OpenAI-compatible)
-      - MIMIR_EMBEDDINGS_PROVIDER=${MIMIR_EMBEDDINGS_PROVIDER:-openai}
-      - MIMIR_EMBEDDINGS_API=${MIMIR_EMBEDDINGS_API:-http://llama-server:8080}
-      - MIMIR_EMBEDDINGS_API_PATH=${MIMIR_EMBEDDINGS_API_PATH:-/v1/embeddings}
-      - MIMIR_EMBEDDINGS_API_MODELS_PATH=${MIMIR_EMBEDDINGS_API_MODELS_PATH:-/v1/models}
-      - MIMIR_EMBEDDINGS_API_KEY=${MIMIR_EMBEDDINGS_API_KEY:-dummy-key}
-      # Embeddings Configuration (llama.cpp uses OpenAI-compatible format)
-      - MIMIR_EMBEDDINGS_ENABLED=${MIMIR_EMBEDDINGS_ENABLED:-true}
-      - MIMIR_EMBEDDINGS_MODEL=${MIMIR_EMBEDDINGS_MODEL:-mxbai-embed-large}
-      - MIMIR_EMBEDDINGS_DIMENSIONS=${MIMIR_EMBEDDINGS_DIMENSIONS:-1024}
-      - MIMIR_EMBEDDINGS_CHUNK_SIZE=${MIMIR_EMBEDDINGS_CHUNK_SIZE:-768}
-      - MIMIR_EMBEDDINGS_CHUNK_OVERLAP=${MIMIR_EMBEDDINGS_CHUNK_OVERLAP:-10}
-      - MIMIR_EMBEDDINGS_DELAY_MS=${MIMIR_EMBEDDINGS_DELAY_MS:-100}
-      - MIMIR_EMBEDDINGS_MAX_RETRIES=${MIMIR_EMBEDDINGS_MAX_RETRIES:-3}
-      # Image/VL Embeddings Configuration (Vision-Language models)
-      # Image Embeddings Control (disabled by default for safety)
-      - MIMIR_EMBEDDINGS_IMAGES=${MIMIR_EMBEDDINGS_IMAGES:-false}  # Default: disabled
-      - MIMIR_EMBEDDINGS_IMAGES_DESCRIBE_MODE=${MIMIR_EMBEDDINGS_IMAGES_DESCRIBE_MODE:-true}  # Default: VL description mode
-      - MIMIR_EMBEDDINGS_VL_PROVIDER=${MIMIR_EMBEDDINGS_VL_PROVIDER:-}
-      - MIMIR_EMBEDDINGS_VL_API=${MIMIR_EMBEDDINGS_VL_API:-}
-      - MIMIR_EMBEDDINGS_VL_API_PATH=${MIMIR_EMBEDDINGS_VL_API_PATH:-}
-      - MIMIR_EMBEDDINGS_VL_API_KEY=${MIMIR_EMBEDDINGS_VL_API_KEY:-}
-      - MIMIR_EMBEDDINGS_VL_MODEL=${MIMIR_EMBEDDINGS_VL_MODEL:-}
-      - MIMIR_EMBEDDINGS_VL_DIMENSIONS=${MIMIR_EMBEDDINGS_VL_DIMENSIONS:-}
+  #     # Embeddings API Configuration (llama.cpp server - OpenAI-compatible)
+  #     - MIMIR_EMBEDDINGS_PROVIDER=${MIMIR_EMBEDDINGS_PROVIDER:-openai}
+  #     - MIMIR_EMBEDDINGS_API=${MIMIR_EMBEDDINGS_API:-http://llama-server:8080}
+  #     - MIMIR_EMBEDDINGS_API_PATH=${MIMIR_EMBEDDINGS_API_PATH:-/v1/embeddings}
+  #     - MIMIR_EMBEDDINGS_API_MODELS_PATH=${MIMIR_EMBEDDINGS_API_MODELS_PATH:-/v1/models}
+  #     - MIMIR_EMBEDDINGS_API_KEY=${MIMIR_EMBEDDINGS_API_KEY:-dummy-key}
+  #     # Embeddings Configuration (llama.cpp uses OpenAI-compatible format)
+  #     - MIMIR_EMBEDDINGS_ENABLED=${MIMIR_EMBEDDINGS_ENABLED:-true}
+  #     - MIMIR_EMBEDDINGS_MODEL=${MIMIR_EMBEDDINGS_MODEL:-mxbai-embed-large}
+  #     - MIMIR_EMBEDDINGS_DIMENSIONS=${MIMIR_EMBEDDINGS_DIMENSIONS:-1024}
+  #     - MIMIR_EMBEDDINGS_CHUNK_SIZE=${MIMIR_EMBEDDINGS_CHUNK_SIZE:-768}
+  #     - MIMIR_EMBEDDINGS_CHUNK_OVERLAP=${MIMIR_EMBEDDINGS_CHUNK_OVERLAP:-10}
+  #     - MIMIR_EMBEDDINGS_DELAY_MS=${MIMIR_EMBEDDINGS_DELAY_MS:-100}
+  #     - MIMIR_EMBEDDINGS_MAX_RETRIES=${MIMIR_EMBEDDINGS_MAX_RETRIES:-3}
+  #     # Image/VL Embeddings Configuration (Vision-Language models)
+  #     # Image Embeddings Control (disabled by default for safety)
+  #     - MIMIR_EMBEDDINGS_IMAGES=${MIMIR_EMBEDDINGS_IMAGES:-false}  # Default: disabled
+  #     - MIMIR_EMBEDDINGS_IMAGES_DESCRIBE_MODE=${MIMIR_EMBEDDINGS_IMAGES_DESCRIBE_MODE:-true}  # Default: VL description mode
+  #     - MIMIR_EMBEDDINGS_VL_PROVIDER=${MIMIR_EMBEDDINGS_VL_PROVIDER:-}
+  #     - MIMIR_EMBEDDINGS_VL_API=${MIMIR_EMBEDDINGS_VL_API:-}
+  #     - MIMIR_EMBEDDINGS_VL_API_PATH=${MIMIR_EMBEDDINGS_VL_API_PATH:-}
+  #     - MIMIR_EMBEDDINGS_VL_API_KEY=${MIMIR_EMBEDDINGS_VL_API_KEY:-}
+  #     - MIMIR_EMBEDDINGS_VL_MODEL=${MIMIR_EMBEDDINGS_VL_MODEL:-}
+  #     - MIMIR_EMBEDDINGS_VL_DIMENSIONS=${MIMIR_EMBEDDINGS_VL_DIMENSIONS:-}
       
-      # Indexing Configuration
-      - MIMIR_INDEXING_THREADS=${MIMIR_INDEXING_THREADS:-1}
+  #     # Indexing Configuration
+  #     - MIMIR_INDEXING_THREADS=${MIMIR_INDEXING_THREADS:-1}
       
-      # Feature Flags
-      - MIMIR_FEATURE_PM_MODEL_SUGGESTIONS=${MIMIR_FEATURE_PM_MODEL_SUGGESTIONS:-true}
-      - MIMIR_AUTO_INDEX_DOCS=${MIMIR_AUTO_INDEX_DOCS:-true}
+  #     # Feature Flags
+  #     - MIMIR_FEATURE_PM_MODEL_SUGGESTIONS=${MIMIR_FEATURE_PM_MODEL_SUGGESTIONS:-true}
+  #     - MIMIR_AUTO_INDEX_DOCS=${MIMIR_AUTO_INDEX_DOCS:-true}
       
-      # Agent Execution Limits
-      - MIMIR_AGENT_RECURSION_LIMIT=${MIMIR_AGENT_RECURSION_LIMIT:-100}
+  #     # Agent Execution Limits
+  #     - MIMIR_AGENT_RECURSION_LIMIT=${MIMIR_AGENT_RECURSION_LIMIT:-100}
       
-      # Security Configuration
-      - MIMIR_ENABLE_SECURITY=${MIMIR_ENABLE_SECURITY:-false}
-      - MIMIR_DEV_USER_ADMIN=${MIMIR_DEV_USER_ADMIN}
-      - MIMIR_DEV_USER_DEVELOPER=${MIMIR_DEV_USER_DEVELOPER}
-      - MIMIR_DEV_USER_ANALYST=${MIMIR_DEV_USER_ANALYST}
-      - MIMIR_DEV_USER_VIEWER=${MIMIR_DEV_USER_VIEWER}
-      - MIMIR_JWT_SECRET=${MIMIR_JWT_SECRET}
+  #     # Security Configuration
+  #     - MIMIR_ENABLE_SECURITY=${MIMIR_ENABLE_SECURITY:-false}
+  #     - MIMIR_DEV_USER_ADMIN=${MIMIR_DEV_USER_ADMIN}
+  #     - MIMIR_DEV_USER_DEVELOPER=${MIMIR_DEV_USER_DEVELOPER}
+  #     - MIMIR_DEV_USER_ANALYST=${MIMIR_DEV_USER_ANALYST}
+  #     - MIMIR_DEV_USER_VIEWER=${MIMIR_DEV_USER_VIEWER}
+  #     - MIMIR_JWT_SECRET=${MIMIR_JWT_SECRET}
 
-      # OAuth Configuration (explicit endpoint URLs - provider-specific)
-      - MIMIR_AUTH_PROVIDER=${MIMIR_AUTH_PROVIDER}
-      - MIMIR_OAUTH_AUTHORIZATION_URL=${MIMIR_OAUTH_AUTHORIZATION_URL}  # Full authorization endpoint URL
-      - MIMIR_OAUTH_TOKEN_URL=${MIMIR_OAUTH_TOKEN_URL}                  # Full token endpoint URL
-      - MIMIR_OAUTH_USERINFO_URL=${MIMIR_OAUTH_USERINFO_URL}            # Full userinfo endpoint URL
-      - MIMIR_OAUTH_CLIENT_ID=${MIMIR_OAUTH_CLIENT_ID}
-      - MIMIR_OAUTH_CLIENT_SECRET=${MIMIR_OAUTH_CLIENT_SECRET}
-      - MIMIR_OAUTH_CALLBACK_URL=${MIMIR_OAUTH_CALLBACK_URL}
-      - MIMIR_OAUTH_ALLOW_HTTP=${MIMIR_OAUTH_ALLOW_HTTP}
+  #     # OAuth Configuration (explicit endpoint URLs - provider-specific)
+  #     - MIMIR_AUTH_PROVIDER=${MIMIR_AUTH_PROVIDER}
+  #     - MIMIR_OAUTH_AUTHORIZATION_URL=${MIMIR_OAUTH_AUTHORIZATION_URL}  # Full authorization endpoint URL
+  #     - MIMIR_OAUTH_TOKEN_URL=${MIMIR_OAUTH_TOKEN_URL}                  # Full token endpoint URL
+  #     - MIMIR_OAUTH_USERINFO_URL=${MIMIR_OAUTH_USERINFO_URL}            # Full userinfo endpoint URL
+  #     - MIMIR_OAUTH_CLIENT_ID=${MIMIR_OAUTH_CLIENT_ID}
+  #     - MIMIR_OAUTH_CLIENT_SECRET=${MIMIR_OAUTH_CLIENT_SECRET}
+  #     - MIMIR_OAUTH_CALLBACK_URL=${MIMIR_OAUTH_CALLBACK_URL}
+  #     - MIMIR_OAUTH_ALLOW_HTTP=${MIMIR_OAUTH_ALLOW_HTTP}
       
-      # Advanced Configuration
-      - MIMIR_PARALLEL_EXECUTION=${MIMIR_PARALLEL_EXECUTION:-false}
-      - MIMIR_INSTALL_DIR=${MIMIR_INSTALL_DIR:-/app}
-      - MIMIR_AGENTS_DIR=${MIMIR_AGENTS_DIR:-/app/docs/agents}
-    volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
-      - ${HOST_WORKSPACE_ROOT:-~/src}:${WORKSPACE_ROOT:-/workspace}  # Read-write for file editing (remove :ro)
-      # - ${HOST_WORKSPACE_ROOT:-~/src}:/workspace:ro  # Read-write for file editing (remove :ro)
-    ports:
-      - "9042:3000"
-    healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (res) => process.exit(res.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-    depends_on:
-      neo4j:
-        condition: service_healthy
-      copilot-api:
-        condition: service_healthy
-      # Ollama is required for embeddings but you can use a local server
-      llama-server:
-        condition: service_healthy
-      # llama-vl-server:
-      #   condition: service_healthy
-    networks:
-      - mcp_network
+  #     # Advanced Configuration
+  #     - MIMIR_PARALLEL_EXECUTION=${MIMIR_PARALLEL_EXECUTION:-false}
+  #     - MIMIR_INSTALL_DIR=${MIMIR_INSTALL_DIR:-/app}
+  #     - MIMIR_AGENTS_DIR=${MIMIR_AGENTS_DIR:-/app/docs/agents}
+  #   volumes:
+  #     - ./data:/app/data
+  #     - ./logs:/app/logs
+  #     - ${HOST_WORKSPACE_ROOT:-~/src}:${WORKSPACE_ROOT:-/workspace}  # Read-write for file editing (remove :ro)
+  #     # - ${HOST_WORKSPACE_ROOT:-~/src}:/workspace:ro  # Read-write for file editing (remove :ro)
+  #   ports:
+  #     - "9042:3000"
+  #   healthcheck:
+  #     test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (res) => process.exit(res.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 10s
+  #   depends_on:
+  #     neo4j:
+  #       condition: service_healthy
+  #     copilot-api:
+  #       condition: service_healthy
+  #     # Ollama is required for embeddings but you can use a local server
+  #     llama-server:
+  #       condition: service_healthy
+  #     # llama-vl-server:
+  #     #   condition: service_healthy
+  #   networks:
+  #     - mcp_network
 
-  # # Open-WebUI with Mimir Pipeline Integration
+  # # # Open-WebUI with Mimir Pipeline Integration
   # open-webui:
   #   build:
   #     context: .

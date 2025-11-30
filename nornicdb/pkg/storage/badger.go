@@ -850,6 +850,14 @@ func (b *BadgerEngine) deleteEdgesWithPrefix(txn *badger.Txn, prefix []byte) err
 
 // CreateEdge creates a new edge between two nodes.
 func (b *BadgerEngine) CreateEdge(edge *Edge) error {
+	return b.CreateEdgeWithOptions(edge, false)
+}
+
+// CreateEdgeWithOptions creates an edge with optional node verification skip.
+// When skipNodeVerification is true, we skip checking if start/end nodes exist.
+// This is safe when nodes were already verified (e.g., after MATCH).
+// Skipping verification saves 2 disk reads per edge creation.
+func (b *BadgerEngine) CreateEdgeWithOptions(edge *Edge, skipNodeVerification bool) error {
 	if edge == nil {
 		return ErrInvalidData
 	}
@@ -865,32 +873,36 @@ func (b *BadgerEngine) CreateEdge(edge *Edge) error {
 	b.mu.RUnlock()
 
 	err := b.db.Update(func(txn *badger.Txn) error {
-		// Check if edge already exists
 		key := edgeKey(edge.ID)
-		_, err := txn.Get(key)
-		if err == nil {
-			return ErrAlreadyExists
-		}
-		if err != badger.ErrKeyNotFound {
-			return err
-		}
 
-		// Verify start node exists
-		_, err = txn.Get(nodeKey(edge.StartNode))
-		if err == badger.ErrKeyNotFound {
-			return ErrNotFound
-		}
-		if err != nil {
-			return err
-		}
+		// Only check for duplicates if not skipping verification
+		// (new edges from CREATE always have unique UUIDs)
+		if !skipNodeVerification {
+			_, err := txn.Get(key)
+			if err == nil {
+				return ErrAlreadyExists
+			}
+			if err != badger.ErrKeyNotFound {
+				return err
+			}
 
-		// Verify end node exists
-		_, err = txn.Get(nodeKey(edge.EndNode))
-		if err == badger.ErrKeyNotFound {
-			return ErrNotFound
-		}
-		if err != nil {
-			return err
+			// Verify start node exists
+			_, err = txn.Get(nodeKey(edge.StartNode))
+			if err == badger.ErrKeyNotFound {
+				return ErrNotFound
+			}
+			if err != nil {
+				return err
+			}
+
+			// Verify end node exists
+			_, err = txn.Get(nodeKey(edge.EndNode))
+			if err == badger.ErrKeyNotFound {
+				return ErrNotFound
+			}
+			if err != nil {
+				return err
+			}
 		}
 
 		// Serialize edge
@@ -1053,15 +1065,45 @@ func (b *BadgerEngine) DeleteEdge(id EdgeID) error {
 	}
 	b.mu.RUnlock()
 
-	// Get edge type before deletion for selective cache invalidation
-	edge, _ := b.GetEdge(id)
+	// Single transaction: read edge type AND delete in one pass
 	var edgeType string
-	if edge != nil {
-		edgeType = edge.Type
-	}
-
 	err := b.db.Update(func(txn *badger.Txn) error {
-		return b.deleteEdgeInTxn(txn, id)
+		key := edgeKey(id)
+
+		// Get edge for index cleanup and cache invalidation
+		item, err := txn.Get(key)
+		if err == badger.ErrKeyNotFound {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+
+		var edge *Edge
+		if err := item.Value(func(val []byte) error {
+			var decodeErr error
+			edge, decodeErr = decodeEdge(val)
+			return decodeErr
+		}); err != nil {
+			return err
+		}
+
+		// Save edge type for cache invalidation after transaction
+		edgeType = edge.Type
+
+		// Delete indexes
+		if err := txn.Delete(outgoingIndexKey(edge.StartNode, id)); err != nil {
+			return err
+		}
+		if err := txn.Delete(incomingIndexKey(edge.EndNode, id)); err != nil {
+			return err
+		}
+		if err := txn.Delete(edgeTypeIndexKey(edge.Type, id)); err != nil {
+			return err
+		}
+
+		// Delete edge
+		return txn.Delete(key)
 	})
 
 	// Invalidate only this edge type (not entire cache)
@@ -1282,6 +1324,51 @@ func (b *BadgerEngine) GetNodesByLabel(label string) ([]*Node, error) {
 	}
 
 	return nodes, nil
+}
+
+// GetFirstNodeByLabel returns the first node with a given label.
+// This is O(1) instead of O(N) when you only need any single match.
+// Used for MATCH patterns without property filters like MATCH (a:Actor).
+func (b *BadgerEngine) GetFirstNodeByLabel(label string) (*Node, error) {
+	b.mu.RLock()
+	if b.closed {
+		b.mu.RUnlock()
+		return nil, ErrStorageClosed
+	}
+	b.mu.RUnlock()
+
+	var node *Node
+	err := b.db.View(func(txn *badger.Txn) error {
+		prefix := labelIndexPrefix(label)
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		// Only get the FIRST match
+		it.Seek(prefix)
+		if !it.ValidForPrefix(prefix) {
+			return nil // No nodes with this label
+		}
+
+		nodeID := extractNodeIDFromLabelIndex(it.Item().Key(), len(label))
+		if nodeID == "" {
+			return nil
+		}
+
+		item, err := txn.Get(nodeKey(nodeID))
+		if err != nil {
+			return nil
+		}
+
+		return item.Value(func(val []byte) error {
+			var decodeErr error
+			node, decodeErr = decodeNode(val)
+			return decodeErr
+		})
+	})
+
+	return node, err
 }
 
 // GetAllNodes returns all nodes in the storage.
@@ -1785,9 +1872,16 @@ func (b *BadgerEngine) BulkCreateEdges(edges []*Edge) error {
 		return nil
 	})
 
-	// Invalidate edge type cache on successful bulk create
+	// Invalidate edge type cache on successful bulk create - targeted by type
 	if err == nil && len(edges) > 0 {
-		b.InvalidateEdgeTypeCache()
+		// Collect unique edge types
+		seen := make(map[string]struct{})
+		for _, edge := range edges {
+			if _, ok := seen[edge.Type]; !ok {
+				seen[edge.Type] = struct{}{}
+				b.InvalidateEdgeTypeCacheForType(edge.Type)
+			}
+		}
 	}
 
 	return err

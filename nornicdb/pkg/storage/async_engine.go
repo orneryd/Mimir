@@ -30,6 +30,9 @@ type AsyncEngine struct {
 	deleteEdges map[EdgeID]bool
 	mu          sync.RWMutex
 
+	// Label index for O(1) lookup by label (lowercase)
+	labelIndex map[string]map[NodeID]bool
+
 	// Background flush
 	flushInterval time.Duration
 	flushTicker   *time.Ticker
@@ -68,6 +71,7 @@ func NewAsyncEngine(engine Engine, config *AsyncEngineConfig) *AsyncEngine {
 		edgeCache:     make(map[EdgeID]*Edge),
 		deleteNodes:   make(map[NodeID]bool),
 		deleteEdges:   make(map[EdgeID]bool),
+		labelIndex:    make(map[string]map[NodeID]bool),
 		flushInterval: config.FlushInterval,
 		stopChan:      make(chan struct{}),
 	}
@@ -177,6 +181,13 @@ func (ae *AsyncEngine) Flush() error {
 	for id := range nodesToWrite {
 		// Only delete if it's the same object (not updated during flush)
 		if ae.nodeCache[id] == nodesToWrite[id] {
+			// Remove from label index
+			for _, label := range ae.nodeCache[id].Labels {
+				lowerLabel := strings.ToLower(label)
+				if ae.labelIndex[lowerLabel] != nil {
+					delete(ae.labelIndex[lowerLabel], id)
+				}
+			}
 			delete(ae.nodeCache, id)
 		}
 	}
@@ -214,6 +225,16 @@ func (ae *AsyncEngine) CreateNode(node *Node) error {
 	// Remove from delete set if present
 	delete(ae.deleteNodes, node.ID)
 	ae.nodeCache[node.ID] = node
+
+	// Update label index for O(1) GetNodesByLabel
+	for _, label := range node.Labels {
+		lowerLabel := strings.ToLower(label)
+		if ae.labelIndex[lowerLabel] == nil {
+			ae.labelIndex[lowerLabel] = make(map[NodeID]bool)
+		}
+		ae.labelIndex[lowerLabel][node.ID] = true
+	}
+
 	ae.pendingWrites++
 	return nil
 }
@@ -223,7 +244,27 @@ func (ae *AsyncEngine) UpdateNode(node *Node) error {
 	ae.mu.Lock()
 	defer ae.mu.Unlock()
 
+	// Remove old labels from index if node exists
+	if oldNode, exists := ae.nodeCache[node.ID]; exists {
+		for _, label := range oldNode.Labels {
+			lowerLabel := strings.ToLower(label)
+			if ae.labelIndex[lowerLabel] != nil {
+				delete(ae.labelIndex[lowerLabel], node.ID)
+			}
+		}
+	}
+
 	ae.nodeCache[node.ID] = node
+
+	// Add new labels to index
+	for _, label := range node.Labels {
+		lowerLabel := strings.ToLower(label)
+		if ae.labelIndex[lowerLabel] == nil {
+			ae.labelIndex[lowerLabel] = make(map[NodeID]bool)
+		}
+		ae.labelIndex[lowerLabel][node.ID] = true
+	}
+
 	ae.pendingWrites++
 	return nil
 }
@@ -232,6 +273,16 @@ func (ae *AsyncEngine) UpdateNode(node *Node) error {
 func (ae *AsyncEngine) DeleteNode(id NodeID) error {
 	ae.mu.Lock()
 	defer ae.mu.Unlock()
+
+	// Remove from label index if node exists
+	if node, exists := ae.nodeCache[id]; exists {
+		for _, label := range node.Labels {
+			lowerLabel := strings.ToLower(label)
+			if ae.labelIndex[lowerLabel] != nil {
+				delete(ae.labelIndex[lowerLabel], id)
+			}
+		}
+	}
 
 	delete(ae.nodeCache, id)
 	ae.deleteNodes[id] = true
@@ -310,23 +361,29 @@ func (ae *AsyncEngine) GetEdge(id EdgeID) (*Edge, error) {
 // Uses case-insensitive label matching for Neo4j compatibility.
 // Snapshots cache state quickly, then releases lock before engine I/O.
 func (ae *AsyncEngine) GetNodesByLabel(label string) ([]*Node, error) {
-	ae.mu.RLock()
-	cachedNodes := make([]*Node, 0)
-	deletedIDs := make(map[NodeID]bool)
-
-	// Normalize label for case-insensitive matching (Neo4j compatible)
 	normalLabel := strings.ToLower(label)
 
+	ae.mu.RLock()
+	// Use label index for O(1) lookup instead of iterating all cached nodes
+	cachedNodes := make([]*Node, 0)
+	if nodeIDs, ok := ae.labelIndex[normalLabel]; ok {
+		for nodeID := range nodeIDs {
+			if node, exists := ae.nodeCache[nodeID]; exists {
+				cachedNodes = append(cachedNodes, node)
+			}
+		}
+	}
+
+	// Copy deleted set to avoid holding lock during I/O
+	deletedIDs := make(map[NodeID]bool, len(ae.deleteNodes))
 	for id := range ae.deleteNodes {
 		deletedIDs[id] = true
 	}
-	for _, node := range ae.nodeCache {
-		for _, l := range node.Labels {
-			if strings.ToLower(l) == normalLabel { // Case-insensitive comparison
-				cachedNodes = append(cachedNodes, node)
-				break
-			}
-		}
+
+	// Copy seen IDs from cache
+	seenIDs := make(map[NodeID]bool, len(cachedNodes))
+	for _, node := range cachedNodes {
+		seenIDs[node.ID] = true
 	}
 	ae.mu.RUnlock()
 
@@ -338,13 +395,7 @@ func (ae *AsyncEngine) GetNodesByLabel(label string) ([]*Node, error) {
 
 	// Merge: cache overrides engine
 	result := make([]*Node, 0, len(cachedNodes)+len(engineNodes))
-
-	// Add cached nodes first
-	seenIDs := make(map[NodeID]bool)
-	for _, node := range cachedNodes {
-		result = append(result, node)
-		seenIDs[node.ID] = true
-	}
+	result = append(result, cachedNodes...)
 
 	// Add engine nodes not in cache or deleted
 	for _, node := range engineNodes {
@@ -667,6 +718,15 @@ func (ae *AsyncEngine) BulkCreateNodes(nodes []*Node) error {
 	for _, node := range nodes {
 		delete(ae.deleteNodes, node.ID)
 		ae.nodeCache[node.ID] = node
+
+		// Update label index
+		for _, label := range node.Labels {
+			lowerLabel := strings.ToLower(label)
+			if ae.labelIndex[lowerLabel] == nil {
+				ae.labelIndex[lowerLabel] = make(map[NodeID]bool)
+			}
+			ae.labelIndex[lowerLabel][node.ID] = true
+		}
 	}
 	ae.pendingWrites += int64(len(nodes))
 	return nil
@@ -691,6 +751,15 @@ func (ae *AsyncEngine) BulkDeleteNodes(ids []NodeID) error {
 	defer ae.mu.Unlock()
 
 	for _, id := range ids {
+		// Remove from label index if node exists
+		if node, exists := ae.nodeCache[id]; exists {
+			for _, label := range node.Labels {
+				lowerLabel := strings.ToLower(label)
+				if ae.labelIndex[lowerLabel] != nil {
+					delete(ae.labelIndex[lowerLabel], id)
+				}
+			}
+		}
 		delete(ae.nodeCache, id)
 		ae.deleteNodes[id] = true
 	}

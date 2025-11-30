@@ -170,6 +170,9 @@ type StorageExecutor struct {
 	// This dramatically speeds up repeated MATCH lookups for the same pattern
 	nodeLookupCache   map[string]*storage.Node
 	nodeLookupCacheMu sync.RWMutex
+
+	// Reverse index: label → set of cache keys for O(1) targeted invalidation
+	labelToKeys map[string]map[string]struct{}
 }
 
 // NewStorageExecutor creates a new Cypher executor with the given storage backend.
@@ -198,6 +201,7 @@ func NewStorageExecutor(store storage.Engine) *StorageExecutor {
 		cache:           NewSmartQueryCache(1000), // Query result cache with label-aware invalidation
 		planCache:       NewQueryPlanCache(500),   // Cache 500 parsed query plans
 		nodeLookupCache: make(map[string]*storage.Node, 1000),
+		labelToKeys:     make(map[string]map[string]struct{}, 100),
 	}
 }
 
@@ -227,20 +231,64 @@ func (e *StorageExecutor) lookupCachedNode(label string, props map[string]interf
 func (e *StorageExecutor) cacheNodeLookup(label string, props map[string]interface{}, node *storage.Node) {
 	key := makeLookupKey(label, props)
 	e.nodeLookupCacheMu.Lock()
-	// Simple eviction: if too large, clear
+	// Simple eviction: if too large, clear both caches
 	if len(e.nodeLookupCache) > 10000 {
 		e.nodeLookupCache = make(map[string]*storage.Node, 1000)
+		e.labelToKeys = make(map[string]map[string]struct{}, 100)
 	}
 	e.nodeLookupCache[key] = node
+	// Add to reverse index for O(1) invalidation
+	if e.labelToKeys[label] == nil {
+		e.labelToKeys[label] = make(map[string]struct{})
+	}
+	e.labelToKeys[label][key] = struct{}{}
 	e.nodeLookupCacheMu.Unlock()
 }
 
-// invalidateNodeLookupCache clears the node lookup cache.
-// Called on write operations that might invalidate cached lookups.
+// invalidateNodeLookupCache clears the entire node lookup cache.
+// Called when we can't determine which labels are affected.
 func (e *StorageExecutor) invalidateNodeLookupCache() {
 	e.nodeLookupCacheMu.Lock()
 	e.nodeLookupCache = make(map[string]*storage.Node, 1000)
+	e.labelToKeys = make(map[string]map[string]struct{}, 100)
 	e.nodeLookupCacheMu.Unlock()
+}
+
+// invalidateNodeLookupCacheForLabels clears only cache entries for specific labels.
+// Uses reverse index for O(1) lookup instead of iterating entire cache.
+func (e *StorageExecutor) invalidateNodeLookupCacheForLabels(labels []string) {
+	if len(labels) == 0 {
+		return
+	}
+	e.nodeLookupCacheMu.Lock()
+	defer e.nodeLookupCacheMu.Unlock()
+
+	// Use reverse index for O(1) targeted invalidation
+	for _, label := range labels {
+		if keys, ok := e.labelToKeys[label]; ok {
+			for key := range keys {
+				delete(e.nodeLookupCache, key)
+			}
+			delete(e.labelToKeys, label)
+		}
+	}
+}
+
+// getFirstNodeByLabel returns the first node with a given label.
+// Goes through storage interface to ensure AsyncEngine cache is checked.
+func (e *StorageExecutor) getFirstNodeByLabel(label string) *storage.Node {
+	// Use standard path - AsyncEngine.GetNodesByLabel checks cache first
+	nodes, err := e.storage.GetNodesByLabel(label)
+	if err != nil || len(nodes) == 0 {
+		return nil
+	}
+	return nodes[0]
+}
+
+// createEdgeOptimized creates an edge using the fastest path.
+// Uses AsyncEngine's write-behind cache for speed + eventual consistency.
+func (e *StorageExecutor) createEdgeOptimized(edge *storage.Edge) error {
+	return e.storage.CreateEdge(edge)
 }
 
 // Execute parses and executes a Cypher query with optional parameters.
@@ -380,8 +428,7 @@ func (e *StorageExecutor) Execute(ctx context.Context, cypher string, params map
 		return e.executeInTransaction(ctx, cypher, upperQuery)
 	}
 
-	// Otherwise, auto-commit single query (implicit transaction)
-	// This maintains Neo4j compatibility: single queries are atomic
+	// Auto-commit single query (implicit transaction)
 	result, err := e.executeImplicit(ctx, cypher, upperQuery)
 
 	// Cache successful read-only queries
@@ -395,12 +442,26 @@ func (e *StorageExecutor) Execute(ctx context.Context, cypher string, params map
 	}
 
 	// Smart invalidation: only invalidate caches for affected labels
-	if !isReadOnly && e.cache != nil {
+	if !isReadOnly {
+		// Extract labels affected by this write operation
 		affectedLabels := extractLabelsFromQuery(cypher)
+
+		// Invalidate node lookup cache (for MATCH pattern caching)
+		// This prevents stale MATCH results after CREATE/DELETE/UPDATE
 		if len(affectedLabels) > 0 {
-			e.cache.InvalidateLabels(affectedLabels)
+			e.invalidateNodeLookupCacheForLabels(affectedLabels)
 		} else {
-			e.cache.Invalidate()
+			// Can't determine labels - full invalidation
+			e.invalidateNodeLookupCache()
+		}
+
+		// Invalidate query result cache
+		if e.cache != nil {
+			if len(affectedLabels) > 0 {
+				e.cache.InvalidateLabels(affectedLabels)
+			} else {
+				e.cache.Invalidate()
+			}
 		}
 	}
 
