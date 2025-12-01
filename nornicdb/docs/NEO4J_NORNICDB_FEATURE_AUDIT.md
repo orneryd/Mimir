@@ -22,7 +22,7 @@ NornicDB is a **production-ready drop-in replacement** for Neo4j with:
 | Indexes | ✅ 100% | B-tree, full-text, vector, composite, range |
 | Constraints | ✅ 100% | UNIQUE, NODE KEY, EXISTS, property types |
 | Transactions | ✅ 100% | Full ACID with BEGIN/COMMIT/ROLLBACK |
-| Built-in Procedures | ✅ 90% | 18+ db.* procedures |
+| Built-in Procedures | ✅ 100% | 41 procedures (34 db.* + 7 dbms.*) |
 | APOC | ⚠️ 13% | 52 of 400+ (core algorithms covered) |
 | Protocol/Drivers | ✅ 95% | Bolt v4.x, all major drivers |
 
@@ -247,9 +247,7 @@ Features NornicDB has that Neo4j doesn't:
 
 | Gap | Impact | Workaround |
 |-----|--------|------------|
-| 87% APOC missing | Low | Core algorithms covered |
-| Prometheus metrics | Medium | Use BadgerDB metrics |
-| Slow query log | Medium | Custom logging |
+| 87% APOC missing | Low | Core algorithms covered; plugin system planned |
 
 ### ✅ Recently Completed
 
@@ -258,6 +256,13 @@ Features NornicDB has that Neo4j doesn't:
 | Bookmarks (causal consistency) | Returns `nornicdb:bookmark:*` on commit, accepts in BEGIN |
 | String query auto-embedding | `db.index.vector.queryNodes` accepts text strings |
 | Multi-line SET with arrays | Full support for embedding storage workflow |
+| db.index.fulltext.createNodeIndex | Create fulltext indexes on node labels |
+| db.index.fulltext.createRelationshipIndex | Create fulltext indexes on relationship types |
+| db.index.vector.createRelationshipIndex | Create vector indexes on relationships |
+| db.index.fulltext.drop | Drop fulltext indexes |
+| db.index.vector.drop | Drop vector indexes |
+| Prometheus /metrics endpoint | Full metrics export (requests, nodes, edges, embeddings, slow queries) |
+| Slow query logging | Configurable threshold (default 100ms), file or stderr output |
 
 ### 🟢 Not Applicable
 
@@ -275,20 +280,20 @@ Features NornicDB has that Neo4j doesn't:
 
 - LLM/AI Agent Memory (primary design target)
 - Knowledge Graphs
-- Semantic Search (GPU-accelerated)
+- Semantic Search (GPU-accelerated, MMR diversification)
 - Graph Analysis (shortestPath, traversals, subgraphs)
 - Recommendation Engines
 - Financial/Transactional (full ACID)
 - Multi-tenant Systems (constraint enforcement)
 - Development/Testing (fast, lightweight)
+- Enterprise Monitoring (Prometheus `/metrics` endpoint)
 
 ### ⚠️ Use with Consideration
 
 | Use Case | Consideration |
 |----------|---------------|
 | Advanced GIS | 127% spatial but no complex geometries |
-| Heavy APOC apps | 13% coverage - verify needed procedures |
-| Enterprise monitoring | No Prometheus endpoint yet |
+| Heavy APOC apps | 13% coverage - verify needed procedures; plugin system planned |
 
 ---
 
@@ -299,15 +304,20 @@ Features NornicDB has that Neo4j doesn't:
 - String query auto-embedding in vector search
 - Multi-line SET with arrays
 - Server-side query embedding via Cypher executor
+- Prometheus /metrics endpoint
+- Slow query logging (configurable threshold)
+- MMR diversification for search results
 
 ### 🎯 Next Priority
 
 | Task | Effort | Status |
 |------|--------|--------|
-| Prometheus metrics | 2 days | 🔴 TODO |
-| Slow query logging | 1 day | 🔴 TODO |
-| MMR diversification | 1 day | 🔴 TODO |
+| Prometheus metrics | 2 days | ✅ Done |
+| Slow query logging | 1 day | ✅ Done |
+| MMR diversification | 1 day | ✅ Done |
 | Cross-encoder rerank | 3 days | 🔴 TODO |
+| Plugin system for APOC | 3 days | 🔴 TODO |
+| Eval harness | 2 days | 🔴 TODO |
 
 ---
 

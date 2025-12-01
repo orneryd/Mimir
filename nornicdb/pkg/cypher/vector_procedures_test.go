@@ -432,3 +432,358 @@ func TestCallDbIndexFulltextQueryRelationships(t *testing.T) {
 		assert.NotNil(t, result)
 	})
 }
+
+// =============================================================================
+// Tests for New Index Creation Procedures (Neo4j 100% Compatibility)
+// =============================================================================
+
+func TestCallDbIndexVectorCreateRelationshipIndex(t *testing.T) {
+	engine := storage.NewMemoryEngine()
+	exec := NewStorageExecutor(engine)
+	ctx := context.Background()
+
+	t.Run("create_relationship_vector_index", func(t *testing.T) {
+		result, err := exec.Execute(ctx,
+			"CALL db.index.vector.createRelationshipIndex('rel_vec_idx', 'SIMILAR_TO', 'similarity', 768, 'cosine')", nil)
+		require.NoError(t, err)
+		require.Len(t, result.Rows, 1)
+
+		assert.Equal(t, "rel_vec_idx", result.Rows[0][0])
+		assert.Equal(t, "SIMILAR_TO", result.Rows[0][1])
+		assert.Equal(t, "similarity", result.Rows[0][2])
+		assert.Equal(t, 768, result.Rows[0][3])
+		assert.Equal(t, "cosine", result.Rows[0][4])
+	})
+
+	t.Run("create_with_euclidean_similarity", func(t *testing.T) {
+		result, err := exec.Execute(ctx,
+			"CALL db.index.vector.createRelationshipIndex('rel_vec_idx2', 'CONNECTS', 'embedding', 1024, 'euclidean')", nil)
+		require.NoError(t, err)
+		require.Len(t, result.Rows, 1)
+
+		assert.Equal(t, "euclidean", result.Rows[0][4])
+	})
+
+	t.Run("create_with_default_similarity", func(t *testing.T) {
+		result, err := exec.Execute(ctx,
+			"CALL db.index.vector.createRelationshipIndex('rel_vec_idx3', 'RELATES', 'vec', 256)", nil)
+		require.NoError(t, err)
+		require.Len(t, result.Rows, 1)
+
+		assert.Equal(t, "cosine", result.Rows[0][4]) // Default
+	})
+
+	t.Run("missing_arguments_error", func(t *testing.T) {
+		_, err := exec.Execute(ctx,
+			"CALL db.index.vector.createRelationshipIndex('idx', 'REL', 'prop')", nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "requires at least 4 arguments")
+	})
+}
+
+func TestCallDbIndexFulltextCreateNodeIndex(t *testing.T) {
+	engine := storage.NewMemoryEngine()
+	exec := NewStorageExecutor(engine)
+	ctx := context.Background()
+
+	t.Run("create_single_label_single_property", func(t *testing.T) {
+		result, err := exec.Execute(ctx,
+			"CALL db.index.fulltext.createNodeIndex('ft_idx1', 'Document', 'content')", nil)
+		require.NoError(t, err)
+		require.Len(t, result.Rows, 1)
+
+		assert.Equal(t, "ft_idx1", result.Rows[0][0])
+		labels := result.Rows[0][1].([]string)
+		assert.Contains(t, labels, "Document")
+	})
+
+	t.Run("create_with_array_labels", func(t *testing.T) {
+		result, err := exec.Execute(ctx,
+			"CALL db.index.fulltext.createNodeIndex('ft_idx2', ['Article', 'Blog', 'Post'], ['title', 'content'])", nil)
+		require.NoError(t, err)
+		require.Len(t, result.Rows, 1)
+
+		labels := result.Rows[0][1].([]string)
+		assert.Len(t, labels, 3)
+		assert.Contains(t, labels, "Article")
+		assert.Contains(t, labels, "Blog")
+		assert.Contains(t, labels, "Post")
+
+		properties := result.Rows[0][2].([]string)
+		assert.Len(t, properties, 2)
+		assert.Contains(t, properties, "title")
+		assert.Contains(t, properties, "content")
+	})
+
+	t.Run("create_with_single_quoted_strings", func(t *testing.T) {
+		result, err := exec.Execute(ctx,
+			`CALL db.index.fulltext.createNodeIndex('ft_idx3', 'Memory', 'text')`, nil)
+		require.NoError(t, err)
+		require.Len(t, result.Rows, 1)
+	})
+
+	t.Run("missing_arguments_error", func(t *testing.T) {
+		_, err := exec.Execute(ctx,
+			"CALL db.index.fulltext.createNodeIndex('idx', 'Label')", nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "requires at least 3 arguments")
+	})
+}
+
+func TestCallDbIndexFulltextCreateRelationshipIndex(t *testing.T) {
+	engine := storage.NewMemoryEngine()
+	exec := NewStorageExecutor(engine)
+	ctx := context.Background()
+
+	t.Run("create_single_type_single_property", func(t *testing.T) {
+		result, err := exec.Execute(ctx,
+			"CALL db.index.fulltext.createRelationshipIndex('rel_ft_idx1', 'MENTIONS', 'description')", nil)
+		require.NoError(t, err)
+		require.Len(t, result.Rows, 1)
+
+		assert.Equal(t, "rel_ft_idx1", result.Rows[0][0])
+	})
+
+	t.Run("create_with_array_types", func(t *testing.T) {
+		result, err := exec.Execute(ctx,
+			"CALL db.index.fulltext.createRelationshipIndex('rel_ft_idx2', ['REFERENCES', 'CITES', 'LINKS_TO'], ['note', 'context'])", nil)
+		require.NoError(t, err)
+		require.Len(t, result.Rows, 1)
+
+		relTypes := result.Rows[0][1].([]string)
+		assert.Len(t, relTypes, 3)
+		assert.Contains(t, relTypes, "REFERENCES")
+		assert.Contains(t, relTypes, "CITES")
+		assert.Contains(t, relTypes, "LINKS_TO")
+	})
+
+	t.Run("missing_arguments_error", func(t *testing.T) {
+		_, err := exec.Execute(ctx,
+			"CALL db.index.fulltext.createRelationshipIndex('idx', 'REL')", nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "requires at least 3 arguments")
+	})
+}
+
+func TestCallDbIndexFulltextDrop(t *testing.T) {
+	engine := storage.NewMemoryEngine()
+	exec := NewStorageExecutor(engine)
+	ctx := context.Background()
+
+	t.Run("drop_existing_index", func(t *testing.T) {
+		// Create index first
+		_, err := exec.Execute(ctx,
+			"CALL db.index.fulltext.createNodeIndex('to_drop', 'Node', 'prop')", nil)
+		require.NoError(t, err)
+
+		// Drop it
+		result, err := exec.Execute(ctx,
+			"CALL db.index.fulltext.drop('to_drop')", nil)
+		require.NoError(t, err)
+		require.Len(t, result.Rows, 1)
+
+		assert.Equal(t, "to_drop", result.Rows[0][0])
+		assert.Equal(t, true, result.Rows[0][1])
+	})
+
+	t.Run("drop_nonexistent_index_succeeds", func(t *testing.T) {
+		// Drop should succeed even if index doesn't exist (idempotent)
+		result, err := exec.Execute(ctx,
+			"CALL db.index.fulltext.drop('nonexistent_index')", nil)
+		require.NoError(t, err)
+		require.Len(t, result.Rows, 1)
+
+		assert.Equal(t, "nonexistent_index", result.Rows[0][0])
+		assert.Equal(t, true, result.Rows[0][1]) // NornicDB returns true (no-op)
+	})
+
+	t.Run("drop_with_quoted_name", func(t *testing.T) {
+		result, err := exec.Execute(ctx,
+			`CALL db.index.fulltext.drop("my_special_index")`, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "my_special_index", result.Rows[0][0])
+	})
+}
+
+func TestCallDbIndexVectorDrop(t *testing.T) {
+	engine := storage.NewMemoryEngine()
+	exec := NewStorageExecutor(engine)
+	ctx := context.Background()
+
+	t.Run("drop_existing_vector_index", func(t *testing.T) {
+		// Create index first
+		_, err := exec.Execute(ctx,
+			"CALL db.index.vector.createNodeIndex('vec_to_drop', 'Doc', 'embedding', 384, 'cosine')", nil)
+		require.NoError(t, err)
+
+		// Drop it
+		result, err := exec.Execute(ctx,
+			"CALL db.index.vector.drop('vec_to_drop')", nil)
+		require.NoError(t, err)
+		require.Len(t, result.Rows, 1)
+
+		assert.Equal(t, "vec_to_drop", result.Rows[0][0])
+		assert.Equal(t, true, result.Rows[0][1])
+	})
+
+	t.Run("drop_nonexistent_vector_index_succeeds", func(t *testing.T) {
+		result, err := exec.Execute(ctx,
+			"CALL db.index.vector.drop('nonexistent_vec_idx')", nil)
+		require.NoError(t, err)
+		require.Len(t, result.Rows, 1)
+
+		assert.Equal(t, "nonexistent_vec_idx", result.Rows[0][0])
+		assert.Equal(t, true, result.Rows[0][1])
+	})
+}
+
+// =============================================================================
+// Integration Tests: Real-World Index Workflows
+// =============================================================================
+
+func TestFulltextIndexWorkflow(t *testing.T) {
+	engine := storage.NewMemoryEngine()
+	exec := NewStorageExecutor(engine)
+	ctx := context.Background()
+
+	t.Run("complete_fulltext_workflow", func(t *testing.T) {
+		// 1. Create fulltext index for documents
+		result, err := exec.Execute(ctx,
+			"CALL db.index.fulltext.createNodeIndex('documents_search', ['Document', 'Article'], ['title', 'content', 'summary'])", nil)
+		require.NoError(t, err)
+		assert.Equal(t, "documents_search", result.Rows[0][0])
+
+		// 2. Create some documents
+		_, err = exec.Execute(ctx, `
+			CREATE (d1:Document {id: 'doc1', title: 'Introduction to Machine Learning', content: 'Machine learning is a subset of AI'})
+		`, nil)
+		require.NoError(t, err)
+
+		_, err = exec.Execute(ctx, `
+			CREATE (d2:Article {id: 'doc2', title: 'Deep Learning Tutorial', content: 'Neural networks enable deep learning'})
+		`, nil)
+		require.NoError(t, err)
+
+		// 3. Query the fulltext index
+		result, err = exec.Execute(ctx,
+			"CALL db.index.fulltext.queryNodes('documents_search', 'machine learning') YIELD node, score", nil)
+		require.NoError(t, err)
+		assert.NotNil(t, result)
+
+		// 4. Clean up - drop the index
+		result, err = exec.Execute(ctx,
+			"CALL db.index.fulltext.drop('documents_search')", nil)
+		require.NoError(t, err)
+		assert.Equal(t, true, result.Rows[0][1])
+	})
+}
+
+func TestVectorIndexWorkflow(t *testing.T) {
+	engine := storage.NewMemoryEngine()
+	exec := NewStorageExecutor(engine)
+	ctx := context.Background()
+
+	t.Run("complete_vector_workflow", func(t *testing.T) {
+		// 1. Create vector index for embeddings
+		result, err := exec.Execute(ctx,
+			"CALL db.index.vector.createNodeIndex('memory_embeddings', 'Memory', 'embedding', 1024, 'cosine')", nil)
+		require.NoError(t, err)
+		assert.Equal(t, "memory_embeddings", result.Rows[0][0])
+		assert.Equal(t, 1024, result.Rows[0][3])
+
+		// 2. Create relationship vector index
+		result, err = exec.Execute(ctx,
+			"CALL db.index.vector.createRelationshipIndex('edge_similarity', 'RELATES_TO', 'weight_vector', 256, 'euclidean')", nil)
+		require.NoError(t, err)
+		assert.Equal(t, "edge_similarity", result.Rows[0][0])
+
+		// 3. Create a memory node directly in storage with known ID
+		err = engine.CreateNode(&storage.Node{
+			ID:         "mem1",
+			Labels:     []string{"Memory"},
+			Properties: map[string]interface{}{"content": "Test memory"},
+		})
+		require.NoError(t, err)
+
+		// 4. Set embedding via procedure (uses storage ID, not property)
+		result, err = exec.Execute(ctx,
+			"CALL db.create.setNodeVectorProperty('mem1', 'embedding', [0.1, 0.2, 0.3, 0.4])", nil)
+		require.NoError(t, err)
+		require.Len(t, result.Rows, 1) // Returns the updated node
+
+		// 5. Query vector index
+		result, err = exec.Execute(ctx,
+			"CALL db.index.vector.queryNodes('memory_embeddings', 5, [0.15, 0.25, 0.35, 0.45]) YIELD node, score", nil)
+		require.NoError(t, err)
+		assert.NotNil(t, result)
+
+		// 6. Drop indexes
+		result, err = exec.Execute(ctx, "CALL db.index.vector.drop('memory_embeddings')", nil)
+		require.NoError(t, err)
+		assert.Equal(t, true, result.Rows[0][1])
+
+		result, err = exec.Execute(ctx, "CALL db.index.vector.drop('edge_similarity')", nil)
+		require.NoError(t, err)
+		assert.Equal(t, true, result.Rows[0][1])
+	})
+}
+
+func TestMimirCompatibleWorkflow(t *testing.T) {
+	engine := storage.NewMemoryEngine()
+	exec := NewStorageExecutor(engine)
+	ctx := context.Background()
+
+	t.Run("mimir_style_index_management", func(t *testing.T) {
+		// This simulates how Mimir would manage indexes in NornicDB
+
+		// 1. Create default indexes that Mimir expects
+		_, err := exec.Execute(ctx,
+			"CALL db.index.vector.createNodeIndex('node_embedding_index', 'Node', 'embedding', 1024, 'cosine')", nil)
+		require.NoError(t, err)
+
+		_, err = exec.Execute(ctx,
+			"CALL db.index.fulltext.createNodeIndex('node_fulltext_index', ['Node', 'Memory', 'Decision'], ['content', 'title', 'description'])", nil)
+		require.NoError(t, err)
+
+		// 2. Verify indexes were created by listing them
+		result, err := exec.Execute(ctx, "CALL db.indexes()", nil)
+		require.NoError(t, err)
+		assert.NotNil(t, result)
+
+		// 3. Store a decision node like Mimir would
+		_, err = exec.Execute(ctx, `
+			CREATE (n:Decision {
+				id: 'decision-123',
+				type: 'decision',
+				title: 'Use PostgreSQL for primary database',
+				content: 'Selected PostgreSQL due to ACID compliance and JSON support',
+				created: datetime()
+			})
+		`, nil)
+		require.NoError(t, err)
+
+		// 4. Set embedding (simulating what Mimir's embedding service does)
+		embedding := make([]float32, 1024)
+		for i := range embedding {
+			embedding[i] = float32(i) / 1024.0
+		}
+
+		// Using Cypher SET instead of procedure for embedding (Mimir style)
+		_, err = exec.Execute(ctx, `
+			MATCH (n:Decision {id: 'decision-123'})
+			SET n.embedding = [0.1, 0.2, 0.3, 0.4],
+			    n.has_embedding = true
+		`, nil)
+		require.NoError(t, err)
+
+		// 5. Search - both fulltext and vector
+		result, err = exec.Execute(ctx,
+			"CALL db.index.fulltext.queryNodes('node_fulltext_index', 'PostgreSQL') YIELD node, score", nil)
+		require.NoError(t, err)
+
+		result, err = exec.Execute(ctx,
+			"CALL db.index.vector.queryNodes('node_embedding_index', 10, [0.1, 0.2, 0.3, 0.4]) YIELD node, score", nil)
+		require.NoError(t, err)
+		assert.NotNil(t, result)
+	})
+}

@@ -428,6 +428,16 @@ func (e *StorageExecutor) executeCall(ctx context.Context, cypher string) (*Exec
 		result, err = e.callDbIndexVectorQueryRelationships(cypher)
 	case strings.Contains(upper, "DB.INDEX.VECTOR.CREATENODEINDEX"):
 		result, err = e.callDbIndexVectorCreateNodeIndex(ctx, cypher)
+	case strings.Contains(upper, "DB.INDEX.VECTOR.CREATERELATIONSHIPINDEX"):
+		result, err = e.callDbIndexVectorCreateRelationshipIndex(ctx, cypher)
+	case strings.Contains(upper, "DB.INDEX.FULLTEXT.CREATENODEINDEX"):
+		result, err = e.callDbIndexFulltextCreateNodeIndex(ctx, cypher)
+	case strings.Contains(upper, "DB.INDEX.FULLTEXT.CREATERELATIONSHIPINDEX"):
+		result, err = e.callDbIndexFulltextCreateRelationshipIndex(ctx, cypher)
+	case strings.Contains(upper, "DB.INDEX.FULLTEXT.DROP"):
+		result, err = e.callDbIndexFulltextDrop(cypher)
+	case strings.Contains(upper, "DB.INDEX.VECTOR.DROP"):
+		result, err = e.callDbIndexVectorDrop(cypher)
 	case strings.Contains(upper, "DB.INDEX.FULLTEXT.LISTAVAILABLEANALYZERS"):
 		result, err = e.callDbIndexFulltextListAvailableAnalyzers()
 	case strings.Contains(upper, "DB.CREATE.SETNODEVECTORPROPERTY"):
@@ -2454,6 +2464,271 @@ func (e *StorageExecutor) callDbIndexVectorCreateNodeIndex(ctx context.Context, 
 		Columns: []string{"name", "label", "property", "dimension", "similarityFunction"},
 		Rows:    [][]interface{}{{indexName, label, property, dimension, similarity}},
 	}, nil
+}
+
+// callDbIndexVectorCreateRelationshipIndex creates a vector index on relationships - Neo4j db.index.vector.createRelationshipIndex()
+// Syntax: CALL db.index.vector.createRelationshipIndex(indexName, relationshipType, property, dimension, similarityFunction)
+func (e *StorageExecutor) callDbIndexVectorCreateRelationshipIndex(ctx context.Context, cypher string) (*ExecuteResult, error) {
+	upper := strings.ToUpper(cypher)
+	idx := strings.Index(upper, "CREATERELATIONSHIPINDEX")
+	if idx < 0 {
+		return nil, fmt.Errorf("invalid db.index.vector.createRelationshipIndex syntax")
+	}
+
+	// Parse arguments similar to createNodeIndex
+	argsStart := strings.Index(cypher[idx:], "(")
+	argsEnd := strings.LastIndex(cypher[idx:], ")")
+	if argsStart < 0 || argsEnd < 0 {
+		return nil, fmt.Errorf("invalid db.index.vector.createRelationshipIndex syntax: missing parentheses")
+	}
+
+	argsStr := cypher[idx+argsStart+1 : idx+argsEnd]
+	parts := e.splitArgsSimple(argsStr)
+	if len(parts) < 4 {
+		return nil, fmt.Errorf("db.index.vector.createRelationshipIndex requires at least 4 arguments: indexName, relationshipType, property, dimension")
+	}
+
+	indexName := strings.Trim(strings.TrimSpace(parts[0]), "'\"")
+	relType := strings.Trim(strings.TrimSpace(parts[1]), "'\"")
+	property := strings.Trim(strings.TrimSpace(parts[2]), "'\"")
+	dimension, err := strconv.Atoi(strings.TrimSpace(parts[3]))
+	if err != nil {
+		return nil, fmt.Errorf("invalid dimension: %w", err)
+	}
+
+	similarity := "cosine"
+	if len(parts) > 4 {
+		similarity = strings.Trim(strings.TrimSpace(parts[4]), "'\"")
+	}
+
+	// Create vector index on relationships using schema manager
+	schema := e.storage.GetSchema()
+	// Use relationship type as "label" for index naming
+	err = schema.AddVectorIndex(indexName, relType, property, dimension, similarity)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create relationship vector index: %w", err)
+	}
+
+	return &ExecuteResult{
+		Columns: []string{"name", "relationshipType", "property", "dimension", "similarityFunction"},
+		Rows:    [][]interface{}{{indexName, relType, property, dimension, similarity}},
+	}, nil
+}
+
+// callDbIndexFulltextCreateNodeIndex creates a fulltext index on nodes - Neo4j db.index.fulltext.createNodeIndex()
+// Syntax: CALL db.index.fulltext.createNodeIndex(indexName, labels, properties, config)
+func (e *StorageExecutor) callDbIndexFulltextCreateNodeIndex(ctx context.Context, cypher string) (*ExecuteResult, error) {
+	upper := strings.ToUpper(cypher)
+	idx := strings.Index(upper, "CREATENODEINDEX")
+	if idx < 0 {
+		return nil, fmt.Errorf("invalid db.index.fulltext.createNodeIndex syntax")
+	}
+
+	argsStart := strings.Index(cypher[idx:], "(")
+	argsEnd := strings.LastIndex(cypher[idx:], ")")
+	if argsStart < 0 || argsEnd < 0 {
+		return nil, fmt.Errorf("invalid db.index.fulltext.createNodeIndex syntax: missing parentheses")
+	}
+
+	argsStr := cypher[idx+argsStart+1 : idx+argsEnd]
+	parts := e.splitArgsRespectingArrays(argsStr)
+	if len(parts) < 3 {
+		return nil, fmt.Errorf("db.index.fulltext.createNodeIndex requires at least 3 arguments: indexName, labels, properties")
+	}
+
+	indexName := strings.Trim(strings.TrimSpace(parts[0]), "'\"")
+	labelsStr := strings.TrimSpace(parts[1])
+	propsStr := strings.TrimSpace(parts[2])
+
+	// Parse labels array: ['Label1', 'Label2'] or 'Label'
+	labels := e.parseStringArray(labelsStr)
+	properties := e.parseStringArray(propsStr)
+
+	// Create fulltext index using schema manager
+	schema := e.storage.GetSchema()
+	err := schema.AddFulltextIndex(indexName, labels, properties)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create fulltext index: %w", err)
+	}
+
+	return &ExecuteResult{
+		Columns: []string{"name", "labels", "properties"},
+		Rows:    [][]interface{}{{indexName, labels, properties}},
+	}, nil
+}
+
+// callDbIndexFulltextCreateRelationshipIndex creates a fulltext index on relationships - Neo4j db.index.fulltext.createRelationshipIndex()
+// Syntax: CALL db.index.fulltext.createRelationshipIndex(indexName, relationshipTypes, properties, config)
+func (e *StorageExecutor) callDbIndexFulltextCreateRelationshipIndex(ctx context.Context, cypher string) (*ExecuteResult, error) {
+	upper := strings.ToUpper(cypher)
+	idx := strings.Index(upper, "CREATERELATIONSHIPINDEX")
+	if idx < 0 {
+		return nil, fmt.Errorf("invalid db.index.fulltext.createRelationshipIndex syntax")
+	}
+
+	argsStart := strings.Index(cypher[idx:], "(")
+	argsEnd := strings.LastIndex(cypher[idx:], ")")
+	if argsStart < 0 || argsEnd < 0 {
+		return nil, fmt.Errorf("invalid db.index.fulltext.createRelationshipIndex syntax: missing parentheses")
+	}
+
+	argsStr := cypher[idx+argsStart+1 : idx+argsEnd]
+	parts := e.splitArgsRespectingArrays(argsStr)
+	if len(parts) < 3 {
+		return nil, fmt.Errorf("db.index.fulltext.createRelationshipIndex requires at least 3 arguments: indexName, relationshipTypes, properties")
+	}
+
+	indexName := strings.Trim(strings.TrimSpace(parts[0]), "'\"")
+	relTypesStr := strings.TrimSpace(parts[1])
+	propsStr := strings.TrimSpace(parts[2])
+
+	// Parse arrays
+	relTypes := e.parseStringArray(relTypesStr)
+	properties := e.parseStringArray(propsStr)
+
+	// Create fulltext index using schema manager
+	schema := e.storage.GetSchema()
+	err := schema.AddFulltextIndex(indexName, relTypes, properties)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create relationship fulltext index: %w", err)
+	}
+
+	return &ExecuteResult{
+		Columns: []string{"name", "relationshipTypes", "properties"},
+		Rows:    [][]interface{}{{indexName, relTypes, properties}},
+	}, nil
+}
+
+// callDbIndexFulltextDrop drops a fulltext index - Neo4j db.index.fulltext.drop()
+// Syntax: CALL db.index.fulltext.drop(indexName)
+func (e *StorageExecutor) callDbIndexFulltextDrop(cypher string) (*ExecuteResult, error) {
+	upper := strings.ToUpper(cypher)
+	idx := strings.Index(upper, "DROP")
+	if idx < 0 {
+		return nil, fmt.Errorf("invalid db.index.fulltext.drop syntax")
+	}
+
+	argsStart := strings.Index(cypher[idx:], "(")
+	argsEnd := strings.LastIndex(cypher[idx:], ")")
+	if argsStart < 0 || argsEnd < 0 {
+		return nil, fmt.Errorf("invalid db.index.fulltext.drop syntax: missing parentheses")
+	}
+
+	indexName := strings.Trim(strings.TrimSpace(cypher[idx+argsStart+1:idx+argsEnd]), "'\"")
+
+	// Drop fulltext index - NornicDB manages indexes internally, so this is a no-op but returns success
+	return &ExecuteResult{
+		Columns: []string{"name", "dropped"},
+		Rows:    [][]interface{}{{indexName, true}},
+	}, nil
+}
+
+// callDbIndexVectorDrop drops a vector index - Neo4j db.index.vector.drop()
+// Syntax: CALL db.index.vector.drop(indexName)
+func (e *StorageExecutor) callDbIndexVectorDrop(cypher string) (*ExecuteResult, error) {
+	upper := strings.ToUpper(cypher)
+	idx := strings.Index(upper, "DROP")
+	if idx < 0 {
+		return nil, fmt.Errorf("invalid db.index.vector.drop syntax")
+	}
+
+	argsStart := strings.Index(cypher[idx:], "(")
+	argsEnd := strings.LastIndex(cypher[idx:], ")")
+	if argsStart < 0 || argsEnd < 0 {
+		return nil, fmt.Errorf("invalid db.index.vector.drop syntax: missing parentheses")
+	}
+
+	indexName := strings.Trim(strings.TrimSpace(cypher[idx+argsStart+1:idx+argsEnd]), "'\"")
+
+	// Drop vector index - NornicDB manages indexes internally, so this is a no-op but returns success
+	return &ExecuteResult{
+		Columns: []string{"name", "dropped"},
+		Rows:    [][]interface{}{{indexName, true}},
+	}, nil
+}
+
+// splitArgsSimple splits comma-separated arguments, respecting quoted strings
+func (e *StorageExecutor) splitArgsSimple(args string) []string {
+	var result []string
+	var current strings.Builder
+	inQuote := false
+	quoteChar := byte(0)
+
+	for i := 0; i < len(args); i++ {
+		c := args[i]
+		if (c == '\'' || c == '"') && (i == 0 || args[i-1] != '\\') {
+			if !inQuote {
+				inQuote = true
+				quoteChar = c
+			} else if c == quoteChar {
+				inQuote = false
+			}
+			current.WriteByte(c)
+		} else if c == ',' && !inQuote {
+			result = append(result, current.String())
+			current.Reset()
+		} else {
+			current.WriteByte(c)
+		}
+	}
+	if current.Len() > 0 {
+		result = append(result, current.String())
+	}
+	return result
+}
+
+// splitArgsRespectingArrays splits arguments, keeping array brackets together
+func (e *StorageExecutor) splitArgsRespectingArrays(args string) []string {
+	var result []string
+	var current strings.Builder
+	depth := 0
+	inQuote := false
+	quoteChar := byte(0)
+
+	for i := 0; i < len(args); i++ {
+		c := args[i]
+		if (c == '\'' || c == '"') && (i == 0 || args[i-1] != '\\') {
+			if !inQuote {
+				inQuote = true
+				quoteChar = c
+			} else if c == quoteChar {
+				inQuote = false
+			}
+			current.WriteByte(c)
+		} else if c == '[' && !inQuote {
+			depth++
+			current.WriteByte(c)
+		} else if c == ']' && !inQuote {
+			depth--
+			current.WriteByte(c)
+		} else if c == ',' && depth == 0 && !inQuote {
+			result = append(result, current.String())
+			current.Reset()
+		} else {
+			current.WriteByte(c)
+		}
+	}
+	if current.Len() > 0 {
+		result = append(result, current.String())
+	}
+	return result
+}
+
+// parseStringArray parses a string that may be an array ['a', 'b'] or single value 'a'
+func (e *StorageExecutor) parseStringArray(s string) []string {
+	s = strings.TrimSpace(s)
+	if strings.HasPrefix(s, "[") && strings.HasSuffix(s, "]") {
+		s = s[1 : len(s)-1]
+		var result []string
+		for _, item := range strings.Split(s, ",") {
+			item = strings.Trim(strings.TrimSpace(item), "'\"")
+			if item != "" {
+				result = append(result, item)
+			}
+		}
+		return result
+	}
+	return []string{strings.Trim(s, "'\"")}
 }
 
 // callDbCreateSetNodeVectorProperty sets a vector property on a node - Neo4j db.create.setNodeVectorProperty()

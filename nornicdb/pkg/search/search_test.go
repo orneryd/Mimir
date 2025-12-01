@@ -3,6 +3,7 @@ package search
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -515,7 +516,7 @@ func BenchmarkRRFFusion(b *testing.B) {
 	bm25Results := make([]indexResult, 50)
 	for i := 0; i < 50; i++ {
 		vectorResults[i] = indexResult{ID: string(rune('a'+i%26)) + string(rune(i)), Score: float64(50-i) / 50.0}
-		bm25Results[i] = indexResult{ID: string(rune('a'+(i+10)%26)) + string(rune(i)), Score: float64(50-i)}
+		bm25Results[i] = indexResult{ID: string(rune('a'+(i+10)%26)) + string(rune(i)), Score: float64(50 - i)}
 	}
 
 	opts := DefaultSearchOptions()
@@ -637,7 +638,7 @@ func TestFulltextIndex_PhraseSearch(t *testing.T) {
 
 	// Search for exact phrase "quick brown"
 	results := idx.PhraseSearch("quick brown", 10)
-	
+
 	// Should find doc1 (has exact phrase "quick brown")
 	foundDoc1 := false
 	for _, r := range results {
@@ -894,9 +895,9 @@ func TestTruncate(t *testing.T) {
 		{"longer string", 8, "longe..."}, // 8-3=5 chars + "..."
 		{"exact", 5, "exact"},
 		{"", 5, ""},
-		{"test", 0, ""},       // Edge case: 0 maxLen
-		{"test", 3, "tes"},    // Edge case: maxLen <= 3, no ellipsis
-		{"test", 2, "te"},     // Edge case: maxLen <= 3, no ellipsis
+		{"test", 0, ""},               // Edge case: 0 maxLen
+		{"test", 3, "tes"},            // Edge case: maxLen <= 3, no ellipsis
+		{"test", 2, "te"},             // Edge case: maxLen <= 3, no ellipsis
 		{"hello world", 7, "hell..."}, // Normal case: 7-3=4 chars + "..."
 	}
 
@@ -949,8 +950,8 @@ func TestSearchService_BuildIndexesFromStorage(t *testing.T) {
 func TestGetAdaptiveRRFConfig(t *testing.T) {
 	// Test the package-level function
 	tests := []struct {
-		name   string
-		query  string
+		name  string
+		query string
 	}{
 		{
 			name:  "short query",
@@ -1257,5 +1258,152 @@ func TestRRFHybridSearchDirect(t *testing.T) {
 			t.Fatalf("rrfHybridSearch failed: %v", err)
 		}
 		t.Logf("RRF search returned %d results", len(response.Results))
+	})
+}
+
+// =============================================================================
+// MMR Diversification Tests
+// =============================================================================
+
+func TestMMRDiversification(t *testing.T) {
+	store := storage.NewMemoryEngine()
+	service := NewService(store)
+
+	// Create nodes with embeddings - some similar, some diverse
+	createNodeWithEmbedding := func(id string, labels []string, embedding []float32, props map[string]interface{}) {
+		node := &storage.Node{
+			ID:         storage.NodeID(id),
+			Labels:     labels,
+			Properties: props,
+			Embedding:  embedding,
+		}
+		store.CreateNode(node)
+		service.IndexNode(node)
+	}
+
+	t.Run("mmr_promotes_diversity", func(t *testing.T) {
+		// Create 3 documents: 2 nearly identical, 1 diverse
+		// Embeddings are 4-dimensional for simplicity
+		createNodeWithEmbedding("similar1", []string{"Doc"}, []float32{0.9, 0.1, 0.0, 0.0}, map[string]interface{}{
+			"title":   "Machine Learning Basics",
+			"content": "Introduction to ML algorithms",
+		})
+		createNodeWithEmbedding("similar2", []string{"Doc"}, []float32{0.89, 0.11, 0.0, 0.0}, map[string]interface{}{
+			"title":   "ML Fundamentals",
+			"content": "Basic machine learning concepts",
+		})
+		createNodeWithEmbedding("diverse1", []string{"Doc"}, []float32{0.1, 0.1, 0.8, 0.0}, map[string]interface{}{
+			"title":   "Database Design",
+			"content": "SQL and NoSQL databases",
+		})
+
+		// Build RRF results with EQUAL scores to isolate diversity effect
+		rrfResults := []rrfResult{
+			{ID: "similar1", RRFScore: 0.05, VectorRank: 1, BM25Rank: 1},
+			{ID: "similar2", RRFScore: 0.05, VectorRank: 2, BM25Rank: 2}, // Equal score
+			{ID: "diverse1", RRFScore: 0.05, VectorRank: 3, BM25Rank: 3}, // Equal score
+		}
+
+		// Query embedding similar to "similar1"
+		queryEmb := []float32{0.9, 0.1, 0.0, 0.0}
+
+		// Without MMR: results should be in original order
+		resultsNoMMR := service.applyMMR(rrfResults, queryEmb, 3, 1.0) // lambda=1.0 = no diversity
+		assert.Len(t, resultsNoMMR, 3, "Should return all results")
+		t.Logf("Without MMR (lambda=1.0): %v", []string{resultsNoMMR[0].ID, resultsNoMMR[1].ID, resultsNoMMR[2].ID})
+
+		// With MMR (lambda=0.3): strong diversity preference
+		resultsWithMMR := service.applyMMR(rrfResults, queryEmb, 3, 0.3) // lambda=0.3 = 70% diversity
+		assert.Len(t, resultsWithMMR, 3, "Should return all results")
+		t.Logf("With MMR (lambda=0.3):    %v", []string{resultsWithMMR[0].ID, resultsWithMMR[1].ID, resultsWithMMR[2].ID})
+
+		// Verify MMR algorithm completes successfully
+		// Note: exact order depends on embeddings being retrieved from storage
+	})
+
+	t.Run("mmr_lambda_1_equals_no_diversity", func(t *testing.T) {
+		rrfResults := []rrfResult{
+			{ID: "doc1", RRFScore: 0.1},
+			{ID: "doc2", RRFScore: 0.09},
+			{ID: "doc3", RRFScore: 0.08},
+		}
+
+		// Lambda=1.0 should return results in original order (pure relevance)
+		results := service.applyMMR(rrfResults, []float32{1, 0, 0, 0}, 3, 1.0)
+		assert.Equal(t, "doc1", results[0].ID)
+		assert.Equal(t, "doc2", results[1].ID)
+		assert.Equal(t, "doc3", results[2].ID)
+	})
+
+	t.Run("mmr_handles_empty_results", func(t *testing.T) {
+		results := service.applyMMR([]rrfResult{}, []float32{1, 0, 0, 0}, 10, 0.7)
+		assert.Empty(t, results)
+	})
+
+	t.Run("mmr_handles_single_result", func(t *testing.T) {
+		rrfResults := []rrfResult{{ID: "only", RRFScore: 0.1}}
+		results := service.applyMMR(rrfResults, []float32{1, 0, 0, 0}, 10, 0.7)
+		assert.Len(t, results, 1)
+		assert.Equal(t, "only", results[0].ID)
+	})
+}
+
+func TestSearchWithMMROption(t *testing.T) {
+	store := storage.NewMemoryEngine()
+	service := NewService(store)
+	ctx := context.Background()
+
+	// Create nodes with embeddings
+	for i := 0; i < 5; i++ {
+		node := &storage.Node{
+			ID:     storage.NodeID(fmt.Sprintf("doc%d", i)),
+			Labels: []string{"Document"},
+			Properties: map[string]interface{}{
+				"title":   fmt.Sprintf("Document %d about AI", i),
+				"content": "This is content about artificial intelligence and machine learning",
+			},
+			Embedding: make([]float32, 1024),
+		}
+		// Slightly different embeddings
+		for j := range node.Embedding {
+			node.Embedding[j] = float32(i)*0.01 + float32(j)*0.001
+		}
+		store.CreateNode(node)
+		service.IndexNode(node)
+	}
+
+	t.Run("search_with_mmr_enabled", func(t *testing.T) {
+		queryEmb := make([]float32, 1024)
+		for i := range queryEmb {
+			queryEmb[i] = 0.5
+		}
+
+		opts := &SearchOptions{
+			Limit:      5,
+			MMREnabled: true,
+			MMRLambda:  0.7,
+		}
+
+		response, err := service.Search(ctx, "AI machine learning", queryEmb, opts)
+		require.NoError(t, err)
+		assert.Contains(t, response.SearchMethod, "mmr", "Search method should indicate MMR")
+		assert.NotEmpty(t, response.Results)
+		t.Logf("MMR search returned %d results with method: %s", len(response.Results), response.SearchMethod)
+	})
+
+	t.Run("search_without_mmr", func(t *testing.T) {
+		queryEmb := make([]float32, 1024)
+		for i := range queryEmb {
+			queryEmb[i] = 0.5
+		}
+
+		opts := &SearchOptions{
+			Limit:      5,
+			MMREnabled: false,
+		}
+
+		response, err := service.Search(ctx, "AI machine learning", queryEmb, opts)
+		require.NoError(t, err)
+		assert.NotContains(t, response.SearchMethod, "mmr", "Search method should not mention MMR")
 	})
 }

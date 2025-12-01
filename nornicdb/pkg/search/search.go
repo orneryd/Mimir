@@ -160,6 +160,11 @@ type SearchOptions struct {
 	VectorWeight float64 // Weight for vector results (default: 1.0)
 	BM25Weight   float64 // Weight for BM25 results (default: 1.0)
 	MinRRFScore  float64 // Minimum RRF score threshold (default: 0.01)
+
+	// MMR (Maximal Marginal Relevance) diversification
+	// When enabled, results are re-ranked to balance relevance with diversity
+	MMREnabled bool    // Enable MMR diversification (default: false)
+	MMRLambda  float64 // Balance: 1.0 = pure relevance, 0.0 = pure diversity (default: 0.7)
 }
 
 // DefaultSearchOptions returns sensible defaults.
@@ -171,6 +176,8 @@ func DefaultSearchOptions() *SearchOptions {
 		VectorWeight:  1.0,
 		BM25Weight:    1.0,
 		MinRRFScore:   0.01,
+		MMREnabled:    false,
+		MMRLambda:     0.7, // Balanced: 70% relevance, 30% diversity
 	}
 }
 
@@ -480,7 +487,16 @@ func (s *Service) rrfHybridSearch(ctx context.Context, query string, embedding [
 	// Step 4: Fuse with RRF
 	fusedResults := s.fuseRRF(vectorResults, bm25Results, opts)
 
-	// Step 5: Convert to SearchResult and enrich with node data
+	// Step 5: Apply MMR diversification if enabled
+	searchMethod := "rrf_hybrid"
+	message := "Reciprocal Rank Fusion (Vector + BM25)"
+	if opts.MMREnabled && len(embedding) > 0 {
+		fusedResults = s.applyMMR(fusedResults, embedding, opts.Limit, opts.MMRLambda)
+		searchMethod = "rrf_hybrid+mmr"
+		message = fmt.Sprintf("RRF + MMR diversification (λ=%.2f)", opts.MMRLambda)
+	}
+
+	// Step 6: Convert to SearchResult and enrich with node data
 	results := s.enrichResults(fusedResults, opts.Limit)
 
 	return &SearchResponse{
@@ -489,8 +505,8 @@ func (s *Service) rrfHybridSearch(ctx context.Context, query string, embedding [
 		Results:         results,
 		TotalCandidates: len(fusedResults),
 		Returned:        len(results),
-		SearchMethod:    "rrf_hybrid",
-		Message:         "Reciprocal Rank Fusion (Vector + BM25)",
+		SearchMethod:    searchMethod,
+		Message:         message,
 		Metrics: &SearchMetrics{
 			VectorCandidates: len(vectorResults),
 			BM25Candidates:   len(bm25Results),
@@ -614,6 +630,120 @@ func (s *Service) fuseRRF(vectorResults, bm25Results []indexResult, opts *Search
 	})
 
 	return results
+}
+
+// applyMMR applies Maximal Marginal Relevance diversification to search results.
+//
+// MMR re-ranks results to balance relevance with diversity, preventing redundant
+// results that are too similar to each other.
+//
+// Formula: MMR(d) = λ * Sim(d, query) - (1-λ) * max(Sim(d, d_i))
+//
+// Where:
+//   - λ (lambda) controls relevance vs diversity balance (0.0 to 1.0)
+//   - λ = 1.0: Pure relevance (no diversity)
+//   - λ = 0.0: Pure diversity (ignore relevance)
+//   - λ = 0.7: Balanced (default, 70% relevance, 30% diversity)
+//   - Sim(d, query) = similarity to the query (RRF score)
+//   - max(Sim(d, d_i)) = max similarity to already selected results
+//
+// Algorithm:
+//  1. Select the most relevant document first
+//  2. For each remaining position:
+//     - Calculate MMR score for all remaining docs
+//     - Select doc with highest MMR (balancing relevance + diversity)
+//  3. Repeat until limit reached
+//
+// ELI12:
+//
+// Imagine picking a playlist from your library. You don't want 5 songs that
+// all sound the same! MMR is like saying:
+//   - "I want songs I like (relevance)"
+//   - "But also songs that are different from what I already picked (diversity)"
+//
+// Lambda controls how much you care about variety vs. your favorites.
+//
+// Reference: Carbonell & Goldstein (1998)
+// "The Use of MMR, Diversity-Based Reranking for Reordering Documents
+// and Producing Summaries"
+func (s *Service) applyMMR(results []rrfResult, queryEmbedding []float32, limit int, lambda float64) []rrfResult {
+	if len(results) <= 1 || lambda >= 1.0 {
+		// No diversification needed
+		return results
+	}
+
+	// Get embeddings for all candidate documents
+	type docWithEmbed struct {
+		result    rrfResult
+		embedding []float32
+	}
+
+	candidates := make([]docWithEmbed, 0, len(results))
+	for _, r := range results {
+		// Get embedding from storage
+		node, err := s.engine.GetNode(storage.NodeID(r.ID))
+		if err != nil || node == nil || len(node.Embedding) == 0 {
+			// No embedding - use original score only
+			candidates = append(candidates, docWithEmbed{
+				result:    r,
+				embedding: nil,
+			})
+		} else {
+			candidates = append(candidates, docWithEmbed{
+				result:    r,
+				embedding: node.Embedding,
+			})
+		}
+	}
+
+	// MMR selection
+	selected := make([]rrfResult, 0, limit)
+	remaining := candidates
+
+	for len(selected) < limit && len(remaining) > 0 {
+		bestIdx := -1
+		bestMMR := math.Inf(-1)
+
+		for i, cand := range remaining {
+			// Relevance component: similarity to query (using RRF score as proxy)
+			relevance := cand.result.RRFScore
+
+			// Diversity component: max similarity to already selected docs
+			maxSimToSelected := 0.0
+			if cand.embedding != nil && len(selected) > 0 {
+				for _, sel := range selected {
+					// Find embedding for selected doc
+					for _, c := range candidates {
+						if c.result.ID == sel.ID && c.embedding != nil {
+							sim := cosineSimilarity(cand.embedding, c.embedding)
+							if sim > maxSimToSelected {
+								maxSimToSelected = sim
+							}
+							break
+						}
+					}
+				}
+			}
+
+			// MMR formula
+			mmrScore := lambda*relevance - (1-lambda)*maxSimToSelected
+
+			if mmrScore > bestMMR {
+				bestMMR = mmrScore
+				bestIdx = i
+			}
+		}
+
+		if bestIdx >= 0 {
+			selected = append(selected, remaining[bestIdx].result)
+			// Remove selected from remaining
+			remaining = append(remaining[:bestIdx], remaining[bestIdx+1:]...)
+		} else {
+			break
+		}
+	}
+
+	return selected
 }
 
 // vectorSearchOnly performs vector-only search.

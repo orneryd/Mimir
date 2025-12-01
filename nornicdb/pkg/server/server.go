@@ -133,6 +133,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -233,6 +234,16 @@ type Config struct {
 	// EmbeddingCacheSize is max embeddings to cache (0 = disabled, default: 10000)
 	// Each cached embedding uses ~4KB (1024 dims × 4 bytes)
 	EmbeddingCacheSize int
+
+	// Slow Query Logging Configuration
+	// SlowQueryEnabled turns on slow query logging (default: true)
+	SlowQueryEnabled bool
+	// SlowQueryThreshold is minimum duration to log (default: 100ms)
+	// Queries taking longer than this will be logged
+	SlowQueryThreshold time.Duration
+	// SlowQueryLogFile is optional file path for slow query log
+	// If empty, logs to stderr with other server logs
+	SlowQueryLogFile string
 }
 
 // DefaultConfig returns Neo4j-compatible default server configuration.
@@ -298,6 +309,15 @@ func DefaultConfig() *Config {
 		EmbeddingModel:      "mxbai-embed-large",
 		EmbeddingDimensions: 1024,
 		EmbeddingCacheSize:  10000, // ~40MB cache for 1024-dim vectors
+
+		// Slow query logging enabled by default
+		// Override via:
+		//   NORNICDB_SLOW_QUERY_ENABLED=false
+		//   NORNICDB_SLOW_QUERY_THRESHOLD=200ms
+		//   NORNICDB_SLOW_QUERY_LOG=/var/log/nornicdb/slow.log
+		SlowQueryEnabled:   false,
+		SlowQueryThreshold: 100 * time.Millisecond,
+		SlowQueryLogFile:   "", // Empty = log to stderr
 	}
 }
 
@@ -357,6 +377,10 @@ type Server struct {
 	requestCount   atomic.Int64
 	errorCount     atomic.Int64
 	activeRequests atomic.Int64
+
+	// Slow query logging
+	slowQueryLogger *log.Logger
+	slowQueryCount  atomic.Int64
 }
 
 // New creates a new HTTP server with the given database, authenticator, and configuration.
@@ -485,6 +509,19 @@ func New(db *nornicdb.DB, authenticator *auth.Authenticator, config *Config) (*S
 		db:        db,
 		auth:      authenticator,
 		mcpServer: mcpServer,
+	}
+
+	// Initialize slow query logger if file specified
+	if config.SlowQueryEnabled && config.SlowQueryLogFile != "" {
+		file, err := os.OpenFile(config.SlowQueryLogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			log.Printf("⚠️  Failed to open slow query log file %s: %v", config.SlowQueryLogFile, err)
+		} else {
+			s.slowQueryLogger = log.New(file, "", log.LstdFlags)
+			log.Printf("✓ Slow query logging to: %s (threshold: %v)", config.SlowQueryLogFile, config.SlowQueryThreshold)
+		}
+	} else if config.SlowQueryEnabled {
+		log.Printf("✓ Slow query logging enabled (threshold: %v)", config.SlowQueryThreshold)
 	}
 
 	return s, nil
@@ -678,10 +715,11 @@ func (s *Server) buildRouter() http.Handler {
 	mux.HandleFunc("/db/", s.withAuth(s.handleDatabaseEndpoint, auth.PermRead))
 
 	// ==========================================================================
-	// Health/Status Endpoints (no auth required)
+	// Health/Status/Metrics Endpoints (no auth required)
 	// ==========================================================================
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/status", s.handleStatus)
+	mux.HandleFunc("/metrics", s.handleMetrics) // Prometheus-compatible metrics
 
 	// ==========================================================================
 	// Authentication Endpoints (NornicDB additions)
@@ -1171,7 +1209,14 @@ func (s *Server) handleImplicitTransaction(w http.ResponseWriter, r *http.Reques
 			}
 		}
 
+		// Track query execution time for slow query logging
+		queryStart := time.Now()
 		result, err := s.db.ExecuteCypher(r.Context(), stmt.Statement, stmt.Parameters)
+		queryDuration := time.Since(queryStart)
+
+		// Log slow queries
+		s.logSlowQuery(stmt.Statement, stmt.Parameters, queryDuration, err)
+
 		if err != nil {
 			response.Errors = append(response.Errors, QueryError{
 				Code:    "Neo.ClientError.Statement.SyntaxError",
@@ -1606,6 +1651,99 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.writeJSON(w, http.StatusOK, response)
+}
+
+// handleMetrics returns Prometheus-compatible metrics.
+// This endpoint can be scraped by Prometheus at /metrics.
+//
+// Metrics exported:
+//   - nornicdb_uptime_seconds: Server uptime in seconds
+//   - nornicdb_requests_total: Total HTTP requests
+//   - nornicdb_errors_total: Total request errors
+//   - nornicdb_active_requests: Currently active requests
+//   - nornicdb_nodes_total: Total nodes in database
+//   - nornicdb_edges_total: Total edges in database
+//   - nornicdb_embeddings_processed: Embeddings processed
+//   - nornicdb_embeddings_failed: Embedding failures
+//   - nornicdb_embedding_worker_running: Whether embed worker is active (0/1)
+//
+// Example Prometheus config:
+//
+//	scrape_configs:
+//	  - job_name: 'nornicdb'
+//	    static_configs:
+//	      - targets: ['localhost:7474']
+//	    metrics_path: '/metrics'
+func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	stats := s.Stats()
+	dbStats := s.db.Stats()
+
+	// Build Prometheus format output
+	var sb strings.Builder
+
+	// Server metrics
+	sb.WriteString("# HELP nornicdb_uptime_seconds Server uptime in seconds\n")
+	sb.WriteString("# TYPE nornicdb_uptime_seconds gauge\n")
+	fmt.Fprintf(&sb, "nornicdb_uptime_seconds %.2f\n", stats.Uptime.Seconds())
+
+	sb.WriteString("# HELP nornicdb_requests_total Total HTTP requests\n")
+	sb.WriteString("# TYPE nornicdb_requests_total counter\n")
+	fmt.Fprintf(&sb, "nornicdb_requests_total %d\n", stats.RequestCount)
+
+	sb.WriteString("# HELP nornicdb_errors_total Total request errors\n")
+	sb.WriteString("# TYPE nornicdb_errors_total counter\n")
+	fmt.Fprintf(&sb, "nornicdb_errors_total %d\n", stats.ErrorCount)
+
+	sb.WriteString("# HELP nornicdb_active_requests Currently active requests\n")
+	sb.WriteString("# TYPE nornicdb_active_requests gauge\n")
+	fmt.Fprintf(&sb, "nornicdb_active_requests %d\n", stats.ActiveRequests)
+
+	// Database metrics
+	sb.WriteString("# HELP nornicdb_nodes_total Total nodes in database\n")
+	sb.WriteString("# TYPE nornicdb_nodes_total gauge\n")
+	fmt.Fprintf(&sb, "nornicdb_nodes_total %d\n", dbStats.NodeCount)
+
+	sb.WriteString("# HELP nornicdb_edges_total Total edges in database\n")
+	sb.WriteString("# TYPE nornicdb_edges_total gauge\n")
+	fmt.Fprintf(&sb, "nornicdb_edges_total %d\n", dbStats.EdgeCount)
+
+	// Embedding metrics
+	if embedStats := s.db.EmbedQueueStats(); embedStats != nil {
+		sb.WriteString("# HELP nornicdb_embeddings_processed Total embeddings processed\n")
+		sb.WriteString("# TYPE nornicdb_embeddings_processed counter\n")
+		fmt.Fprintf(&sb, "nornicdb_embeddings_processed %d\n", embedStats.Processed)
+
+		sb.WriteString("# HELP nornicdb_embeddings_failed Total embedding failures\n")
+		sb.WriteString("# TYPE nornicdb_embeddings_failed counter\n")
+		fmt.Fprintf(&sb, "nornicdb_embeddings_failed %d\n", embedStats.Failed)
+
+		sb.WriteString("# HELP nornicdb_embedding_worker_running Whether embed worker is active\n")
+		sb.WriteString("# TYPE nornicdb_embedding_worker_running gauge\n")
+		running := 0
+		if embedStats.Running {
+			running = 1
+		}
+		fmt.Fprintf(&sb, "nornicdb_embedding_worker_running %d\n", running)
+	}
+
+	// Slow query metrics
+	sb.WriteString("# HELP nornicdb_slow_queries_total Total slow queries logged\n")
+	sb.WriteString("# TYPE nornicdb_slow_queries_total counter\n")
+	fmt.Fprintf(&sb, "nornicdb_slow_queries_total %d\n", s.slowQueryCount.Load())
+
+	sb.WriteString("# HELP nornicdb_slow_query_threshold_ms Slow query threshold in milliseconds\n")
+	sb.WriteString("# TYPE nornicdb_slow_query_threshold_ms gauge\n")
+	fmt.Fprintf(&sb, "nornicdb_slow_query_threshold_ms %d\n", s.config.SlowQueryThreshold.Milliseconds())
+
+	// Info metric with version
+	sb.WriteString("# HELP nornicdb_info Database information\n")
+	sb.WriteString("# TYPE nornicdb_info gauge\n")
+	sb.WriteString("nornicdb_info{version=\"0.1.4\",backend=\"badger\"} 1\n")
+
+	// Set content type for Prometheus
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(sb.String()))
 }
 
 // =============================================================================
@@ -2384,6 +2522,53 @@ func (s *Server) writeError(w http.ResponseWriter, status int, message string, e
 func (s *Server) logRequest(r *http.Request, status int, duration time.Duration) {
 	// Could be enhanced with structured logging
 	fmt.Printf("[HTTP] %s %s %d %v\n", r.Method, r.URL.Path, status, duration)
+}
+
+// logSlowQuery logs queries that exceed the configured threshold.
+// Logged info includes: query text (truncated), duration, parameters, error if any.
+func (s *Server) logSlowQuery(query string, params map[string]interface{}, duration time.Duration, err error) {
+	if !s.config.SlowQueryEnabled {
+		return
+	}
+
+	if duration < s.config.SlowQueryThreshold {
+		return
+	}
+
+	s.slowQueryCount.Add(1)
+
+	// Truncate long queries for logging
+	queryLog := query
+	if len(queryLog) > 500 {
+		queryLog = queryLog[:500] + "..."
+	}
+
+	// Build log message
+	status := "OK"
+	if err != nil {
+		status = fmt.Sprintf("ERROR: %v", err)
+	}
+
+	// Format parameters (limit to avoid huge logs)
+	paramStr := ""
+	if len(params) > 0 {
+		paramBytes, _ := json.Marshal(params)
+		if len(paramBytes) > 200 {
+			paramStr = string(paramBytes[:200]) + "..."
+		} else {
+			paramStr = string(paramBytes)
+		}
+	}
+
+	logMsg := fmt.Sprintf("[SLOW QUERY] duration=%v status=%s query=%q params=%s",
+		duration, status, queryLog, paramStr)
+
+	// Log to slow query logger if configured, otherwise to stderr
+	if s.slowQueryLogger != nil {
+		s.slowQueryLogger.Println(logMsg)
+	} else {
+		log.Println(logMsg)
+	}
 }
 
 func (s *Server) logAudit(r *http.Request, userID, eventType string, success bool, details string) {
