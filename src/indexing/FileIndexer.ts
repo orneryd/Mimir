@@ -479,10 +479,11 @@ export class FileIndexer {
       const needsChunking = generateEmbeddings && content.length > 1000; // Will be refined by EmbeddingsService
       
       // Storage strategy:
+      // - If NornicDB → ALWAYS store full content (NornicDB handles chunking/embedding natively)
       // - If embeddings ENABLED and file is LARGE → Store in chunks (chunk nodes) + no content on File node
       // - If embeddings DISABLED → ALWAYS store full content on File node (enables full-text search)
       // - If embeddings ENABLED and file is SMALL → Store content on File node + embedding
-      const shouldStoreFullContent = !generateEmbeddings || !needsChunking;
+      const shouldStoreFullContent = this.isNornicDB || !generateEmbeddings || !needsChunking;
       
       // Create File node with BOTH container and host paths
       // f.path = absolute container path (e.g., /app/docs/README.md)

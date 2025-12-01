@@ -9,6 +9,8 @@ services:
         - timothyswt/nornicdb-arm64-metal-bge:latest
     image: timothyswt/nornicdb-arm64-metal-bge:latest
     container_name: nornicdb
+    volumes:
+      - ./data/nornicdb:/data
     ports:
       - "7474:7474" # HTTP API & Browser UI
       - "7687:7687" # Bolt protocol (Neo4j compatible)

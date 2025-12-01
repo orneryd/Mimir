@@ -790,5 +790,108 @@ func (ae *AsyncEngine) Stats() (pendingWrites, totalFlushes int64) {
 	return ae.pendingWrites, ae.totalFlushes
 }
 
+// FindNodeNeedingEmbedding returns a node that needs embedding.
+// IMPORTANT: This checks the in-memory cache first to ensure we don't re-process
+// nodes that have embeddings pending flush to the underlying engine.
+//
+// The algorithm:
+// 1. Build set of node IDs that have embeddings in cache (pending flush)
+// 2. First check nodes in our cache that need embedding
+// 3. Then check underlying engine, skipping nodes we have in cache with embeddings
+func (ae *AsyncEngine) FindNodeNeedingEmbedding() *Node {
+	ae.mu.RLock()
+
+	// Build set of node IDs in cache that already have embeddings
+	cachedWithEmbedding := make(map[NodeID]bool)
+	for id, node := range ae.nodeCache {
+		if len(node.Embedding) > 0 {
+			cachedWithEmbedding[id] = true
+		}
+	}
+
+	// First check nodes in our own cache that might need embedding
+	for _, node := range ae.nodeCache {
+		if ae.deleteNodes[node.ID] {
+			continue
+		}
+		if !cachedWithEmbedding[node.ID] && NodeNeedsEmbedding(node) {
+			ae.mu.RUnlock()
+			return node
+		}
+	}
+	ae.mu.RUnlock()
+
+	// Try dedicated finder on underlying engine
+	if finder, ok := ae.engine.(interface{ FindNodeNeedingEmbedding() *Node }); ok {
+		node := finder.FindNodeNeedingEmbedding()
+		if node == nil {
+			return nil
+		}
+
+		// Check if this node has an embedding in our cache
+		if cachedWithEmbedding[node.ID] {
+			// This node has embedding pending flush - no work to do
+			return nil
+		}
+
+		return node
+	}
+
+	// Fallback: use AllNodes from ExportableEngine
+	if exportable, ok := ae.engine.(ExportableEngine); ok {
+		nodes, err := exportable.AllNodes()
+		if err != nil {
+			return nil
+		}
+		for _, node := range nodes {
+			// Skip if in cache with embedding
+			if cachedWithEmbedding[node.ID] {
+				continue
+			}
+			if NodeNeedsEmbedding(node) {
+				return node
+			}
+		}
+	}
+
+	return nil
+}
+
+// IterateNodes iterates through all nodes, checking cache first.
+func (ae *AsyncEngine) IterateNodes(fn func(*Node) bool) error {
+	// First iterate cache
+	ae.mu.RLock()
+	cachedIDs := make(map[NodeID]bool)
+	for id, node := range ae.nodeCache {
+		if ae.deleteNodes[id] {
+			continue
+		}
+		cachedIDs[id] = true
+		if !fn(node) {
+			ae.mu.RUnlock()
+			return nil
+		}
+	}
+	ae.mu.RUnlock()
+
+	// Then iterate underlying engine, skipping cached nodes
+	if iterator, ok := ae.engine.(interface{ IterateNodes(func(*Node) bool) error }); ok {
+		return iterator.IterateNodes(func(node *Node) bool {
+			if cachedIDs[node.ID] {
+				return true // Skip, already visited from cache
+			}
+			ae.mu.RLock()
+			if ae.deleteNodes[node.ID] {
+				ae.mu.RUnlock()
+				return true // Skip deleted
+			}
+			ae.mu.RUnlock()
+			return fn(node)
+		})
+	}
+
+	return nil
+}
+
 // Verify AsyncEngine implements Engine interface
 var _ Engine = (*AsyncEngine)(nil)
