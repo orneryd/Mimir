@@ -875,6 +875,15 @@ func (db *DB) SetEmbedder(embedder embed.Embedder) {
 			_ = db.searchService.IndexNode(node)
 		}
 	})
+
+	// Wire up Cypher executor to trigger embedding queue when nodes are created/updated
+	// This ensures nodes created via Cypher queries get embeddings generated
+	if db.cypherExecutor != nil {
+		db.cypherExecutor.SetNodeCreatedCallback(func(nodeID string) {
+			db.embedQueue.Enqueue(nodeID)
+		})
+	}
+
 	log.Printf("🧠 Auto-embed queue started using %s (%d dims)",
 		embedder.Model(), embedder.Dimensions())
 }

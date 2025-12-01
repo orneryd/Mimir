@@ -99,3 +99,73 @@ func (d *Device) NormalizeVectors(vectors *Buffer, n, dimensions uint32) error {
 func (d *Device) Search(embeddings *Buffer, query []float32, n, dimensions uint32, k int, normalized bool) ([]SearchResult, error) {
 	return nil, ErrMetalNotAvailable
 }
+
+// =============================================================================
+// Memory Tracking (stubs)
+// =============================================================================
+
+// MemoryInfo contains GPU and system memory statistics.
+type MemoryInfo struct {
+	TotalMemory      uint64
+	UsedMemory       uint64
+	AvailableMemory  uint64
+	GPURecommended   uint64
+	CurrentAllocated uint64
+}
+
+// GetMemoryInfo returns current memory statistics (stub).
+func (d *Device) GetMemoryInfo() MemoryInfo {
+	return MemoryInfo{}
+}
+
+// DeviceCapabilities contains detailed GPU capabilities.
+type DeviceCapabilities struct {
+	Name                     string
+	Architecture             string
+	GPUFamily                int
+	MaxThreadsPerThreadgroup int
+	MaxBufferLength          uint64 // Can be very large (16GB+) on Apple Silicon
+	IsLowPower               bool
+	IsHeadless               bool
+	HasUnifiedMemory         bool
+	RegistryID               int
+}
+
+// GetCapabilities returns detailed device capabilities (stub).
+func (d *Device) GetCapabilities() DeviceCapabilities {
+	return DeviceCapabilities{}
+}
+
+// GetCapabilitiesNoDevice returns capabilities without creating a device (stub).
+func GetCapabilitiesNoDevice() DeviceCapabilities {
+	return DeviceCapabilities{}
+}
+
+// PrintDeviceInfo logs detailed Metal device information (stub).
+func PrintDeviceInfo() {
+	// No-op on non-Darwin
+}
+
+// =============================================================================
+// Metal Performance Shaders (stubs)
+// =============================================================================
+
+// MPSIsSupported returns true if Metal Performance Shaders are available.
+func MPSIsSupported() bool {
+	return false
+}
+
+// MPSMatrixMultiply performs GPU-accelerated matrix multiplication (stub).
+func (d *Device) MPSMatrixMultiply(a, b, c *Buffer, m, n, k uint32, alpha, beta float32) error {
+	return ErrMetalNotAvailable
+}
+
+// MPSMatrixVectorMultiply performs GPU-accelerated matrix-vector multiplication (stub).
+func (d *Device) MPSMatrixVectorMultiply(a, x, y *Buffer, m, n uint32, alpha, beta float32) error {
+	return ErrMetalNotAvailable
+}
+
+// MPSBatchCosineSimilarity computes cosine similarities using MPS (stub).
+func (d *Device) MPSBatchCosineSimilarity(embeddings, query, scores *Buffer, n, dims uint32) error {
+	return ErrMetalNotAvailable
+}

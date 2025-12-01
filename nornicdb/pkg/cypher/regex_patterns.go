@@ -196,10 +196,12 @@ var (
 	createKeywordPattern = regexp.MustCompile(`(?i)\bCREATE\s+`)
 
 	// Forward relationship pattern: (a)-[r:TYPE {props}]->(b)
-	relForwardPattern = regexp.MustCompile(`\((\w+)\)\s*-\[(\w*)(?::(\w+))?(?:\s*(\{[^}]*\}))?\]\s*->\s*\((\w+)\)`)
+	// Captures full node content including inline definitions like (c:Label {props})
+	relForwardPattern = regexp.MustCompile(`\(([^)]+)\)\s*-\[(\w*)(?::(\w+))?(?:\s*(\{[^}]*\}))?\]\s*->\s*\(([^)]+)\)`)
 
 	// Reverse relationship pattern: (a)<-[r:TYPE {props}]-(b)
-	relReversePattern = regexp.MustCompile(`\((\w+)\)\s*<-\[(\w*)(?::(\w+))?(?:\s*(\{[^}]*\}))?\]\s*-\s*\((\w+)\)`)
+	// Captures full node content including inline definitions like (c:Label {props})
+	relReversePattern = regexp.MustCompile(`\(([^)]+)\)\s*<-\[(\w*)(?::(\w+))?(?:\s*(\{[^}]*\}))?\]\s*-\s*\(([^)]+)\)`)
 
 	// Node variable extraction: (varName:Label) or (varName)
 	nodeVarPattern = regexp.MustCompile(`\((\w+)(?::\w+)?`)

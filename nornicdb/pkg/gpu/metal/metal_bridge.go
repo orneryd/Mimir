@@ -6,7 +6,7 @@ package metal
 
 /*
 #cgo CFLAGS: -x objective-c -fobjc-arc
-#cgo LDFLAGS: -framework Metal -framework Foundation -framework CoreGraphics
+#cgo LDFLAGS: -framework Metal -framework MetalPerformanceShaders -framework Foundation -framework CoreGraphics
 
 #include <stdlib.h>
 #include <stdbool.h>
@@ -62,12 +62,51 @@ int metal_normalize_vectors(
 // Error handling
 const char* metal_last_error(void);
 void metal_clear_error(void);
+
+// Memory tracking structs
+typedef struct {
+    unsigned long total_memory;
+    unsigned long used_memory;
+    unsigned long available_memory;
+    unsigned long gpu_recommended;
+    unsigned long current_allocated;
+} MetalMemoryInfo;
+
+typedef struct {
+    char name[256];
+    char architecture[64];
+    int gpu_family;
+    int max_threads_per_threadgroup;
+    unsigned long max_buffer_length;
+    bool supports_raytracing;
+    bool supports_32bit_float_filtering;
+    bool supports_32bit_msaa;
+    bool is_low_power;
+    bool is_headless;
+    bool is_removable;
+    bool has_unified_memory;
+    int registry_id;
+} MetalDeviceCapabilities;
+
+// Memory tracking
+void metal_get_memory_info(MetalDevice device, MetalMemoryInfo* info);
+void metal_get_device_capabilities(MetalDevice device, MetalDeviceCapabilities* caps);
+
+// Metal Performance Shaders (MPS)
+bool metal_mps_is_supported(void);
+int metal_mps_matrix_multiply(MetalDevice device, MetalBuffer a, MetalBuffer b, MetalBuffer c,
+    unsigned int m, unsigned int n, unsigned int k, float alpha, float beta);
+int metal_mps_matrix_vector_multiply(MetalDevice device, MetalBuffer a, MetalBuffer x, MetalBuffer y,
+    unsigned int m, unsigned int n, float alpha, float beta);
+int metal_mps_batch_cosine_similarity(MetalDevice device, MetalBuffer embeddings, MetalBuffer query,
+    MetalBuffer scores, unsigned int n, unsigned int dims);
 */
 import "C"
 
 import (
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 	"unsafe"
 )
@@ -514,4 +553,225 @@ func (d *Device) Search(
 	}
 
 	return results, nil
+}
+
+// =============================================================================
+// Memory Tracking
+// =============================================================================
+
+// MemoryInfo contains GPU and system memory statistics.
+type MemoryInfo struct {
+	TotalMemory      uint64 // Total unified memory (bytes)
+	UsedMemory       uint64 // Currently used (bytes)
+	AvailableMemory  uint64 // Available (bytes)
+	GPURecommended   uint64 // Recommended max GPU working set (bytes)
+	CurrentAllocated uint64 // Currently allocated GPU buffers (bytes)
+}
+
+// GetMemoryInfo returns current memory statistics.
+func (d *Device) GetMemoryInfo() MemoryInfo {
+	var info C.MetalMemoryInfo
+	C.metal_get_memory_info(d.ptr, &info)
+
+	return MemoryInfo{
+		TotalMemory:      uint64(info.total_memory),
+		UsedMemory:       uint64(info.used_memory),
+		AvailableMemory:  uint64(info.available_memory),
+		GPURecommended:   uint64(info.gpu_recommended),
+		CurrentAllocated: uint64(info.current_allocated),
+	}
+}
+
+// DeviceCapabilities contains detailed GPU capabilities.
+type DeviceCapabilities struct {
+	Name                     string
+	Architecture             string
+	GPUFamily                int
+	MaxThreadsPerThreadgroup int
+	MaxBufferLength          uint64 // Can be very large (16GB+) on Apple Silicon
+	IsLowPower               bool
+	IsHeadless               bool
+	HasUnifiedMemory         bool
+	RegistryID               int
+}
+
+// GetCapabilities returns detailed device capabilities.
+func (d *Device) GetCapabilities() DeviceCapabilities {
+	var caps C.MetalDeviceCapabilities
+	C.metal_get_device_capabilities(d.ptr, &caps)
+
+	return DeviceCapabilities{
+		Name:                     C.GoString(&caps.name[0]),
+		Architecture:             C.GoString(&caps.architecture[0]),
+		GPUFamily:                int(caps.gpu_family),
+		MaxThreadsPerThreadgroup: int(caps.max_threads_per_threadgroup),
+		MaxBufferLength:          uint64(caps.max_buffer_length),
+		IsLowPower:               bool(caps.is_low_power),
+		IsHeadless:               bool(caps.is_headless),
+		HasUnifiedMemory:         bool(caps.has_unified_memory),
+		RegistryID:               int(caps.registry_id),
+	}
+}
+
+// GetCapabilitiesNoDevice returns capabilities without creating a device.
+func GetCapabilitiesNoDevice() DeviceCapabilities {
+	var caps C.MetalDeviceCapabilities
+	C.metal_get_device_capabilities(nil, &caps)
+
+	return DeviceCapabilities{
+		Name:                     C.GoString(&caps.name[0]),
+		Architecture:             C.GoString(&caps.architecture[0]),
+		GPUFamily:                int(caps.gpu_family),
+		MaxThreadsPerThreadgroup: int(caps.max_threads_per_threadgroup),
+		MaxBufferLength:          uint64(caps.max_buffer_length),
+		IsLowPower:               bool(caps.is_low_power),
+		IsHeadless:               bool(caps.is_headless),
+		HasUnifiedMemory:         bool(caps.has_unified_memory),
+		RegistryID:               int(caps.registry_id),
+	}
+}
+
+// PrintDeviceInfo logs detailed Metal device information.
+// Call this on startup to show "Using Metal GPU: Apple M2 Max"
+func PrintDeviceInfo() {
+	if !IsAvailable() {
+		log.Println("🔴 Metal GPU: Not available")
+		return
+	}
+
+	caps := GetCapabilitiesNoDevice()
+
+	log.Printf("🟢 Metal GPU: %s", caps.Name)
+	if caps.Architecture != "" {
+		log.Printf("   Architecture: %s (GPU Family %d)", caps.Architecture, caps.GPUFamily)
+	}
+	log.Printf("   Unified Memory: %v", caps.HasUnifiedMemory)
+	log.Printf("   Max Threads/Group: %d", caps.MaxThreadsPerThreadgroup)
+	log.Printf("   Max Buffer: %.1f GB", float64(caps.MaxBufferLength)/(1024*1024*1024))
+
+	// Get memory info
+	dev, err := NewDevice()
+	if err == nil {
+		memInfo := dev.GetMemoryInfo()
+		log.Printf("   Total Memory: %.1f GB", float64(memInfo.TotalMemory)/(1024*1024*1024))
+		log.Printf("   Available: %.1f GB", float64(memInfo.AvailableMemory)/(1024*1024*1024))
+		log.Printf("   GPU Recommended: %.1f GB", float64(memInfo.GPURecommended)/(1024*1024*1024))
+		dev.Release()
+	}
+
+	if MPSIsSupported() {
+		log.Println("   MPS: ✅ Supported")
+	}
+}
+
+// =============================================================================
+// Metal Performance Shaders (MPS)
+// =============================================================================
+
+// MPSIsSupported returns true if Metal Performance Shaders are available.
+func MPSIsSupported() bool {
+	return bool(C.metal_mps_is_supported())
+}
+
+// MPSMatrixMultiply performs GPU-accelerated matrix multiplication.
+// Computes: C = alpha * A * B + beta * C
+//
+// Parameters:
+//   - a: Matrix A buffer (m × k floats)
+//   - b: Matrix B buffer (k × n floats)
+//   - c: Matrix C buffer (m × n floats, output)
+//   - m, n, k: Matrix dimensions
+//   - alpha, beta: Scaling factors
+//
+// This uses Metal Performance Shaders which are highly optimized
+// for Apple Silicon's unified memory architecture.
+func (d *Device) MPSMatrixMultiply(a, b, c *Buffer, m, n, k uint32, alpha, beta float32) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	result := C.metal_mps_matrix_multiply(
+		d.ptr,
+		a.ptr,
+		b.ptr,
+		c.ptr,
+		C.uint(m),
+		C.uint(n),
+		C.uint(k),
+		C.float(alpha),
+		C.float(beta),
+	)
+
+	if result != 0 {
+		errMsg := C.GoString(C.metal_last_error())
+		C.metal_clear_error()
+		return fmt.Errorf("MPS matrix multiply failed: %s", errMsg)
+	}
+
+	return nil
+}
+
+// MPSMatrixVectorMultiply performs GPU-accelerated matrix-vector multiplication.
+// Computes: y = alpha * A * x + beta * y
+//
+// Parameters:
+//   - a: Matrix A buffer (m × n floats)
+//   - x: Vector x buffer (n floats)
+//   - y: Vector y buffer (m floats, output)
+//   - m, n: Matrix dimensions
+//   - alpha, beta: Scaling factors
+func (d *Device) MPSMatrixVectorMultiply(a, x, y *Buffer, m, n uint32, alpha, beta float32) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	result := C.metal_mps_matrix_vector_multiply(
+		d.ptr,
+		a.ptr,
+		x.ptr,
+		y.ptr,
+		C.uint(m),
+		C.uint(n),
+		C.float(alpha),
+		C.float(beta),
+	)
+
+	if result != 0 {
+		errMsg := C.GoString(C.metal_last_error())
+		C.metal_clear_error()
+		return fmt.Errorf("MPS matrix-vector multiply failed: %s", errMsg)
+	}
+
+	return nil
+}
+
+// MPSBatchCosineSimilarity computes cosine similarities using MPS.
+// More efficient than custom kernels for large batches (>1000 embeddings).
+//
+// Parameters:
+//   - embeddings: Buffer with n embeddings (n × dims floats)
+//   - query: Query vector buffer (dims floats)
+//   - scores: Output buffer (n floats)
+//   - n: Number of embeddings
+//   - dims: Embedding dimensions
+//
+// Note: Assumes embeddings are pre-normalized for cosine similarity.
+func (d *Device) MPSBatchCosineSimilarity(embeddings, query, scores *Buffer, n, dims uint32) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	result := C.metal_mps_batch_cosine_similarity(
+		d.ptr,
+		embeddings.ptr,
+		query.ptr,
+		scores.ptr,
+		C.uint(n),
+		C.uint(dims),
+	)
+
+	if result != 0 {
+		errMsg := C.GoString(C.metal_last_error())
+		C.metal_clear_error()
+		return fmt.Errorf("MPS batch cosine similarity failed: %s", errMsg)
+	}
+
+	return nil
 }

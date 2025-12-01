@@ -158,6 +158,11 @@ import (
 // Thread Safety:
 //
 //	The executor is thread-safe and can handle concurrent queries.
+//
+// NodeCreatedCallback is called when a node is created or updated via Cypher.
+// This allows external systems (like the embed queue) to be notified of new content.
+type NodeCreatedCallback func(nodeID string)
+
 type StorageExecutor struct {
 	parser    *Parser
 	storage   storage.Engine
@@ -177,6 +182,10 @@ type StorageExecutor struct {
 	// embedder for server-side query embedding (optional)
 	// If set, vector search can accept string queries which are embedded automatically
 	embedder QueryEmbedder
+
+	// onNodeCreated is called when a node is created or updated via CREATE/MERGE
+	// This allows the embed queue to be notified of new content requiring embeddings
+	onNodeCreated NodeCreatedCallback
 }
 
 // QueryEmbedder generates embeddings for search queries.
@@ -228,6 +237,28 @@ func NewStorageExecutor(store storage.Engine) *StorageExecutor {
 //	// CALL db.index.vector.queryNodes('idx', 10, 'search query')   // String (auto-embedded)
 func (e *StorageExecutor) SetEmbedder(embedder QueryEmbedder) {
 	e.embedder = embedder
+}
+
+// SetNodeCreatedCallback sets a callback that is invoked when nodes are created
+// or updated via CREATE/MERGE statements. This allows the embed queue to be
+// notified of new content that needs embedding generation.
+//
+// Example:
+//
+//	executor := cypher.NewStorageExecutor(storage)
+//	executor.SetNodeCreatedCallback(func(nodeID string) {
+//	    embedQueue.Enqueue(nodeID)
+//	})
+func (e *StorageExecutor) SetNodeCreatedCallback(cb NodeCreatedCallback) {
+	e.onNodeCreated = cb
+}
+
+// notifyNodeCreated calls the onNodeCreated callback if set.
+// This is called internally after node creation/update operations.
+func (e *StorageExecutor) notifyNodeCreated(nodeID string) {
+	if e.onNodeCreated != nil {
+		e.onNodeCreated(nodeID)
+	}
 }
 
 // Flush persists all pending writes to storage.

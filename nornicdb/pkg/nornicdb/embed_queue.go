@@ -131,8 +131,12 @@ func (ew *EmbedWorker) worker() {
 
 	fmt.Println("🧠 Embed worker started")
 
-	// Initial delay to let server start
-	time.Sleep(2 * time.Second)
+	// Short initial delay to let server start
+	time.Sleep(500 * time.Millisecond)
+
+	// Immediate scan on startup for any existing nodes needing embedding
+	fmt.Println("🔍 Initial scan for nodes needing embeddings...")
+	ew.processUntilEmpty()
 
 	ticker := time.NewTicker(ew.config.ScanInterval)
 	defer ticker.Stop()
@@ -144,12 +148,32 @@ func (ew *EmbedWorker) worker() {
 			return
 
 		case <-ew.trigger:
-			// Immediate trigger - process now
-			ew.processNextBatch()
+			// Immediate trigger - process until queue is empty
+			ew.processUntilEmpty()
 
 		case <-ticker.C:
 			// Regular interval scan
 			ew.processNextBatch()
+		}
+	}
+}
+
+// processUntilEmpty keeps processing nodes until no more need embeddings.
+func (ew *EmbedWorker) processUntilEmpty() {
+	for {
+		select {
+		case <-ew.ctx.Done():
+			return
+		default:
+			ew.processNextBatch()
+			// Check if we found any node to process
+			// If processNextBatch didn't find anything, stop
+			node := ew.findNodeWithoutEmbedding()
+			if node == nil {
+				return // No more nodes to process
+			}
+			// Small delay between batches to avoid CPU spin
+			time.Sleep(50 * time.Millisecond)
 		}
 	}
 }

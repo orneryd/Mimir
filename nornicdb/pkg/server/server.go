@@ -144,6 +144,7 @@ import (
 	"github.com/orneryd/nornicdb/pkg/auth"
 	"github.com/orneryd/nornicdb/pkg/embed"
 	"github.com/orneryd/nornicdb/pkg/gpu"
+	"github.com/orneryd/nornicdb/pkg/gpu/metal"
 	"github.com/orneryd/nornicdb/pkg/mcp"
 	"github.com/orneryd/nornicdb/pkg/nornicdb"
 )
@@ -418,6 +419,20 @@ func New(db *nornicdb.DB, authenticator *auth.Authenticator, config *Config) (*S
 	}
 	if db == nil {
 		return nil, fmt.Errorf("database required")
+	}
+
+	// Log GPU acceleration status on startup
+	if runtime.GOOS == "darwin" {
+		metal.PrintDeviceInfo()
+	} else {
+		// Check for GPU accelerator on other platforms
+		accel, err := gpu.NewAccelerator(nil)
+		if err == nil && accel != nil {
+			log.Printf("🟢 GPU Acceleration: Available (backend: %s)", accel.Backend())
+			accel.Release()
+		} else {
+			log.Println("🔴 GPU Acceleration: Not available (using CPU)")
+		}
 	}
 
 	// Create MCP server for LLM tool interface (if enabled)

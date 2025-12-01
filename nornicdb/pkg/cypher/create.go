@@ -73,6 +73,7 @@ func (e *StorageExecutor) executeCreate(ctx context.Context, cypher string) (*Ex
 		if err := e.storage.CreateNode(node); err != nil {
 			return nil, fmt.Errorf("failed to create node: %w", err)
 		}
+		e.notifyNodeCreated(string(node.ID))
 
 		result.Stats.NodesCreated++
 
@@ -110,6 +111,7 @@ func (e *StorageExecutor) executeCreate(ctx context.Context, cypher string) (*Ex
 			if err := e.storage.CreateNode(sourceNode); err != nil {
 				return nil, fmt.Errorf("failed to create source node: %w", err)
 			}
+			e.notifyNodeCreated(string(sourceNode.ID))
 			result.Stats.NodesCreated++
 			if sourcePattern.variable != "" {
 				createdNodes[sourcePattern.variable] = sourceNode
@@ -132,6 +134,7 @@ func (e *StorageExecutor) executeCreate(ctx context.Context, cypher string) (*Ex
 			if err := e.storage.CreateNode(targetNode); err != nil {
 				return nil, fmt.Errorf("failed to create target node: %w", err)
 			}
+			e.notifyNodeCreated(string(targetNode.ID))
 			result.Stats.NodesCreated++
 			if targetPattern.variable != "" {
 				createdNodes[targetPattern.variable] = targetNode
@@ -255,6 +258,7 @@ func (e *StorageExecutor) executeCreateWithRefs(ctx context.Context, cypher stri
 		if err := e.storage.CreateNode(node); err != nil {
 			return nil, nil, nil, fmt.Errorf("failed to create node: %w", err)
 		}
+		e.notifyNodeCreated(string(node.ID))
 
 		result.Stats.NodesCreated++
 
@@ -290,6 +294,7 @@ func (e *StorageExecutor) executeCreateWithRefs(ctx context.Context, cypher stri
 			if err := e.storage.CreateNode(sourceNode); err != nil {
 				return nil, nil, nil, fmt.Errorf("failed to create source node: %w", err)
 			}
+			e.notifyNodeCreated(string(sourceNode.ID))
 			result.Stats.NodesCreated++
 			if sourcePattern.variable != "" {
 				createdNodes[sourcePattern.variable] = sourceNode
@@ -310,6 +315,7 @@ func (e *StorageExecutor) executeCreateWithRefs(ctx context.Context, cypher stri
 			if err := e.storage.CreateNode(targetNode); err != nil {
 				return nil, nil, nil, fmt.Errorf("failed to create target node: %w", err)
 			}
+			e.notifyNodeCreated(string(targetNode.ID))
 			result.Stats.NodesCreated++
 			if targetPattern.variable != "" {
 				createdNodes[targetPattern.variable] = targetNode
@@ -659,6 +665,7 @@ func (e *StorageExecutor) executeCreateRelationship(ctx context.Context, cypher,
 	if err := e.storage.CreateNode(sourceNode); err != nil {
 		return nil, fmt.Errorf("failed to create source node: %w", err)
 	}
+	e.notifyNodeCreated(string(sourceNode.ID))
 	result.Stats.NodesCreated++
 
 	// Parse target node
@@ -671,6 +678,7 @@ func (e *StorageExecutor) executeCreateRelationship(ctx context.Context, cypher,
 	if err := e.storage.CreateNode(targetNode); err != nil {
 		return nil, fmt.Errorf("failed to create target node: %w", err)
 	}
+	e.notifyNodeCreated(string(targetNode.ID))
 	result.Stats.NodesCreated++
 
 	// Parse relationship type and properties from relStr (e.g., "r:ACTED_IN {roles: ['Neo']}")
@@ -1316,6 +1324,7 @@ func (e *StorageExecutor) processCreateNode(pattern string, nodeVars map[string]
 	if err := e.storage.CreateNode(node); err != nil {
 		return fmt.Errorf("failed to create node: %w", err)
 	}
+	e.notifyNodeCreated(string(node.ID))
 
 	result.Stats.NodesCreated++
 
@@ -1330,6 +1339,7 @@ func (e *StorageExecutor) processCreateNode(pattern string, nodeVars map[string]
 // processCreateRelationship creates a relationship between nodes in nodeVars
 func (e *StorageExecutor) processCreateRelationship(pattern string, nodeVars map[string]*storage.Node, edgeVars map[string]*storage.Edge, result *ExecuteResult) error {
 	// Parse the relationship pattern: (a)-[r:TYPE {props}]->(b)
+	// Supports both simple variable refs and inline node definitions
 	// Uses pre-compiled patterns from regex_patterns.go for performance
 
 	// Try forward arrow first: (a)-[...]->(b)
@@ -1346,11 +1356,11 @@ func (e *StorageExecutor) processCreateRelationship(pattern string, nodeVars map
 		return fmt.Errorf("invalid relationship pattern in CREATE: %s", pattern)
 	}
 
-	sourceVar := matches[1]
+	sourceContent := strings.TrimSpace(matches[1])
 	relVar := matches[2]
 	relType := matches[3]
 	relPropsStr := matches[4]
-	targetVar := matches[5]
+	targetContent := strings.TrimSpace(matches[5])
 
 	// Default relationship type
 	if relType == "" {
@@ -1365,17 +1375,16 @@ func (e *StorageExecutor) processCreateRelationship(pattern string, nodeVars map
 		relProps = make(map[string]interface{})
 	}
 
-	// Look up source and target nodes
-	sourceNode, sourceExists := nodeVars[sourceVar]
-	targetNode, targetExists := nodeVars[targetVar]
-
-	if !sourceExists {
-		return fmt.Errorf("variable '%s' not found in MATCH results (have: %v)",
-			sourceVar, getKeys(nodeVars))
+	// Resolve source node - could be a variable reference or inline node definition
+	sourceNode, err := e.resolveOrCreateNode(sourceContent, nodeVars, result)
+	if err != nil {
+		return fmt.Errorf("failed to resolve source node: %w", err)
 	}
-	if !targetExists {
-		return fmt.Errorf("variable '%s' not found in MATCH results (have: %v)",
-			targetVar, getKeys(nodeVars))
+
+	// Resolve target node - could be a variable reference or inline node definition
+	targetNode, err := e.resolveOrCreateNode(targetContent, nodeVars, result)
+	if err != nil {
+		return fmt.Errorf("failed to resolve target node: %w", err)
 	}
 
 	// Handle reverse direction
@@ -1405,6 +1414,67 @@ func (e *StorageExecutor) processCreateRelationship(pattern string, nodeVars map
 	}
 
 	return nil
+}
+
+// resolveOrCreateNode resolves a node reference, creating it if it's an inline definition.
+// Supports:
+//   - Simple variable: "p" -> looks up in nodeVars
+//   - Inline definition: "c:Company {name: 'Acme'}" -> creates node and adds to nodeVars
+func (e *StorageExecutor) resolveOrCreateNode(content string, nodeVars map[string]*storage.Node, result *ExecuteResult) (*storage.Node, error) {
+	content = strings.TrimSpace(content)
+
+	// Check if this is a simple variable reference (just alphanumeric)
+	if isSimpleVariable(content) {
+		node, exists := nodeVars[content]
+		if !exists {
+			return nil, fmt.Errorf("variable '%s' not found (have: %v)", content, getKeys(nodeVars))
+		}
+		return node, nil
+	}
+
+	// Parse as inline node definition: "varName:Label {props}" or ":Label {props}" or "varName:Label"
+	nodeInfo := e.parseNodePattern("(" + content + ")")
+
+	// Check if we already have this variable
+	if nodeInfo.variable != "" {
+		if existingNode, exists := nodeVars[nodeInfo.variable]; exists {
+			return existingNode, nil
+		}
+	}
+
+	// Create new node
+	node := &storage.Node{
+		ID:         storage.NodeID(e.generateID()),
+		Labels:     nodeInfo.labels,
+		Properties: nodeInfo.properties,
+	}
+
+	if err := e.storage.CreateNode(node); err != nil {
+		return nil, fmt.Errorf("failed to create node: %w", err)
+	}
+	e.notifyNodeCreated(string(node.ID))
+
+	result.Stats.NodesCreated++
+
+	// Store in nodeVars if it has a variable name
+	if nodeInfo.variable != "" {
+		nodeVars[nodeInfo.variable] = node
+	}
+
+	return node, nil
+}
+
+// isSimpleVariable checks if content is just a variable name (alphanumeric + underscore)
+func isSimpleVariable(content string) bool {
+	if content == "" {
+		return false
+	}
+	for _, r := range content {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_') {
+			return false
+		}
+	}
+	return true
 }
 
 // getKeys returns the keys of a map as a slice

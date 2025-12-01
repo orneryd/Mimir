@@ -118,6 +118,7 @@ func (e *StorageExecutor) executeMerge(ctx context.Context, cypher string) (*Exe
 			Properties: matchProps,
 		}
 		e.storage.CreateNode(node)
+		e.notifyNodeCreated(string(node.ID))
 		result.Stats.NodesCreated = 1
 
 		if varName == "" {
@@ -171,6 +172,7 @@ func (e *StorageExecutor) executeMerge(ctx context.Context, cypher string) (*Exe
 			Properties: matchProps,
 		}
 		e.storage.CreateNode(node)
+		e.notifyNodeCreated(string(node.ID))
 		result.Stats.NodesCreated = 1
 
 		// Apply ON CREATE SET if present
@@ -578,6 +580,7 @@ func (e *StorageExecutor) executeMergeWithContext(ctx context.Context, cypher st
 			Properties: matchProps,
 		}
 		e.storage.CreateNode(node)
+		e.notifyNodeCreated(string(node.ID))
 		result.Stats.NodesCreated = 1
 
 		if onCreateIdx > 0 {
