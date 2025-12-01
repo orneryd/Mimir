@@ -178,9 +178,9 @@ services:
       context: .
       dockerfile: Dockerfile
       tags:
-        - mimir-server:${VERSION:-1.0.0}
-        - mimir-server:latest
-    image: mimir-server:${VERSION:-1.0.0}
+        - timothyswt/mimir-server:${VERSION:-1.0.0}
+        - timothyswt/mimir-server:latest
+    image: timothyswt/mimir-server:latest
     container_name: mimir_server
     restart: unless-stopped
     environment:

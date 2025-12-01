@@ -575,9 +575,10 @@ export class FileWatchManager {
     let skipped = 0;
     let errored = 0;
     const generateEmbeddings = config.generate_embeddings || false;
+    const indexingId = `idx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     
     if (generateEmbeddings) {
-      console.log('🧮 Vector embeddings enabled for this watch');
+      console.log(`🧮 Vector embeddings enabled for this watch [${indexingId}] path=${config.path}`);
     }
     
     for (const file of files) {
@@ -613,7 +614,7 @@ export class FileWatchManager {
         
         if ((indexed + skipped) % 10 === 0) {
           const processed = indexed + skipped + errored;
-          console.log(`  Processed ${processed}/${files.length} files (✅ ${indexed} indexed, ⏭️  ${skipped} skipped, ❌ ${errored} errors)...`);
+          console.log(`  [${indexingId}] Processed ${processed}/${files.length} files (✅ ${indexed} indexed, ⏭️  ${skipped} skipped, ❌ ${errored} errors)...`);
         }
       } catch (error: any) {
         if (error.message === 'Binary file') {

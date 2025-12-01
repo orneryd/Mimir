@@ -50,6 +50,7 @@ export interface IndexResult {
 export class FileIndexer {
   private embeddingsService: EmbeddingsService;
   private embeddingsInitialized: boolean = false;
+  private embeddingsInitPromise: Promise<void> | null = null; // Mutex for initialization
   private documentParser: DocumentParser;
   private imageProcessor: ImageProcessor | null = null;
   private vlService: VLService | null = null;
@@ -100,25 +101,49 @@ export class FileIndexer {
   /**
    * Initialize embeddings service (lazy loading)
    * Skips initialization if connected to NornicDB
+   * Uses mutex pattern to prevent race conditions in concurrent calls
    */
   private async initEmbeddings(): Promise<void> {
-    if (!this.embeddingsInitialized) {
-      // Detect provider on first call
-      if (!this.providerDetected) {
-        await this.detectDatabaseProvider();
-        this.providerDetected = true;
-        
-        if (this.isNornicDB) {
-          console.log('🗄️  FileIndexer: NornicDB detected - skipping embeddings service initialization');
-        }
-      }
-      
-      // Only initialize embeddings service for Neo4j
-      if (!this.isNornicDB) {
-        await this.embeddingsService.initialize();
-      }
-      this.embeddingsInitialized = true;
+    // If already initialized, return immediately
+    if (this.embeddingsInitialized) {
+      return;
     }
+    
+    // If initialization is in progress, wait for it
+    if (this.embeddingsInitPromise) {
+      return this.embeddingsInitPromise;
+    }
+    
+    // Start initialization and store the promise for concurrent callers
+    this.embeddingsInitPromise = this.doInitEmbeddings();
+    
+    try {
+      await this.embeddingsInitPromise;
+    } finally {
+      // Clear the promise after completion (success or failure)
+      this.embeddingsInitPromise = null;
+    }
+  }
+  
+  /**
+   * Internal initialization logic (called once via mutex)
+   */
+  private async doInitEmbeddings(): Promise<void> {
+    // Detect provider on first call
+    if (!this.providerDetected) {
+      await this.detectDatabaseProvider();
+      this.providerDetected = true;
+      
+      if (this.isNornicDB) {
+        console.log('🗄️  FileIndexer: NornicDB detected - skipping embeddings service initialization');
+      }
+    }
+    
+    // Only initialize embeddings service for Neo4j
+    if (!this.isNornicDB) {
+      await this.embeddingsService.initialize();
+    }
+    this.embeddingsInitialized = true;
   }
 
   /**

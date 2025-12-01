@@ -8,15 +8,25 @@ try {
   const pkgJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url)));
   const version = pkgJson.version || '';
   console.log(`Building docker image with VERSION=${version}`);
+  console.log(`Image will be tagged as: timothyswt/mimir-server:${version} and timothyswt/mimir-server:latest`);
 
   const env = { ...process.env, VERSION: version };
+  
+  // Determine compose file based on architecture
+  const arch = process.arch;
+  const composeFile = arch === 'arm64' 
+    ? 'docker-compose.arm64.nornicdb.yml' 
+    : 'docker-compose.yml';
+  
+  console.log(`Using compose file: ${composeFile}`);
 
   // Try 'docker compose' first (modern Docker Desktop), then fall back to 'docker-compose'
-  let result = spawnSync('docker', ['compose', 'build', 'mimir-server'], { stdio: 'inherit', env });
+  // Use --no-cache to ensure fresh build
+  let result = spawnSync('docker', ['compose', '-f', composeFile, 'build', '--no-cache', 'mimir-server'], { stdio: 'inherit', env });
 
   if (result.error && result.error.code === 'ENOENT') {
     console.log('Trying docker-compose (legacy)...');
-    result = spawnSync('docker-compose', ['build', 'mimir-server'], { stdio: 'inherit', env });
+    result = spawnSync('docker-compose', ['-f', composeFile, 'build', '--no-cache', 'mimir-server'], { stdio: 'inherit', env });
   }
 
   if (result.error) {

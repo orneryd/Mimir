@@ -231,24 +231,14 @@ export async function handleIndexFolder(
 
     config = await manager.createWatch(input);
     
-    // Start watching
+    // Start watching - this queues indexing internally via queueIndexing()
+    // No need to call indexFolder separately as startWatch handles it
+    await watchManager.startWatch(config);
+  } else {
+    // Config already exists - check if we need to re-index
+    // startWatch will skip if already watching, so we can safely call it
     await watchManager.startWatch(config);
   }
-
-  // Start indexing in the background (don't await)
-  // Use Promise to ensure it runs asynchronously without blocking the response
-  Promise.resolve().then(async () => {
-    try {
-      console.log(`🚀 Starting background indexing for ${containerPath}`);
-      const filesIndexed = await watchManager.indexFolder(containerPath, config!);
-      const elapsed = Date.now() - startTime;
-      console.log(`✅ Background indexing complete: ${filesIndexed} files indexed in ${elapsed}ms`);
-    } catch (error) {
-      console.error(`❌ Background indexing failed for ${containerPath}:`, error);
-    }
-  }).catch(error => {
-    console.error(`❌ Unhandled error in background indexing:`, error);
-  });
 
   // Return immediately
   const elapsed = Date.now() - startTime;
