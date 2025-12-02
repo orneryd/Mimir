@@ -2626,6 +2626,8 @@ func (e *StorageExecutor) splitArrayElements(inner string) []string {
 // - CASE/END boundaries
 // - Parentheses (function calls)
 // - String literals
+// smartSplitReturnItems splits RETURN items by comma, respecting strings, parentheses, and CASE/END.
+// Properly handles UTF-8 encoded strings with multi-byte characters.
 func (e *StorageExecutor) smartSplitReturnItems(returnPart string) []string {
 	var result []string
 	var current strings.Builder
@@ -2634,10 +2636,23 @@ func (e *StorageExecutor) smartSplitReturnItems(returnPart string) []string {
 	var parenDepth int
 	var caseDepth int
 
+	runes := []rune(returnPart)
+	runeLen := len(runes)
+
+	// Build rune-to-byte index mapping for keyword checking
+	runeToByteIndex := make([]int, runeLen+1)
+	byteIdx := 0
+	for ri, r := range runes {
+		runeToByteIndex[ri] = byteIdx
+		byteIdx += len(string(r))
+	}
+	runeToByteIndex[runeLen] = byteIdx
+
 	upper := strings.ToUpper(returnPart)
 
-	for i := 0; i < len(returnPart); i++ {
-		ch := rune(returnPart[i])
+	for ri := 0; ri < runeLen; ri++ {
+		ch := runes[ri]
+		bytePos := runeToByteIndex[ri]
 
 		// Track string literals
 		if ch == '\'' || ch == '"' {
@@ -2668,21 +2683,30 @@ func (e *StorageExecutor) smartSplitReturnItems(returnPart string) []string {
 			continue
 		}
 
-		// Track CASE/END keywords
-		if i+4 <= len(returnPart) && upper[i:i+4] == "CASE" {
+		// Track CASE/END keywords (using byte positions for substring comparison)
+		if bytePos+4 <= len(returnPart) && upper[bytePos:bytePos+4] == "CASE" {
 			// Check if CASE is a word boundary
-			if (i == 0 || !isAlphaNum(rune(returnPart[i-1]))) &&
-				(i+4 >= len(returnPart) || !isAlphaNum(rune(returnPart[i+4]))) {
+			prevOk := ri == 0 || !isAlphaNum(runes[ri-1])
+			nextRuneIdx := ri + 4 // Skip 4 runes for "CASE"
+			// Need to find which rune corresponds to bytePos+4
+			for nextRuneIdx < runeLen && runeToByteIndex[nextRuneIdx] < bytePos+4 {
+				nextRuneIdx++
+			}
+			nextOk := nextRuneIdx >= runeLen || !isAlphaNum(runes[nextRuneIdx])
+			if prevOk && nextOk {
 				caseDepth++
 			}
 		}
-		if i+3 <= len(returnPart) && upper[i:i+3] == "END" {
+		if bytePos+3 <= len(returnPart) && upper[bytePos:bytePos+3] == "END" {
 			// Check if END is a word boundary
-			if (i == 0 || !isAlphaNum(rune(returnPart[i-1]))) &&
-				(i+3 >= len(returnPart) || !isAlphaNum(rune(returnPart[i+3]))) {
-				if caseDepth > 0 {
-					caseDepth--
-				}
+			prevOk := ri == 0 || !isAlphaNum(runes[ri-1])
+			nextRuneIdx := ri + 3 // Skip 3 runes for "END"
+			for nextRuneIdx < runeLen && runeToByteIndex[nextRuneIdx] < bytePos+3 {
+				nextRuneIdx++
+			}
+			nextOk := nextRuneIdx >= runeLen || !isAlphaNum(runes[nextRuneIdx])
+			if prevOk && nextOk && caseDepth > 0 {
+				caseDepth--
 			}
 		}
 

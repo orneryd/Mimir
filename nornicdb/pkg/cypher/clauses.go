@@ -1053,6 +1053,24 @@ func (e *StorageExecutor) processWithAggregation(rows []joinedRow, sourceVar, ta
 
 			if inner == "*" {
 				row[i] = int64(len(rows))
+			} else if isCaseExpression(inner) {
+				// COUNT(CASE WHEN condition THEN 1 END) - count only non-NULL results
+				count := int64(0)
+				for _, r := range rows {
+					nodeMap := make(map[string]*storage.Node)
+					if r.initialNode != nil {
+						nodeMap[sourceVar] = r.initialNode
+					}
+					if r.relatedNode != nil {
+						nodeMap[targetVar] = r.relatedNode
+					}
+					result := e.evaluateCaseExpression(inner, nodeMap, nil)
+					// count() only counts non-NULL values
+					if result != nil {
+						count++
+					}
+				}
+				row[i] = count
 			} else if strings.HasPrefix(strings.ToUpper(inner), strings.ToUpper(sourceVar)) {
 				count := int64(0)
 				for _, r := range rows {

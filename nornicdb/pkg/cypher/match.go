@@ -540,7 +540,6 @@ func (e *StorageExecutor) executeAggregationSingleGroup(nodes []*storage.Node, v
 	for i, item := range items {
 		upperExprs[i] = strings.ToUpper(item.expr)
 	}
-	upperVariable := strings.ToUpper(variable)
 
 	// Use pre-compiled regex patterns from regex_patterns.go
 
@@ -569,8 +568,22 @@ func (e *StorageExecutor) executeAggregationSingleGroup(nodes []*storage.Node, v
 			}
 
 		case strings.HasPrefix(upperExpr, "COUNT("):
-			if strings.Contains(upperExpr, "*") || strings.Contains(upperExpr, "("+upperVariable+")") {
+			inner := item.expr[6 : len(item.expr)-1]
+			inner = strings.TrimSpace(inner)
+			if inner == "*" || strings.EqualFold(inner, variable) {
 				row[i] = int64(len(nodes))
+			} else if isCaseExpression(inner) {
+				// COUNT(CASE WHEN condition THEN 1 END) - count only non-NULL results
+				count := int64(0)
+				for _, node := range nodes {
+					nodeMap := map[string]*storage.Node{variable: node}
+					result := e.evaluateCaseExpression(inner, nodeMap, nil)
+					// count() only counts non-NULL values
+					if result != nil {
+						count++
+					}
+				}
+				row[i] = count
 			} else {
 				propMatch := countPropPattern.FindStringSubmatch(item.expr)
 				if len(propMatch) == 3 {
