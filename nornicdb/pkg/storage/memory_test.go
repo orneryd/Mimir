@@ -192,10 +192,21 @@ func TestMemoryEngine_UpdateNode(t *testing.T) {
 		assert.ErrorIs(t, err, ErrInvalidData)
 	})
 
-	t.Run("not found", func(t *testing.T) {
+	t.Run("upsert creates if not exists", func(t *testing.T) {
+		// UpdateNode now has upsert behavior - creates if not exists
 		engine := NewMemoryEngine()
-		err := engine.UpdateNode(&Node{ID: "nonexistent"})
-		assert.ErrorIs(t, err, ErrNotFound)
+		err := engine.UpdateNode(&Node{
+			ID:         "new-node",
+			Labels:     []string{"Created"},
+			Properties: map[string]any{"via": "UpdateNode"},
+		})
+		assert.NoError(t, err)
+
+		// Verify the node was created
+		node, err := engine.GetNode("new-node")
+		assert.NoError(t, err)
+		assert.Equal(t, []string{"Created"}, node.Labels)
+		assert.Equal(t, "UpdateNode", node.Properties["via"])
 	})
 }
 

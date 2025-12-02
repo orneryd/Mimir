@@ -700,15 +700,30 @@ func (b *BadgerEngine) UpdateNode(node *Node) error {
 	err := b.db.Update(func(txn *badger.Txn) error {
 		key := nodeKey(node.ID)
 
-		// Get existing node for label index updates
+		// Get existing node for label index updates (if exists)
 		item, err := txn.Get(key)
 		if err == badger.ErrKeyNotFound {
-			return ErrNotFound
+			// Node doesn't exist - do an insert (upsert behavior)
+			data, err := encodeNode(node)
+			if err != nil {
+				return fmt.Errorf("failed to encode node: %w", err)
+			}
+			if err := txn.Set(key, data); err != nil {
+				return err
+			}
+			// Create label indexes
+			for _, label := range node.Labels {
+				if err := txn.Set(labelIndexKey(label, node.ID), []byte{}); err != nil {
+					return err
+				}
+			}
+			return nil
 		}
 		if err != nil {
 			return err
 		}
 
+		// Node exists - update it
 		var existing *Node
 		if err := item.Value(func(val []byte) error {
 			var decodeErr error

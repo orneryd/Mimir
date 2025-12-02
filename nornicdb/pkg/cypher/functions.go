@@ -3937,7 +3937,14 @@ func (e *StorageExecutor) evaluateExpressionWithContext(expr string, nodes map[s
 		propName := expr[dotIdx+1:]
 
 		if node, ok := nodes[varName]; ok {
-			// Don't return internal properties like embeddings
+			// Handle has_embedding specially - check both property and native embedding field
+			if propName == "has_embedding" {
+				if val, ok := node.Properties["has_embedding"]; ok {
+					return val
+				}
+				return len(node.Embedding) > 0
+			}
+			// Don't return internal properties like embeddings (except has_embedding handled above)
 			if e.isInternalProperty(propName) {
 				return nil
 			}

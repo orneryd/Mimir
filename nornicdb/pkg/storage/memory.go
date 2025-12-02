@@ -374,20 +374,20 @@ func (m *MemoryEngine) UpdateNode(node *Node) error {
 		return ErrStorageClosed
 	}
 
+	// Upsert behavior: if node exists, remove from old label indexes first
+	// If not exists, this is a no-op
 	existing, exists := m.nodes[node.ID]
-	if !exists {
-		return ErrNotFound
-	}
-
-	// Remove from old label indexes (normalized for case-insensitive matching)
-	for _, label := range existing.Labels {
-		normalLabel := normalizeLabel(label)
-		if m.nodesByLabel[normalLabel] != nil {
-			delete(m.nodesByLabel[normalLabel], node.ID)
+	if exists {
+		// Remove from old label indexes (normalized for case-insensitive matching)
+		for _, label := range existing.Labels {
+			normalLabel := normalizeLabel(label)
+			if m.nodesByLabel[normalLabel] != nil {
+				delete(m.nodesByLabel[normalLabel], node.ID)
+			}
 		}
 	}
 
-	// Store updated node
+	// Store node (create or update)
 	stored := m.copyNode(node)
 	m.nodes[node.ID] = stored
 

@@ -22,6 +22,14 @@
 REGISTRY ?= timothyswt
 VERSION ?= latest
 
+# Docker build flags (use NO_CACHE=1 to force rebuild without cache)
+# Usage: make build-arm64-metal NO_CACHE=1
+ifdef NO_CACHE
+    DOCKER_BUILD_FLAGS := --no-cache
+else
+    DOCKER_BUILD_FLAGS :=
+endif
+
 # Detect architecture: arm64 (Apple Silicon) or x86_64/amd64 (Intel/AMD)
 UNAME_M := $(shell uname -m)
 ifeq ($(UNAME_M),arm64)
@@ -63,37 +71,37 @@ build-arm64-metal:
 	@echo "╔══════════════════════════════════════════════════════════════╗"
 	@echo "║ Building: $(IMAGE_ARM64) [BYOM]"
 	@echo "╚══════════════════════════════════════════════════════════════╝"
-	docker build --platform linux/arm64 -t $(IMAGE_ARM64) -f $(DOCKER_DIR)/Dockerfile.arm64-metal .
+	docker build $(DOCKER_BUILD_FLAGS) --platform linux/arm64 -t $(IMAGE_ARM64) -f $(DOCKER_DIR)/Dockerfile.arm64-metal .
 
 build-arm64-metal-bge:
 	@echo "╔══════════════════════════════════════════════════════════════╗"
 	@echo "║ Building: $(IMAGE_ARM64_BGE) [with BGE model]"
 	@echo "╚══════════════════════════════════════════════════════════════╝"
-	docker build --platform linux/arm64 --build-arg EMBED_MODEL=true -t $(IMAGE_ARM64_BGE) -f $(DOCKER_DIR)/Dockerfile.arm64-metal .
+	docker build $(DOCKER_BUILD_FLAGS) --platform linux/arm64 --build-arg EMBED_MODEL=true -t $(IMAGE_ARM64_BGE) -f $(DOCKER_DIR)/Dockerfile.arm64-metal .
 
 build-arm64-metal-headless:
 	@echo "╔══════════════════════════════════════════════════════════════╗"
 	@echo "║ Building: $(IMAGE_ARM64_HEADLESS) [headless, no UI]"
 	@echo "╚══════════════════════════════════════════════════════════════╝"
-	docker build --platform linux/arm64 --build-arg HEADLESS=true -t $(IMAGE_ARM64_HEADLESS) -f $(DOCKER_DIR)/Dockerfile.arm64-metal .
+	docker build $(DOCKER_BUILD_FLAGS) --platform linux/arm64 --build-arg HEADLESS=true -t $(IMAGE_ARM64_HEADLESS) -f $(DOCKER_DIR)/Dockerfile.arm64-metal .
 
 build-amd64-cuda:
 	@echo "╔══════════════════════════════════════════════════════════════╗"
 	@echo "║ Building: $(IMAGE_AMD64) [BYOM]"
 	@echo "╚══════════════════════════════════════════════════════════════╝"
-	docker build --platform linux/amd64 -t $(IMAGE_AMD64) -f $(DOCKER_DIR)/Dockerfile.amd64-cuda .
+	docker build $(DOCKER_BUILD_FLAGS) --platform linux/amd64 -t $(IMAGE_AMD64) -f $(DOCKER_DIR)/Dockerfile.amd64-cuda .
 
 build-amd64-cuda-bge:
 	@echo "╔══════════════════════════════════════════════════════════════╗"
 	@echo "║ Building: $(IMAGE_AMD64_BGE) [with BGE model]"
 	@echo "╚══════════════════════════════════════════════════════════════╝"
-	docker build --platform linux/amd64 --build-arg EMBED_MODEL=true -t $(IMAGE_AMD64_BGE) -f $(DOCKER_DIR)/Dockerfile.amd64-cuda .
+	docker build $(DOCKER_BUILD_FLAGS) --platform linux/amd64 --build-arg EMBED_MODEL=true -t $(IMAGE_AMD64_BGE) -f $(DOCKER_DIR)/Dockerfile.amd64-cuda .
 
 build-amd64-cuda-headless:
 	@echo "╔══════════════════════════════════════════════════════════════╗"
 	@echo "║ Building: $(IMAGE_AMD64_HEADLESS) [headless, no UI]"
 	@echo "╚══════════════════════════════════════════════════════════════╝"
-	docker build --platform linux/amd64 --build-arg HEADLESS=true -t $(IMAGE_AMD64_HEADLESS) -f $(DOCKER_DIR)/Dockerfile.amd64-cuda .
+	docker build $(DOCKER_BUILD_FLAGS) --platform linux/amd64 --build-arg HEADLESS=true -t $(IMAGE_AMD64_HEADLESS) -f $(DOCKER_DIR)/Dockerfile.amd64-cuda .
 
 # Build both variants for an architecture
 build-arm64-all: build-arm64-metal build-arm64-metal-bge build-arm64-metal-headless

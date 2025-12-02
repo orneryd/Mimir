@@ -96,12 +96,12 @@ func TestBadgerEngine_GetNode(t *testing.T) {
 
 	t.Run("gets existing node", func(t *testing.T) {
 		original := &Node{
-			ID:           NodeID("n1"),
-			Labels:       []string{"Person", "User"},
-			Properties:   map[string]any{"name": "Alice", "age": 30},
-			CreatedAt:    time.Now().Truncate(time.Second),
-			DecayScore:   0.8,
-			AccessCount:  5,
+			ID:          NodeID("n1"),
+			Labels:      []string{"Person", "User"},
+			Properties:  map[string]any{"name": "Alice", "age": 30},
+			CreatedAt:   time.Now().Truncate(time.Second),
+			DecayScore:  0.8,
+			AccessCount: 5,
 		}
 		err := engine.CreateNode(original)
 		require.NoError(t, err)
@@ -171,10 +171,17 @@ func TestBadgerEngine_UpdateNode(t *testing.T) {
 		assert.Len(t, newNodes, 1)
 	})
 
-	t.Run("returns ErrNotFound for missing node", func(t *testing.T) {
-		node := testNode("nonexistent")
+	t.Run("creates node if missing (upsert behavior)", func(t *testing.T) {
+		// UpdateNode now has upsert behavior - creates if not exists
+		node := testNode("upsert-test")
+		node.Properties["foo"] = "bar"
 		err := engine.UpdateNode(node)
-		assert.ErrorIs(t, err, ErrNotFound)
+		require.NoError(t, err, "UpdateNode should create if not exists")
+
+		// Verify node was created
+		retrieved, err := engine.GetNode("upsert-test")
+		require.NoError(t, err)
+		assert.Equal(t, "bar", retrieved.Properties["foo"])
 	})
 }
 
@@ -358,7 +365,7 @@ func TestBadgerEngine_UpdateEdge(t *testing.T) {
 		// Check indexes updated
 		outgoing, err := engine.GetOutgoingEdges("n1")
 		require.NoError(t, err)
-		
+
 		found := false
 		for _, e := range outgoing {
 			if e.ID == "e2" {

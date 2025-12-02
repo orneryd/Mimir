@@ -153,16 +153,18 @@ func (ae *AsyncEngine) Flush() error {
 		ae.engine.BulkDeleteEdges(edgeIDs)
 	}
 
-	// Apply creates/updates
+	// Apply creates/updates using UpdateNode (upsert) for each node
+	// This handles both new nodes and updates to existing nodes
 	if len(nodesToWrite) > 0 {
-		nodes := make([]*Node, 0, len(nodesToWrite))
 		for _, node := range nodesToWrite {
 			if !nodesToDelete[node.ID] {
-				nodes = append(nodes, node)
+				// UpdateNode now has upsert behavior - creates if not exists, updates if exists
+				if err := ae.engine.UpdateNode(node); err != nil {
+					// Log but don't fail the entire flush
+					// This allows partial flushes to succeed
+					continue
+				}
 			}
-		}
-		if len(nodes) > 0 {
-			ae.engine.BulkCreateNodes(nodes)
 		}
 	}
 	if len(edgesToWrite) > 0 {

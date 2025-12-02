@@ -569,8 +569,10 @@ func (e *StorageExecutor) executeAggregationSingleGroup(nodes []*storage.Node, v
 			}
 
 		case strings.HasPrefix(upperExpr, "SUM("):
+			inner := item.expr[4 : len(item.expr)-1] // Extract inner expression
 			propMatch := sumPropPattern.FindStringSubmatch(item.expr)
 			if len(propMatch) == 3 {
+				// SUM(n.property)
 				sum := float64(0)
 				for _, node := range nodes {
 					if val, exists := node.Properties[propMatch[2]]; exists {
@@ -580,6 +582,20 @@ func (e *StorageExecutor) executeAggregationSingleGroup(nodes []*storage.Node, v
 					}
 				}
 				row[i] = sum
+			} else if isCaseExpression(inner) {
+				// SUM(CASE WHEN ... END)
+				sum := float64(0)
+				for _, node := range nodes {
+					nodeMap := map[string]*storage.Node{variable: node}
+					val := e.evaluateCaseExpression(inner, nodeMap, nil)
+					if num, ok := toFloat64(val); ok {
+						sum += num
+					}
+				}
+				row[i] = sum
+			} else if num, ok := toFloat64(e.parseValue(inner)); ok {
+				// SUM(literal) like SUM(1)
+				row[i] = num * float64(len(nodes))
 			} else {
 				row[i] = float64(0)
 			}

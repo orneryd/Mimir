@@ -253,7 +253,12 @@ func (ew *EmbedWorker) processNextBatch() bool {
 	text := buildEmbeddingText(node.Properties)
 	if text == "" {
 		// No content - mark as processed but skip
-		fmt.Printf("⏭️  Skipping node %s: no embeddable content\n", node.ID)
+		// Debug: show what properties the node has
+		propKeys := make([]string, 0, len(node.Properties))
+		for k := range node.Properties {
+			propKeys = append(propKeys, k)
+		}
+		fmt.Printf("⏭️  Skipping node %s: no embeddable content (has props: %v, labels: %v)\n", node.ID, propKeys, node.Labels)
 		node.Properties["has_embedding"] = false
 		node.Properties["embedding_skipped"] = "no content"
 		_ = ew.storage.UpdateNode(node)
@@ -281,28 +286,59 @@ func (ew *EmbedWorker) processNextBatch() bool {
 	// Chunk text if needed
 	chunks := chunkText(text, ew.config.ChunkSize, ew.config.ChunkOverlap)
 
-	// Embed with retry
-	embedding, err := ew.embedWithRetry(chunks)
-	if err != nil {
-		fmt.Printf("⚠️  Failed to embed node %s: %v\n", node.ID, err)
-		ew.mu.Lock()
-		ew.failed++
-		ew.mu.Unlock()
-		return true // Failed but we tried - continue to next node
+	// Check if this is a File node that needs FileChunk nodes (like Mimir does)
+	isFileNode := nodeHasLabel(node.Labels, "File")
+	needsChunkNodes := isFileNode && len(chunks) > 1
+
+	if needsChunkNodes {
+		// =====================================================================
+		// MIMIR-COMPATIBLE CHUNKING:
+		// - Create separate FileChunk:Node for EACH chunk
+		// - Each chunk gets its OWN embedding (NO averaging!)
+		// - Create HAS_CHUNK relationships from File to each FileChunk
+		// - Search will scan ALL chunk embeddings
+		// =====================================================================
+		err := ew.createFileChunksWithEmbeddings(node, chunks)
+		if err != nil {
+			fmt.Printf("⚠️  Failed to create chunks for node %s: %v\n", node.ID, err)
+			ew.mu.Lock()
+			ew.failed++
+			ew.mu.Unlock()
+			return true
+		}
+
+		// Mark parent File node as having chunks
+		node.Properties["has_chunks"] = true
+		node.Properties["chunk_count"] = len(chunks)
+		node.Properties["has_embedding"] = true // Mimir sets this even when using chunks
+		node.Properties["embedding"] = true     // Marker for IS NOT NULL check
+		node.Properties["embedded_at"] = time.Now().Format(time.RFC3339)
+		// Parent File does NOT get an embedding - the chunks have them!
+	} else {
+		// Single chunk or non-File node: embed directly on the node
+		embeddings, err := ew.embedder.EmbedBatch(ew.ctx, chunks)
+		if err != nil {
+			fmt.Printf("⚠️  Failed to embed node %s: %v\n", node.ID, err)
+			ew.mu.Lock()
+			ew.failed++
+			ew.mu.Unlock()
+			return true
+		}
+
+		// For single chunk, use the embedding directly (no averaging needed)
+		embedding := embeddings[0]
+
+		// Update node with embedding
+		node.Embedding = embedding
+		node.Properties["embedding_model"] = ew.embedder.Model()
+		node.Properties["embedding_dimensions"] = ew.embedder.Dimensions()
+		node.Properties["has_embedding"] = true
+		node.Properties["embedded_at"] = time.Now().Format(time.RFC3339)
+		node.Properties["embedding"] = true // Marker for IS NOT NULL check
 	}
 
-	// Update node with embedding
-	node.Embedding = embedding
-	node.Properties["embedding_model"] = ew.embedder.Model()
-	node.Properties["embedding_dimensions"] = ew.embedder.Dimensions()
-	node.Properties["has_embedding"] = true
-	node.Properties["embedded_at"] = time.Now().Format(time.RFC3339)
-	if len(chunks) > 1 {
-		node.Properties["embedding_chunks"] = len(chunks)
-	}
-
-	fmt.Printf("📝 Saving embedding for node %s: %d dims, embedding length=%d\n",
-		node.ID, len(embedding), len(node.Embedding))
+	fmt.Printf("📝 Saving node %s: embedding length=%d\n",
+		node.ID, len(node.Embedding))
 
 	// Use embedding-specific update if available (uses OpUpdateEmbedding in WAL)
 	// This is safe to skip during recovery since embeddings can be regenerated
@@ -347,7 +383,7 @@ func (ew *EmbedWorker) processNextBatch() bool {
 	ew.recentlyProcessed[string(node.ID)] = time.Now()
 	ew.mu.Unlock()
 
-	fmt.Printf("✅ Embedded node %s (%d dims, %d chunks)\n", node.ID, len(embedding), len(chunks))
+	fmt.Printf("✅ Embedded node %s (%d dims, %d chunks)\n", node.ID, ew.embedder.Dimensions(), len(chunks))
 
 	// Small delay before next
 	time.Sleep(ew.config.BatchDelay)
@@ -437,8 +473,8 @@ func averageEmbeddings(embeddings [][]float32) []float32 {
 func buildEmbeddingText(properties map[string]interface{}) string {
 	var parts []string
 
-	// Priority fields for embedding
-	priorityFields := []string{"title", "content", "description", "name", "text", "body", "summary"}
+	// Priority fields for embedding (content-rich fields first)
+	priorityFields := []string{"title", "content", "description", "name", "text", "body", "summary", "path", "host_path"}
 
 	for _, field := range priorityFields {
 		if val, ok := properties[field]; ok {
@@ -583,6 +619,131 @@ func DefaultEmbedQueueConfig() *EmbedQueueConfig {
 
 func NewEmbedQueue(embedder embed.Embedder, storage storage.Engine, config *EmbedQueueConfig) *EmbedQueue {
 	return NewEmbedWorker(embedder, storage, config)
+}
+
+// nodeHasLabel checks if a node has a specific label
+func nodeHasLabel(labels []string, target string) bool {
+	for _, l := range labels {
+		if l == target {
+			return true
+		}
+	}
+	return false
+}
+
+// createFileChunksWithEmbeddings creates FileChunk:Node nodes for each chunk
+// with their own embeddings, EXACTLY like Mimir's FileIndexer.ts does.
+//
+// CRITICAL: Mimir stores embeddings as a PROPERTY called "embedding", not using
+// a native embedding field. The stats query uses `c.embedding IS NOT NULL`.
+//
+// Mimir's exact Cypher from FileIndexer.ts:
+//
+//	MATCH (f:File) WHERE id(f) = $fileNodeId
+//	MERGE (c:FileChunk:Node {id: $chunkId})
+//	SET
+//	    c.chunk_index = $chunkIndex,
+//	    c.text = $text,
+//	    c.start_offset = $startOffset,
+//	    c.end_offset = $endOffset,
+//	    c.embedding = $embedding,           <-- PROPERTY, not native field!
+//	    c.embedding_dimensions = $dimensions,
+//	    c.embedding_model = $model,
+//	    c.type = 'file_chunk',
+//	    c.indexed_date = datetime(),
+//	    c.filePath = f.path,
+//	    c.fileName = f.name,
+//	    c.parent_file_id = $parentFileId,
+//	    c.total_chunks = $totalChunks,
+//	    c.has_next = $hasNext,
+//	    c.has_prev = $hasPrev
+//	MERGE (f)-[:HAS_CHUNK {index: $chunkIndex}]->(c)
+func (ew *EmbedWorker) createFileChunksWithEmbeddings(parentFile *storage.Node, chunks []string) error {
+	// Get file metadata exactly like Mimir does
+	filePath, _ := parentFile.Properties["path"].(string)
+	fileName, _ := parentFile.Properties["name"].(string)
+	parentFileID := string(parentFile.ID)
+
+	totalChunks := len(chunks)
+	fmt.Printf("📄 Creating %d FileChunk nodes for %s (exactly like Mimir)\n", totalChunks, filePath)
+
+	// Embed all chunks at once for efficiency
+	embeddings, err := ew.embedder.EmbedBatch(ew.ctx, chunks)
+	if err != nil {
+		return fmt.Errorf("failed to embed chunks: %w", err)
+	}
+
+	// Create a FileChunk node for each chunk - EXACTLY like Mimir's FileIndexer.ts
+	for i, chunkText := range chunks {
+		// Generate chunk ID like Mimir does (based on parent + index)
+		chunkID := storage.NodeID(fmt.Sprintf("%s-chunk-%d", parentFileID, i))
+
+		// Calculate offsets (Mimir tracks these for text highlighting)
+		startOffset := i * ew.config.ChunkSize
+		endOffset := startOffset + len(chunkText)
+
+		// Convert embedding to []interface{} for storage as property (like Mimir does)
+		embeddingAsInterface := make([]interface{}, len(embeddings[i]))
+		for j, v := range embeddings[i] {
+			embeddingAsInterface[j] = float64(v) // Store as float64 like Neo4j does
+		}
+
+		// Create FileChunk node with EXACT same properties as Mimir's FileIndexer.ts
+		chunkNode := &storage.Node{
+			ID:     chunkID,
+			Labels: []string{"FileChunk", "Node"}, // Exact same labels as Mimir
+			Properties: map[string]any{
+				// EXACT properties from Mimir's FileIndexer.ts SET clause:
+				"id":                   string(chunkID),
+				"chunk_index":          i,
+				"text":                 chunkText, // Mimir uses "text" NOT "content"
+				"start_offset":         startOffset,
+				"end_offset":           endOffset,
+				"embedding":            embeddingAsInterface, // PROPERTY like Mimir!
+				"embedding_dimensions": ew.embedder.Dimensions(),
+				"embedding_model":      ew.embedder.Model(),
+				"type":                 "file_chunk",
+				"indexed_date":         time.Now().Format(time.RFC3339),
+				"filePath":             filePath, // Mimir sets c.filePath = f.path
+				"fileName":             fileName, // Mimir sets c.fileName = f.name
+				"parent_file_id":       parentFileID,
+				"total_chunks":         totalChunks,
+				"has_next":             i < totalChunks-1,
+				"has_prev":             i > 0,
+			},
+			// Also store in native field for NornicDB's vector search
+			Embedding: embeddings[i],
+		}
+
+		// Create the chunk node (MERGE behavior - create or update)
+		if err := ew.storage.CreateNode(chunkNode); err != nil {
+			// If already exists, update it (like MERGE does)
+			if err := ew.storage.UpdateNode(chunkNode); err != nil {
+				return fmt.Errorf("failed to create/update chunk %d: %w", i, err)
+			}
+		}
+
+		// Create HAS_CHUNK relationship with index property (exactly like Mimir)
+		// Mimir: MERGE (f)-[:HAS_CHUNK {index: $chunkIndex}]->(c)
+		edge := &storage.Edge{
+			ID:        storage.EdgeID(fmt.Sprintf("%s-HAS_CHUNK-%d", parentFileID, i)),
+			Type:      "HAS_CHUNK",
+			StartNode: parentFile.ID,
+			EndNode:   chunkID,
+			Properties: map[string]any{
+				"index": i, // Mimir sets this property on the relationship
+			},
+		}
+		if err := ew.storage.CreateEdge(edge); err != nil {
+			// Edge might already exist from previous indexing, that's OK
+			fmt.Printf("   Note: HAS_CHUNK edge for chunk %d may already exist\n", i)
+		}
+
+		fmt.Printf("   ✓ Created FileChunk %d/%d with %d-dim embedding (Mimir-compatible)\n",
+			i+1, totalChunks, len(embeddings[i]))
+	}
+
+	return nil
 }
 
 // Enqueue is now just a trigger - tells worker to check for work.

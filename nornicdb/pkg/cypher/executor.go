@@ -3193,7 +3193,18 @@ func (e *StorageExecutor) resolveReturnItem(item returnItem, variable string, no
 			return e.buildEmbeddingSummary(node)
 		}
 
-		// Filter out internal embedding-related properties
+		// Handle has_embedding specially - check both property and native embedding field
+		// This supports Mimir's query: WHERE f.has_embedding = true
+		if propName == "has_embedding" {
+			// Check property first
+			if val, ok := node.Properties["has_embedding"]; ok {
+				return val
+			}
+			// Fall back to checking native embedding field
+			return len(node.Embedding) > 0
+		}
+
+		// Filter out internal embedding-related properties (except has_embedding handled above)
 		if e.isInternalProperty(propName) {
 			return nil
 		}

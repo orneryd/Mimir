@@ -78,6 +78,9 @@ type Config struct {
 	// Memory/Decay settings (NornicDB-specific)
 	Memory MemoryConfig
 
+	// Embedding worker settings (NornicDB-specific)
+	EmbeddingWorker EmbeddingWorkerConfig
+
 	// Compliance settings for GDPR/HIPAA/FISMA/SOC2 (NornicDB-specific)
 	Compliance ComplianceConfig
 
@@ -147,6 +150,26 @@ type ServerConfig struct {
 	HTTPTLSCert string
 	// HTTPTLSKey path to private key
 	HTTPTLSKey string
+}
+
+// EmbeddingWorkerConfig holds settings for the background embedding worker.
+// Environment variables:
+//   - NORNICDB_EMBED_SCAN_INTERVAL: How often to scan for unembedded nodes (default: 15m)
+//   - NORNICDB_EMBED_BATCH_DELAY: Delay between processing nodes (default: 500ms)
+//   - NORNICDB_EMBED_MAX_RETRIES: Max retry attempts per node (default: 3)
+//   - NORNICDB_EMBED_CHUNK_SIZE: Max characters per chunk (default: 512)
+//   - NORNICDB_EMBED_CHUNK_OVERLAP: Characters to overlap between chunks (default: 50)
+type EmbeddingWorkerConfig struct {
+	// ScanInterval is how often to scan for nodes without embeddings
+	ScanInterval time.Duration
+	// BatchDelay is the delay between processing individual nodes
+	BatchDelay time.Duration
+	// MaxRetries is the max retry attempts per node
+	MaxRetries int
+	// ChunkSize is max characters per chunk (matches MIMIR_EMBEDDINGS_CHUNK_SIZE)
+	ChunkSize int
+	// ChunkOverlap is characters to overlap between chunks (matches MIMIR_EMBEDDINGS_CHUNK_OVERLAP)
+	ChunkOverlap int
 }
 
 // MemoryConfig holds NornicDB memory decay settings and runtime memory management.
@@ -545,6 +568,13 @@ func LoadFromEnv() *Config {
 	config.Memory.QueryCacheEnabled = getEnvBool("NORNICDB_QUERY_CACHE_ENABLED", true)
 	config.Memory.QueryCacheSize = getEnvInt("NORNICDB_QUERY_CACHE_SIZE", 1000)
 	config.Memory.QueryCacheTTL = getEnvDuration("NORNICDB_QUERY_CACHE_TTL", 5*time.Minute)
+
+	// Embedding worker settings (NornicDB-specific)
+	config.EmbeddingWorker.ScanInterval = getEnvDuration("NORNICDB_EMBED_SCAN_INTERVAL", 15*time.Minute)
+	config.EmbeddingWorker.BatchDelay = getEnvDuration("NORNICDB_EMBED_BATCH_DELAY", 500*time.Millisecond)
+	config.EmbeddingWorker.MaxRetries = getEnvInt("NORNICDB_EMBED_MAX_RETRIES", 3)
+	config.EmbeddingWorker.ChunkSize = getEnvInt("NORNICDB_EMBED_CHUNK_SIZE", 512)
+	config.EmbeddingWorker.ChunkOverlap = getEnvInt("NORNICDB_EMBED_CHUNK_OVERLAP", 50)
 
 	// Compliance settings (NornicDB-specific, framework-agnostic)
 	// Audit Logging

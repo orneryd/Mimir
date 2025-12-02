@@ -418,7 +418,8 @@ type DB struct {
 	searchService *search.Service
 
 	// Async embedding queue for auto-generating embeddings
-	embedQueue *EmbedQueue
+	embedQueue        *EmbedQueue
+	embedWorkerConfig *EmbedWorkerConfig // Configurable via ENV vars
 
 	// Background goroutine tracking
 	bgWg sync.WaitGroup
@@ -868,7 +869,7 @@ func (db *DB) SetEmbedder(embedder embed.Embedder) {
 		return
 	}
 
-	db.embedQueue = NewEmbedQueue(embedder, db.storage, nil)
+	db.embedQueue = NewEmbedQueue(embedder, db.storage, db.embedWorkerConfig)
 	// Set callback to update search index after embedding
 	db.embedQueue.SetOnEmbedded(func(node *storage.Node) {
 		if db.searchService != nil {

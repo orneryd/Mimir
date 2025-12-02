@@ -469,7 +469,7 @@ func TestChunkText(t *testing.T) {
 		chunks := chunkText(text, 100, 20)
 
 		assert.Greater(t, len(chunks), 1, "Should create multiple chunks")
-		
+
 		// Verify each chunk is within size limit (with some tolerance for word boundaries)
 		for _, chunk := range chunks {
 			assert.LessOrEqual(t, len(chunk), 150, "Chunk should be close to chunk size")
@@ -485,7 +485,7 @@ func TestChunkText(t *testing.T) {
 			// (the end of chunk 1 should appear in the beginning of chunk 2)
 			chunk1End := chunks[0][len(chunks[0])-10:]
 			chunk2Start := chunks[1][:min(10, len(chunks[1]))]
-			
+
 			// Due to word boundary logic, we just verify chunks are created
 			assert.NotEmpty(t, chunk1End)
 			assert.NotEmpty(t, chunk2Start)
@@ -673,7 +673,7 @@ func TestLargeContentEmbedding(t *testing.T) {
 			ScanInterval: time.Hour,
 			BatchDelay:   10 * time.Millisecond,
 			MaxRetries:   1,
-			ChunkSize:    512,  // Small chunks to verify chunking
+			ChunkSize:    512, // Small chunks to verify chunking
 			ChunkOverlap: 50,
 		}
 
@@ -697,19 +697,36 @@ func TestLargeContentEmbedding(t *testing.T) {
 
 		node, err := engine.GetNode("large-file-node")
 		require.NoError(t, err)
-		assert.NotEmpty(t, node.Embedding, "Should have embedding")
-		assert.Equal(t, 1024, len(node.Embedding), "Embedding should have correct dims")
 
-		// Verify metadata shows chunking occurred
-		if chunks, ok := node.Properties["embedding_chunks"]; ok {
-			t.Logf("Node was embedded with %v chunks", chunks)
-			assert.Greater(t, chunks, 1, "Large content should use multiple chunks")
+		// MIMIR-COMPATIBLE: Large files create FileChunk nodes, NOT a single embedding on parent
+		// The parent File node has has_chunks=true and chunk_count=N
+		// Each FileChunk has its own embedding
+		assert.True(t, node.Properties["has_chunks"].(bool), "Parent should have has_chunks=true")
+		chunkCount := node.Properties["chunk_count"].(int)
+		assert.Greater(t, chunkCount, 1, "Large content should create multiple chunks")
+		t.Logf("Created %d FileChunk nodes", chunkCount)
+
+		// Parent File does NOT have an embedding - the chunks do
+		assert.Empty(t, node.Embedding, "Parent File should NOT have embedding (chunks have them)")
+
+		// Verify FileChunk nodes were created with embeddings
+		allNodes := engine.GetAllNodes()
+		chunkNodes := 0
+		for _, n := range allNodes {
+			for _, label := range n.Labels {
+				if label == "FileChunk" {
+					chunkNodes++
+					assert.NotEmpty(t, n.Embedding, "FileChunk should have embedding")
+					assert.Equal(t, 1024, len(n.Embedding), "FileChunk embedding should have correct dims")
+				}
+			}
 		}
+		assert.Equal(t, chunkCount, chunkNodes, "Should have created correct number of FileChunk nodes")
 
 		// Verify embedder was called multiple times (once per chunk)
 		embedCount := embedder.GetEmbedCount()
 		t.Logf("Embedder called %d times for %d char content", embedCount, len(largeContent))
-		assert.Greater(t, embedCount, 1, "Should embed multiple chunks")
+		assert.Equal(t, chunkCount, embedCount, "Should embed once per chunk")
 	})
 }
 
