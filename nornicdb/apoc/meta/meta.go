@@ -6,23 +6,18 @@ package meta
 
 import (
 	"fmt"
+
+	"github.com/orneryd/nornicdb/apoc/storage"
 )
 
 // Node represents a graph node.
-type Node struct {
-	ID         int64
-	Labels     []string
-	Properties map[string]interface{}
-}
+type Node = storage.Node
 
 // Relationship represents a graph relationship.
-type Relationship struct {
-	ID         int64
-	Type       string
-	StartNode  int64
-	EndNode    int64
-	Properties map[string]interface{}
-}
+type Relationship = storage.Relationship
+
+// Storage is the interface for database operations.
+var Storage storage.Storage = storage.NewInMemoryStorage()
 
 // Schema returns the graph schema.
 //
@@ -31,9 +26,9 @@ type Relationship struct {
 //	apoc.meta.schema() => schema information
 func Schema() map[string]interface{} {
 	return map[string]interface{}{
-		"labels":            []string{},
-		"relationshipTypes": []string{},
-		"propertyKeys":      []string{},
+		"labels":            NodeLabels(),
+		"relationshipTypes": RelTypes(),
+		"propertyKeys":      PropertyKeys(),
 	}
 }
 
@@ -43,11 +38,26 @@ func Schema() map[string]interface{} {
 //
 //	apoc.meta.graph() => {nodes: 1000, relationships: 5000}
 func Graph() map[string]interface{} {
+	nodes, _ := Storage.AllNodes()
+	rels, _ := Storage.AllRelationships()
+
+	labelCounts := make(map[string]int)
+	for _, node := range nodes {
+		for _, label := range node.Labels {
+			labelCounts[label]++
+		}
+	}
+
+	relTypeCounts := make(map[string]int)
+	for _, rel := range rels {
+		relTypeCounts[rel.Type]++
+	}
+
 	return map[string]interface{}{
-		"nodes":         0,
-		"relationships": 0,
-		"labels":        map[string]int{},
-		"relTypes":      map[string]int{},
+		"nodes":         len(nodes),
+		"relationships": len(rels),
+		"labels":        labelCounts,
+		"relTypes":      relTypeCounts,
 	}
 }
 
@@ -57,12 +67,34 @@ func Graph() map[string]interface{} {
 //
 //	apoc.meta.stats() => detailed statistics
 func Stats() map[string]interface{} {
+	nodes, _ := Storage.AllNodes()
+	rels, _ := Storage.AllRelationships()
+
+	labelSet := make(map[string]bool)
+	propSet := make(map[string]bool)
+	for _, node := range nodes {
+		for _, label := range node.Labels {
+			labelSet[label] = true
+		}
+		for prop := range node.Properties {
+			propSet[prop] = true
+		}
+	}
+
+	relTypeSet := make(map[string]bool)
+	for _, rel := range rels {
+		relTypeSet[rel.Type] = true
+		for prop := range rel.Properties {
+			propSet[prop] = true
+		}
+	}
+
 	return map[string]interface{}{
-		"labelCount":      0,
-		"relTypeCount":    0,
-		"propertyKeyCount": 0,
-		"nodeCount":       0,
-		"relCount":        0,
+		"labelCount":       len(labelSet),
+		"relTypeCount":     len(relTypeSet),
+		"propertyKeyCount": len(propSet),
+		"nodeCount":        len(nodes),
+		"relCount":         len(rels),
 	}
 }
 
@@ -241,8 +273,23 @@ func IsPath(value interface{}) bool {
 //
 //	apoc.meta.nodeLabels() => ['Person', 'Company', 'Product']
 func NodeLabels() []string {
-	// Placeholder - would query database
-	return []string{}
+	nodes, err := Storage.AllNodes()
+	if err != nil {
+		return []string{}
+	}
+
+	labelSet := make(map[string]bool)
+	for _, node := range nodes {
+		for _, label := range node.Labels {
+			labelSet[label] = true
+		}
+	}
+
+	result := make([]string, 0, len(labelSet))
+	for label := range labelSet {
+		result = append(result, label)
+	}
+	return result
 }
 
 // RelTypes returns all relationship types in the graph.
@@ -251,8 +298,21 @@ func NodeLabels() []string {
 //
 //	apoc.meta.relTypes() => ['KNOWS', 'WORKS_AT', 'BOUGHT']
 func RelTypes() []string {
-	// Placeholder - would query database
-	return []string{}
+	rels, err := Storage.AllRelationships()
+	if err != nil {
+		return []string{}
+	}
+
+	typeSet := make(map[string]bool)
+	for _, rel := range rels {
+		typeSet[rel.Type] = true
+	}
+
+	result := make([]string, 0, len(typeSet))
+	for relType := range typeSet {
+		result = append(result, relType)
+	}
+	return result
 }
 
 // PropertyKeys returns all property keys in the graph.
@@ -261,8 +321,31 @@ func RelTypes() []string {
 //
 //	apoc.meta.propertyKeys() => ['name', 'age', 'email']
 func PropertyKeys() []string {
-	// Placeholder - would query database
-	return []string{}
+	propSet := make(map[string]bool)
+
+	nodes, err := Storage.AllNodes()
+	if err == nil {
+		for _, node := range nodes {
+			for prop := range node.Properties {
+				propSet[prop] = true
+			}
+		}
+	}
+
+	rels, err := Storage.AllRelationships()
+	if err == nil {
+		for _, rel := range rels {
+			for prop := range rel.Properties {
+				propSet[prop] = true
+			}
+		}
+	}
+
+	result := make([]string, 0, len(propSet))
+	for prop := range propSet {
+		result = append(result, prop)
+	}
+	return result
 }
 
 // Constraints returns all constraints in the graph.

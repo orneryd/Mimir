@@ -1,13 +1,26 @@
-// Package label provides APOC label operations.
-//
-// This package implements all apoc.label.* functions for working
-// with node labels in graph queries.
+// Package label provides functions for working with node labels.
 package label
 
 import (
 	"fmt"
 	"strings"
+	"sync"
+
+	"github.com/orneryd/nornicdb/apoc/storage"
 )
+
+var (
+	store storage.Storage
+	mu    sync.RWMutex
+)
+
+// SetStorage sets the storage backend for label operations.
+// Called by the parent apoc package during initialization.
+func SetStorage(s storage.Storage) {
+	mu.Lock()
+	defer mu.Unlock()
+	store = s
+}
 
 // Node represents a graph node.
 type Node struct {
@@ -22,7 +35,26 @@ type Node struct {
 //
 //	apoc.label.exists('Person') => true
 func Exists(label string) bool {
-	// Placeholder - would query database
+	mu.RLock()
+	s := store
+	mu.RUnlock()
+
+	if s == nil {
+		return false
+	}
+
+	nodes, err := s.AllNodes()
+	if err != nil {
+		return false
+	}
+
+	for _, node := range nodes {
+		for _, l := range node.Labels {
+			if l == label {
+				return true
+			}
+		}
+	}
 	return false
 }
 
@@ -32,8 +64,31 @@ func Exists(label string) bool {
 //
 //	apoc.label.list() => ['Person', 'Company', 'Product']
 func List() []string {
-	// Placeholder - would query database
-	return []string{}
+	mu.RLock()
+	s := store
+	mu.RUnlock()
+
+	if s == nil {
+		return []string{}
+	}
+
+	nodes, err := s.AllNodes()
+	if err != nil {
+		return []string{}
+	}
+
+	labelSet := make(map[string]bool)
+	for _, node := range nodes {
+		for _, label := range node.Labels {
+			labelSet[label] = true
+		}
+	}
+
+	labels := make([]string, 0, len(labelSet))
+	for label := range labelSet {
+		labels = append(labels, label)
+	}
+	return labels
 }
 
 // Count returns the count of nodes with a specific label.
@@ -42,8 +97,29 @@ func List() []string {
 //
 //	apoc.label.count('Person') => 42
 func Count(label string) int {
-	// Placeholder - would query database
-	return 0
+	mu.RLock()
+	s := store
+	mu.RUnlock()
+
+	if s == nil {
+		return 0
+	}
+
+	nodes, err := s.AllNodes()
+	if err != nil {
+		return 0
+	}
+
+	count := 0
+	for _, node := range nodes {
+		for _, l := range node.Labels {
+			if l == label {
+				count++
+				break
+			}
+		}
+	}
+	return count
 }
 
 // Nodes returns all nodes with a specific label.
@@ -52,8 +128,37 @@ func Count(label string) int {
 //
 //	apoc.label.nodes('Person') => [node1, node2, ...]
 func Nodes(label string) []*Node {
-	// Placeholder - would query database
-	return []*Node{}
+	mu.RLock()
+	s := store
+	mu.RUnlock()
+
+	if s == nil {
+		return []*Node{}
+	}
+
+	storageNodes, err := s.AllNodes()
+	if err != nil {
+		return []*Node{}
+	}
+
+	result := make([]*Node, 0)
+	for _, sn := range storageNodes {
+		hasLabel := false
+		for _, l := range sn.Labels {
+			if l == label {
+				hasLabel = true
+				break
+			}
+		}
+		if hasLabel {
+			result = append(result, &Node{
+				ID:         sn.ID,
+				Labels:     sn.Labels,
+				Properties: sn.Properties,
+			})
+		}
+	}
+	return result
 }
 
 // Add adds a label to a node.
@@ -344,21 +449,112 @@ func FromPattern(pattern string) []string {
 //
 //	apoc.label.stats() => {total: 5, counts: {...}}
 func Stats() map[string]interface{} {
-	// Placeholder - would query database
+	mu.RLock()
+	s := store
+	mu.RUnlock()
+
+	if s == nil {
+		return map[string]interface{}{
+			"total":  0,
+			"counts": map[string]int{},
+		}
+	}
+
+	nodes, err := s.AllNodes()
+	if err != nil {
+		return map[string]interface{}{
+			"total":  0,
+			"counts": map[string]int{},
+		}
+	}
+
+	counts := make(map[string]int)
+	for _, node := range nodes {
+		for _, label := range node.Labels {
+			counts[label]++
+		}
+	}
+
 	return map[string]interface{}{
-		"total":  0,
-		"counts": map[string]int{},
+		"total":  len(counts),
+		"counts": counts,
 	}
 }
 
 // Search searches for labels matching a pattern.
+// Supports wildcards: * (any characters), ? (single character)
 //
 // Example:
 //
 //	apoc.label.search('Per*') => ['Person', 'Permission']
 func Search(pattern string) []string {
-	// Placeholder - would query database with pattern matching
-	return []string{}
+	mu.RLock()
+	s := store
+	mu.RUnlock()
+
+	if s == nil {
+		return []string{}
+	}
+
+	nodes, err := s.AllNodes()
+	if err != nil {
+		return []string{}
+	}
+
+	labelSet := make(map[string]bool)
+	for _, node := range nodes {
+		for _, label := range node.Labels {
+			labelSet[label] = true
+		}
+	}
+
+	// Convert pattern to regexp-like matching
+	// * = any characters, ? = single character
+	result := make([]string, 0)
+	for label := range labelSet {
+		if matchPattern(label, pattern) {
+			result = append(result, label)
+		}
+	}
+	return result
+}
+
+// matchPattern matches a string against a pattern with wildcards.
+// * matches any characters, ? matches single character
+func matchPattern(s, pattern string) bool {
+	if pattern == "" {
+		return s == ""
+	}
+	if pattern == "*" {
+		return true
+	}
+
+	// Simple wildcard matching
+	i, j := 0, 0
+	starIdx, matchIdx := -1, 0
+
+	for i < len(s) {
+		if j < len(pattern) && (pattern[j] == '?' || pattern[j] == s[i]) {
+			i++
+			j++
+		} else if j < len(pattern) && pattern[j] == '*' {
+			starIdx = j
+			matchIdx = i
+			j++
+		} else if starIdx != -1 {
+			j = starIdx + 1
+			matchIdx++
+			i = matchIdx
+		} else {
+			return false
+		}
+	}
+
+	for j < len(pattern) && pattern[j] == '*' {
+		j++
+	}
+
+	return j == len(pattern)
 }
 
 // Compare compares labels of two nodes.

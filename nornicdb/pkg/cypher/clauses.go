@@ -140,7 +140,7 @@ func (e *StorageExecutor) executeWith(ctx context.Context, cypher string) (*Exec
 
 	withIdx := strings.Index(upper, "WITH")
 	if withIdx == -1 {
-		return nil, fmt.Errorf("WITH clause not found")
+		return nil, fmt.Errorf("WITH clause not found in query: %q", truncateQuery(cypher, 80))
 	}
 
 	remainderStart := withIdx + 4
@@ -314,12 +314,12 @@ func (e *StorageExecutor) executeUnwind(ctx context.Context, cypher string) (*Ex
 
 	unwindIdx := strings.Index(upper, "UNWIND")
 	if unwindIdx == -1 {
-		return nil, fmt.Errorf("UNWIND clause not found")
+		return nil, fmt.Errorf("UNWIND clause not found in query: %q", truncateQuery(cypher, 80))
 	}
 
 	asIdx := strings.Index(upper, " AS ")
 	if asIdx == -1 {
-		return nil, fmt.Errorf("UNWIND requires AS clause")
+		return nil, fmt.Errorf("UNWIND requires AS clause (e.g., UNWIND [1,2,3] AS x)")
 	}
 
 	listExpr := strings.TrimSpace(cypher[unwindIdx+6 : asIdx])
@@ -522,7 +522,7 @@ func (e *StorageExecutor) executeUnion(ctx context.Context, cypher string, union
 
 	idx := strings.Index(upper, separator)
 	if idx == -1 {
-		return nil, fmt.Errorf("UNION clause not found")
+		return nil, fmt.Errorf("UNION clause not found in query: %q", truncateQuery(cypher, 80))
 	}
 
 	query1 := strings.TrimSpace(cypher[:idx])
@@ -530,16 +530,16 @@ func (e *StorageExecutor) executeUnion(ctx context.Context, cypher string, union
 
 	result1, err := e.Execute(ctx, query1, nil)
 	if err != nil {
-		return nil, fmt.Errorf("error in first UNION query: %w", err)
+		return nil, fmt.Errorf("error in first UNION query (%q): %w", truncateQuery(query1, 50), err)
 	}
 
 	result2, err := e.Execute(ctx, query2, nil)
 	if err != nil {
-		return nil, fmt.Errorf("error in second UNION query: %w", err)
+		return nil, fmt.Errorf("error in second UNION query (%q): %w", truncateQuery(query2, 50), err)
 	}
 
 	if len(result1.Columns) != len(result2.Columns) {
-		return nil, fmt.Errorf("UNION queries must return the same number of columns")
+		return nil, fmt.Errorf("UNION queries must return the same number of columns (got %d and %d)", len(result1.Columns), len(result2.Columns))
 	}
 
 	combinedResult := &ExecuteResult{
@@ -583,7 +583,7 @@ func (e *StorageExecutor) executeOptionalMatch(ctx context.Context, cypher strin
 	upper := strings.ToUpper(cypher)
 	optMatchIdx := strings.Index(upper, "OPTIONAL MATCH")
 	if optMatchIdx == -1 {
-		return nil, fmt.Errorf("OPTIONAL MATCH not found")
+		return nil, fmt.Errorf("OPTIONAL MATCH not found in query: %q", truncateQuery(cypher, 80))
 	}
 
 	modifiedQuery := cypher[:optMatchIdx] + "MATCH" + cypher[optMatchIdx+14:]
@@ -643,7 +643,7 @@ func (e *StorageExecutor) executeCompoundMatchOptionalMatch(ctx context.Context,
 	// Find OPTIONAL MATCH position
 	optMatchIdx := findKeywordIndex(cypher, "OPTIONAL MATCH")
 	if optMatchIdx == -1 {
-		return nil, fmt.Errorf("OPTIONAL MATCH not found in compound query")
+		return nil, fmt.Errorf("OPTIONAL MATCH not found in compound query: %q", truncateQuery(cypher, 80))
 	}
 
 	// Find WITH or RETURN after OPTIONAL MATCH
@@ -687,7 +687,7 @@ func (e *StorageExecutor) executeCompoundMatchOptionalMatch(ctx context.Context,
 	nodePatternStr := strings.TrimSpace(initialSection[:nodePatternEnd])
 	nodePattern := e.parseNodePattern(nodePatternStr)
 	if nodePattern.variable == "" {
-		return nil, fmt.Errorf("could not parse node pattern from MATCH clause")
+		return nil, fmt.Errorf("could not parse node pattern from MATCH clause: %q", truncateQuery(nodePatternStr, 50))
 	}
 
 	// Extract WHERE clause content if present
@@ -1307,12 +1307,12 @@ func (e *StorageExecutor) executeForeach(ctx context.Context, cypher string) (*E
 	upper := strings.ToUpper(cypher)
 	foreachIdx := strings.Index(upper, "FOREACH")
 	if foreachIdx == -1 {
-		return nil, fmt.Errorf("FOREACH clause not found")
+		return nil, fmt.Errorf("FOREACH clause not found in query: %q", truncateQuery(cypher, 80))
 	}
 
 	parenStart := strings.Index(cypher[foreachIdx:], "(")
 	if parenStart == -1 {
-		return nil, fmt.Errorf("FOREACH requires parentheses")
+		return nil, fmt.Errorf("FOREACH requires parentheses (e.g., FOREACH (x IN list | SET ...))")
 	}
 	parenStart += foreachIdx
 
@@ -1331,7 +1331,7 @@ func (e *StorageExecutor) executeForeach(ctx context.Context, cypher string) (*E
 
 	inIdx := strings.Index(strings.ToUpper(inner), " IN ")
 	if inIdx == -1 {
-		return nil, fmt.Errorf("FOREACH requires IN clause")
+		return nil, fmt.Errorf("FOREACH requires IN clause (e.g., FOREACH (x IN list | SET ...))")
 	}
 
 	variable := strings.TrimSpace(inner[:inIdx])

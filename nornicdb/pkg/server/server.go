@@ -1462,11 +1462,17 @@ func (s *Server) writeNeo4jError(w http.ResponseWriter, status int, code, messag
 
 // handleDecay returns memory decay information (NornicDB-specific)
 func (s *Server) handleDecay(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement decay stats
+	info := s.db.GetDecayInfo()
+
 	response := map[string]interface{}{
-		"enabled":          true,
-		"archiveThreshold": 0.05,
-		"interval":         "1h",
+		"enabled":          info.Enabled,
+		"archiveThreshold": info.ArchiveThreshold,
+		"interval":         info.RecalcInterval.String(),
+		"weights": map[string]interface{}{
+			"recency":    info.RecencyWeight,
+			"frequency":  info.FrequencyWeight,
+			"importance": info.ImportanceWeight,
+		},
 	}
 	s.writeJSON(w, http.StatusOK, response)
 }

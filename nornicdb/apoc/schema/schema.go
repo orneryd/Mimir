@@ -6,14 +6,15 @@ package schema
 
 import (
 	"fmt"
+
+	"github.com/orneryd/nornicdb/apoc/storage"
 )
 
 // Node represents a graph node.
-type Node struct {
-	ID         int64
-	Labels     []string
-	Properties map[string]interface{}
-}
+type Node = storage.Node
+
+// Storage is the interface for database operations.
+var Storage storage.Storage = storage.NewInMemoryStorage()
 
 // IndexInfo represents index information.
 type IndexInfo struct {
@@ -53,8 +54,36 @@ func Assert(indexes, constraints map[string]interface{}) map[string]interface{} 
 //
 //	apoc.schema.nodes() => [{label: 'Person', properties: [...]}]
 func Nodes() []map[string]interface{} {
-	// Placeholder - would query database schema
-	return []map[string]interface{}{}
+	nodes, err := Storage.AllNodes()
+	if err != nil {
+		return []map[string]interface{}{}
+	}
+
+	// Collect unique labels and their properties
+	labelProps := make(map[string]map[string]bool)
+	for _, node := range nodes {
+		for _, label := range node.Labels {
+			if labelProps[label] == nil {
+				labelProps[label] = make(map[string]bool)
+			}
+			for prop := range node.Properties {
+				labelProps[label][prop] = true
+			}
+		}
+	}
+
+	results := make([]map[string]interface{}, 0)
+	for label, props := range labelProps {
+		propList := make([]string, 0, len(props))
+		for prop := range props {
+			propList = append(propList, prop)
+		}
+		results = append(results, map[string]interface{}{
+			"label":      label,
+			"properties": propList,
+		})
+	}
+	return results
 }
 
 // Relationships returns schema information for relationship types.
@@ -63,8 +92,34 @@ func Nodes() []map[string]interface{} {
 //
 //	apoc.schema.relationships() => [{type: 'KNOWS', properties: [...]}]
 func Relationships() []map[string]interface{} {
-	// Placeholder - would query database schema
-	return []map[string]interface{}{}
+	rels, err := Storage.AllRelationships()
+	if err != nil {
+		return []map[string]interface{}{}
+	}
+
+	// Collect unique types and their properties
+	typeProps := make(map[string]map[string]bool)
+	for _, rel := range rels {
+		if typeProps[rel.Type] == nil {
+			typeProps[rel.Type] = make(map[string]bool)
+		}
+		for prop := range rel.Properties {
+			typeProps[rel.Type][prop] = true
+		}
+	}
+
+	results := make([]map[string]interface{}, 0)
+	for relType, props := range typeProps {
+		propList := make([]string, 0, len(props))
+		for prop := range props {
+			propList = append(propList, prop)
+		}
+		results = append(results, map[string]interface{}{
+			"type":       relType,
+			"properties": propList,
+		})
+	}
+	return results
 }
 
 // NodeConstraints returns all node constraints.
@@ -133,8 +188,31 @@ func NodeIndexExists(label string, properties []string) bool {
 //
 //	apoc.schema.properties.distinct() => ['name', 'age', 'email']
 func Properties() []string {
-	// Placeholder - would query database
-	return []string{}
+	propSet := make(map[string]bool)
+
+	nodes, err := Storage.AllNodes()
+	if err == nil {
+		for _, node := range nodes {
+			for prop := range node.Properties {
+				propSet[prop] = true
+			}
+		}
+	}
+
+	rels, err := Storage.AllRelationships()
+	if err == nil {
+		for _, rel := range rels {
+			for prop := range rel.Properties {
+				propSet[prop] = true
+			}
+		}
+	}
+
+	result := make([]string, 0, len(propSet))
+	for prop := range propSet {
+		result = append(result, prop)
+	}
+	return result
 }
 
 // PropertiesDistinct returns distinct property keys.
@@ -143,8 +221,27 @@ func Properties() []string {
 //
 //	apoc.schema.properties.distinct('Person') => ['name', 'age']
 func PropertiesDistinct(label string) []string {
-	// Placeholder - would query database
-	return []string{}
+	propSet := make(map[string]bool)
+
+	nodes, err := Storage.AllNodes()
+	if err == nil {
+		for _, node := range nodes {
+			for _, l := range node.Labels {
+				if l == label {
+					for prop := range node.Properties {
+						propSet[prop] = true
+					}
+					break
+				}
+			}
+		}
+	}
+
+	result := make([]string, 0, len(propSet))
+	for prop := range propSet {
+		result = append(result, prop)
+	}
+	return result
 }
 
 // Labels returns all node labels.
@@ -153,8 +250,22 @@ func PropertiesDistinct(label string) []string {
 //
 //	apoc.schema.labels() => ['Person', 'Company', 'Product']
 func Labels() []string {
-	// Placeholder - would query database
-	return []string{}
+	labelSet := make(map[string]bool)
+
+	nodes, err := Storage.AllNodes()
+	if err == nil {
+		for _, node := range nodes {
+			for _, label := range node.Labels {
+				labelSet[label] = true
+			}
+		}
+	}
+
+	result := make([]string, 0, len(labelSet))
+	for label := range labelSet {
+		result = append(result, label)
+	}
+	return result
 }
 
 // Types returns all relationship types.
@@ -163,8 +274,20 @@ func Labels() []string {
 //
 //	apoc.schema.types() => ['KNOWS', 'WORKS_AT', 'BOUGHT']
 func Types() []string {
-	// Placeholder - would query database
-	return []string{}
+	typeSet := make(map[string]bool)
+
+	rels, err := Storage.AllRelationships()
+	if err == nil {
+		for _, rel := range rels {
+			typeSet[rel.Type] = true
+		}
+	}
+
+	result := make([]string, 0, len(typeSet))
+	for relType := range typeSet {
+		result = append(result, relType)
+	}
+	return result
 }
 
 // Info returns comprehensive schema information.

@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -506,7 +507,9 @@ func (e *StorageExecutor) executeCall(ctx context.Context, cypher string) (*Exec
 	case strings.Contains(upper, "APOC.PERIODIC.ROCK_N_ROLL"):
 		result, err = e.callApocPeriodicIterate(ctx, cypher) // Alias
 	default:
-		return nil, fmt.Errorf("unknown procedure: %s", cypher)
+		// Extract procedure name for clearer error
+		procName := extractProcedureName(cypher)
+		return nil, fmt.Errorf("unknown procedure: %s (try SHOW PROCEDURES for available procedures)", procName)
 	}
 
 	// Return error if procedure failed
@@ -2673,7 +2676,7 @@ func (e *StorageExecutor) callDbCreateSetNodeVectorProperty(ctx context.Context,
 	openParen := strings.Index(remainder, "(")
 	closeParen := strings.LastIndex(remainder, ")")
 	if openParen < 0 || closeParen < 0 {
-		return nil, fmt.Errorf("invalid syntax: missing parentheses")
+		return nil, fmt.Errorf("db.create.setNodeVectorProperty: missing parentheses (expected db.create.setNodeVectorProperty(nodeId, 'key', [vector]))")
 	}
 
 	argsStr := remainder[openParen+1 : closeParen]
@@ -2681,7 +2684,7 @@ func (e *StorageExecutor) callDbCreateSetNodeVectorProperty(ctx context.Context,
 	// Extract nodeId (first arg)
 	commaIdx := strings.Index(argsStr, ",")
 	if commaIdx < 0 {
-		return nil, fmt.Errorf("invalid syntax: missing arguments")
+		return nil, fmt.Errorf("db.create.setNodeVectorProperty: requires 3 arguments (nodeId, propertyKey, vector)")
 	}
 	nodeIDStr := strings.Trim(strings.TrimSpace(argsStr[:commaIdx]), "'\"")
 	argsStr = argsStr[commaIdx+1:]
@@ -2689,7 +2692,7 @@ func (e *StorageExecutor) callDbCreateSetNodeVectorProperty(ctx context.Context,
 	// Extract property key (second arg)
 	commaIdx = strings.Index(argsStr, ",")
 	if commaIdx < 0 {
-		return nil, fmt.Errorf("invalid syntax: missing vector argument")
+		return nil, fmt.Errorf("db.create.setNodeVectorProperty: missing vector argument (expected nodeId, propertyKey, [vector])")
 	}
 	propertyKey := strings.Trim(strings.TrimSpace(argsStr[:commaIdx]), "'\"")
 	argsStr = argsStr[commaIdx+1:]
@@ -2739,7 +2742,7 @@ func (e *StorageExecutor) callDbCreateSetRelationshipVectorProperty(ctx context.
 	openParen := strings.Index(remainder, "(")
 	closeParen := strings.LastIndex(remainder, ")")
 	if openParen < 0 || closeParen < 0 {
-		return nil, fmt.Errorf("invalid syntax: missing parentheses")
+		return nil, fmt.Errorf("db.create.setRelationshipVectorProperty: missing parentheses (expected db.create.setRelationshipVectorProperty(relId, 'key', [vector]))")
 	}
 
 	argsStr := remainder[openParen+1 : closeParen]
@@ -2747,7 +2750,7 @@ func (e *StorageExecutor) callDbCreateSetRelationshipVectorProperty(ctx context.
 	// Extract relId (first arg)
 	commaIdx := strings.Index(argsStr, ",")
 	if commaIdx < 0 {
-		return nil, fmt.Errorf("invalid syntax: missing arguments")
+		return nil, fmt.Errorf("db.create.setRelationshipVectorProperty: requires 3 arguments (relId, propertyKey, vector)")
 	}
 	relIDStr := strings.Trim(strings.TrimSpace(argsStr[:commaIdx]), "'\"")
 	argsStr = argsStr[commaIdx+1:]
@@ -2755,7 +2758,7 @@ func (e *StorageExecutor) callDbCreateSetRelationshipVectorProperty(ctx context.
 	// Extract property key (second arg)
 	commaIdx = strings.Index(argsStr, ",")
 	if commaIdx < 0 {
-		return nil, fmt.Errorf("invalid syntax: missing vector argument")
+		return nil, fmt.Errorf("db.create.setRelationshipVectorProperty: missing vector argument (expected relId, propertyKey, [vector])")
 	}
 	propertyKey := strings.Trim(strings.TrimSpace(argsStr[:commaIdx]), "'\"")
 	argsStr = argsStr[commaIdx+1:]
@@ -3653,4 +3656,19 @@ func (e *StorageExecutor) splitBySemicolon(s string) []string {
 	}
 
 	return result
+}
+
+// extractProcedureName extracts the procedure name from a CALL statement for error messages.
+func extractProcedureName(cypher string) string {
+	// Match CALL followed by procedure name (e.g., "CALL db.labels()" -> "db.labels")
+	re := regexp.MustCompile(`(?i)CALL\s+([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)`)
+	matches := re.FindStringSubmatch(cypher)
+	if len(matches) > 1 {
+		return matches[1]
+	}
+	// Fallback: return truncated query
+	if len(cypher) > 60 {
+		return cypher[:60] + "..."
+	}
+	return cypher
 }

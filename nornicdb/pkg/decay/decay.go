@@ -147,8 +147,8 @@ const (
 //	-ln(2) = -lambda × t
 //	t = ln(2) / lambda
 var tierLambda = map[Tier]float64{
-	TierEpisodic:   0.00412,  // ~7 day half-life (168 hours)
-	TierSemantic:   0.000418, // ~69 day half-life (1656 hours)
+	TierEpisodic:   0.00412,   // ~7 day half-life (168 hours)
+	TierSemantic:   0.000418,  // ~69 day half-life (1656 hours)
 	TierProcedural: 0.0000417, // ~693 day half-life (16632 hours)
 }
 
@@ -180,7 +180,6 @@ var tierBaseImportance = map[Tier]float64{
 //		FrequencyWeight:     0.3, // 30% based on access count
 //		ImportanceWeight:    0.3, // 30% based on importance
 //	}
-//
 type Config struct {
 	// RecalculateInterval determines how often to recalculate all decay scores.
 	//
@@ -276,7 +275,7 @@ func DefaultConfig() *Config {
 type Manager struct {
 	config *Config
 	mu     sync.RWMutex
-	
+
 	// For background recalculation
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -307,7 +306,7 @@ type Manager struct {
 // Example 1 - Basic Usage with Default Config:
 //
 //	manager := decay.New(nil) // Uses DefaultConfig()
-//	
+//
 //	// Create a semantic memory
 //	info := &decay.MemoryInfo{
 //		ID:           "fact-123",
@@ -316,7 +315,7 @@ type Manager struct {
 //		LastAccessed: time.Now(),
 //		AccessCount:  1,
 //	}
-//	
+//
 //	// Calculate initial score
 //	score := manager.CalculateScore(info)
 //	fmt.Printf("Initial score: %.2f\n", score) // ~0.60 (semantic tier default)
@@ -330,9 +329,9 @@ type Manager struct {
 //		FrequencyWeight:     0.3,
 //		ImportanceWeight:    0.2,
 //	}
-//	
+//
 //	manager := decay.New(config)
-//	
+//
 //	// Old, rarely-accessed memories decay faster
 //	oldInfo := &decay.MemoryInfo{
 //		ID:           "old-note",
@@ -348,7 +347,7 @@ type Manager struct {
 //
 //	manager := decay.New(nil)
 //	memories := make(map[string]*decay.MemoryInfo)
-//	
+//
 //	// Simulate memory access over time
 //	for day := 0; day < 30; day++ {
 //		// Create new memory
@@ -360,23 +359,23 @@ type Manager struct {
 //			AccessCount:  1,
 //		}
 //		memories[info.ID] = info
-//		
+//
 //		// Update existing memories
 //		for id, mem := range memories {
 //			score := manager.CalculateScore(mem)
-//			
+//
 //			// Archive low-scoring memories
 //			if manager.ShouldArchive(score) {
 //				delete(memories, id)
 //				archiveMemory(mem)
 //			}
-//			
+//
 //			// Randomly reinforce some memories
 //			if rand.Float64() < 0.3 { // 30% chance
 //				memories[id] = manager.Reinforce(mem)
 //			}
 //		}
-//		
+//
 //		time.Sleep(24 * time.Hour) // Simulate day passing
 //	}
 //
@@ -384,11 +383,11 @@ type Manager struct {
 //
 // Imagine your brain has a "memory manager" that decides what to remember:
 //
-//   1. New memories start strong (score = 0.6-0.9)
-//   2. Every day, memories get weaker like ice cream melting
-//   3. When you USE a memory, it gets stronger again!
-//   4. Really old, unused memories drop to almost zero and get "archived"
-//      (like moving old toys to the attic)
+//  1. New memories start strong (score = 0.6-0.9)
+//  2. Every day, memories get weaker like ice cream melting
+//  3. When you USE a memory, it gets stronger again!
+//  4. Really old, unused memories drop to almost zero and get "archived"
+//     (like moving old toys to the attic)
 //
 // The three tiers are like different types of memories:
 //   - Episodic = What you ate for breakfast (forget in days)
@@ -401,18 +400,34 @@ type Manager struct {
 //   - Background recalculation: Configurable interval (default 1 hour)
 //
 // Thread Safety:
-//   Manager is thread-safe for concurrent score calculations.
+//
+//	Manager is thread-safe for concurrent score calculations.
 func New(config *Config) *Manager {
 	if config == nil {
 		config = DefaultConfig()
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	return &Manager{
 		config: config,
 		ctx:    ctx,
 		cancel: cancel,
+	}
+}
+
+// GetConfig returns the manager's configuration.
+// This is useful for exposing decay settings via API endpoints.
+func (m *Manager) GetConfig() *Config {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	// Return a copy to prevent modification
+	return &Config{
+		RecalculateInterval: m.config.RecalculateInterval,
+		ArchiveThreshold:    m.config.ArchiveThreshold,
+		RecencyWeight:       m.config.RecencyWeight,
+		FrequencyWeight:     m.config.FrequencyWeight,
+		ImportanceWeight:    m.config.ImportanceWeight,
 	}
 }
 
@@ -490,7 +505,7 @@ func (m *Manager) CalculateScore(info *MemoryInfo) float64 {
 	defer m.mu.RUnlock()
 
 	now := time.Now()
-	
+
 	// 1. Recency factor (exponential decay)
 	hoursSinceAccess := now.Sub(info.LastAccessed).Hours()
 	lambda := tierLambda[info.Tier]
@@ -629,7 +644,7 @@ func (m *Manager) Start(recalculateFunc func(context.Context) error) {
 	m.wg.Add(1)
 	go func() {
 		defer m.wg.Done()
-		
+
 		ticker := time.NewTicker(m.config.RecalculateInterval)
 		defer ticker.Stop()
 
@@ -722,10 +737,10 @@ func (m *Manager) GetStats(memories []MemoryInfo) *Stats {
 
 	for _, mem := range memories {
 		stats.TotalMemories++
-		
+
 		score := m.CalculateScore(&mem)
 		totalScore += score
-		
+
 		switch mem.Tier {
 		case TierEpisodic:
 			stats.EpisodicCount++
@@ -734,7 +749,7 @@ func (m *Manager) GetStats(memories []MemoryInfo) *Stats {
 		case TierProcedural:
 			stats.ProceduralCount++
 		}
-		
+
 		tierScores[mem.Tier] = append(tierScores[mem.Tier], score)
 
 		if m.ShouldArchive(score) {

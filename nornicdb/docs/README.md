@@ -34,6 +34,7 @@ Welcome to **NornicDB** - A production-ready graph database with GPU acceleratio
 
 ### For Operations
 - **[Operations Guide](operations/)** - Deployment, monitoring, backup, scaling
+- **[Clustering Guide](user-guides/clustering.md)** - Hot Standby, Raft, Multi-Region
 - **[Compliance](compliance/)** - GDPR, HIPAA, SOC2, encryption, audit logging
 
 ### For AI Integration
@@ -70,6 +71,7 @@ Welcome to **NornicDB** - A production-ready graph database with GPU acceleratio
 - Easy migration from Neo4j
 
 ### 🔐 Enterprise-Ready
+- **High Availability** - Hot Standby, Raft consensus, Multi-Region
 - GDPR, HIPAA, SOC2 compliance
 - Field-level encryption
 - RBAC and audit logging
@@ -85,6 +87,7 @@ Welcome to **NornicDB** - A production-ready graph database with GPU acceleratio
 
 ## 🎯 Popular Topics
 
+- [Clustering & High Availability](user-guides/clustering.md) ⭐ **NEW**
 - [Vector Search Guide](user-guides/vector-search.md)
 - [Hybrid Search (RRF)](user-guides/hybrid-search.md)
 - [GPU Acceleration](features/gpu-acceleration.md)

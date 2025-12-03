@@ -112,6 +112,8 @@ package cypher
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -120,6 +122,23 @@ import (
 
 	"github.com/orneryd/nornicdb/pkg/storage"
 )
+
+// Pre-compiled regexes for subquery detection (whitespace-flexible)
+var (
+	// Matches EXISTS followed by optional whitespace and opening brace
+	existsSubqueryRe = regexp.MustCompile(`(?i)\bEXISTS\s*\{`)
+	// Matches NOT EXISTS followed by optional whitespace and opening brace
+	notExistsSubqueryRe = regexp.MustCompile(`(?i)\bNOT\s+EXISTS\s*\{`)
+	// Matches COUNT followed by optional whitespace and opening brace
+	countSubqueryRe = regexp.MustCompile(`(?i)\bCOUNT\s*\{`)
+	// Matches CALL followed by optional whitespace and opening brace (not CALL procedure())
+	callSubqueryRe = regexp.MustCompile(`(?i)\bCALL\s*\{`)
+)
+
+// hasSubqueryPattern checks if the query contains a subquery pattern (keyword + optional whitespace + brace)
+func hasSubqueryPattern(query string, pattern *regexp.Regexp) bool {
+	return pattern.MatchString(query)
+}
 
 // StorageExecutor executes Cypher queries against a storage backend.
 //
@@ -736,6 +755,10 @@ func (e *StorageExecutor) executeWithoutTransaction(ctx context.Context, cypher 
 	case strings.HasPrefix(upperQuery, "DELETE"), hasDetachDelete:
 		return e.executeDelete(ctx, cypher)
 	case strings.HasPrefix(upperQuery, "CALL"):
+		// Distinguish CALL {} subquery from CALL procedure()
+		if isCallSubquery(cypher) {
+			return e.executeCallSubquery(ctx, cypher)
+		}
 		return e.executeCall(ctx, cypher)
 	case strings.HasPrefix(upperQuery, "RETURN"):
 		return e.executeReturn(ctx, cypher)
@@ -766,7 +789,8 @@ func (e *StorageExecutor) executeWithoutTransaction(ctx context.Context, cypher 
 	case strings.HasPrefix(upperQuery, "SHOW DATABASE"):
 		return e.executeShowDatabase(ctx, cypher)
 	default:
-		return nil, fmt.Errorf("unsupported query type: %s", strings.Split(upperQuery, " ")[0])
+		firstWord := strings.Split(upperQuery, " ")[0]
+		return nil, fmt.Errorf("unsupported query type: %s (supported: MATCH, CREATE, MERGE, DELETE, SET, REMOVE, RETURN, WITH, UNWIND, CALL, FOREACH, LOAD CSV, SHOW, DROP)", firstWord)
 	}
 }
 
@@ -775,7 +799,7 @@ func (e *StorageExecutor) executeReturn(ctx context.Context, cypher string) (*Ex
 	// Parse RETURN clause - use word boundary detection
 	returnIdx := findKeywordIndex(cypher, "RETURN")
 	if returnIdx == -1 {
-		return nil, fmt.Errorf("RETURN clause not found")
+		return nil, fmt.Errorf("RETURN clause not found in query: %q", truncateQuery(cypher, 80))
 	}
 
 	returnClause := strings.TrimSpace(cypher[returnIdx+6:])
@@ -1033,7 +1057,7 @@ func (e *StorageExecutor) executeDelete(ctx context.Context, cypher string) (*Ex
 	}
 
 	if matchIdx == -1 || deleteIdx == -1 {
-		return nil, fmt.Errorf("DELETE requires a MATCH clause")
+		return nil, fmt.Errorf("DELETE requires a MATCH clause first (e.g., MATCH (n) DELETE n)")
 	}
 
 	// Parse the delete target variable(s) - e.g., "DELETE n" or "DELETE n, r"
@@ -1145,7 +1169,7 @@ func (e *StorageExecutor) executeSet(ctx context.Context, cypher string) (*Execu
 	returnIdx := findKeywordIndex(normalized, "RETURN")
 
 	if matchIdx == -1 || setIdx == -1 {
-		return nil, fmt.Errorf("SET requires a MATCH clause")
+		return nil, fmt.Errorf("SET requires a MATCH clause first (e.g., MATCH (n) SET n.property = value)")
 	}
 
 	// Execute the match first (use normalized query for slicing)
@@ -1391,7 +1415,7 @@ func (e *StorageExecutor) executeRemove(ctx context.Context, cypher string) (*Ex
 	returnIdx := findKeywordIndex(normalized, "RETURN")
 
 	if matchIdx == -1 || removeIdx == -1 {
-		return nil, fmt.Errorf("REMOVE requires a MATCH clause")
+		return nil, fmt.Errorf("REMOVE requires a MATCH clause first (e.g., MATCH (n) REMOVE n.property)")
 	}
 
 	// Execute the match first
@@ -1685,22 +1709,8 @@ func (e *StorageExecutor) evaluateWhere(node *storage.Node, variable, whereClaus
 		}
 	}
 
-	// Handle NOT EXISTS { } subquery FIRST (before other NOT handling)
-	if strings.Contains(upperClause, "NOT EXISTS") {
-		return e.evaluateNotExistsSubquery(node, variable, whereClause)
-	}
-
-	// Handle EXISTS { } subquery
-	if strings.Contains(upperClause, "EXISTS") && strings.Contains(whereClause, "{") {
-		return e.evaluateExistsSubquery(node, variable, whereClause)
-	}
-
-	// Handle COUNT { } subquery with comparison
-	if strings.Contains(upperClause, "COUNT {") {
-		return e.evaluateCountSubqueryComparison(node, variable, whereClause)
-	}
-
-	// Handle AND at top level only (not inside parentheses or strings)
+	// CRITICAL: Handle AND/OR at top level FIRST before subqueries
+	// This ensures "EXISTS {} AND COUNT {} >= 2" is properly split
 	if andIdx := findTopLevelKeyword(whereClause, " AND "); andIdx > 0 {
 		left := strings.TrimSpace(whereClause[:andIdx])
 		right := strings.TrimSpace(whereClause[andIdx+5:])
@@ -1712,6 +1722,22 @@ func (e *StorageExecutor) evaluateWhere(node *storage.Node, variable, whereClaus
 		left := strings.TrimSpace(whereClause[:orIdx])
 		right := strings.TrimSpace(whereClause[orIdx+4:])
 		return e.evaluateWhere(node, variable, left) || e.evaluateWhere(node, variable, right)
+	}
+
+	// Handle NOT EXISTS { } subquery FIRST (before other NOT handling)
+	// Uses regex for whitespace-flexible matching
+	if hasSubqueryPattern(whereClause, notExistsSubqueryRe) {
+		return e.evaluateNotExistsSubquery(node, variable, whereClause)
+	}
+
+	// Handle EXISTS { } subquery (whitespace-flexible)
+	if hasSubqueryPattern(whereClause, existsSubqueryRe) {
+		return e.evaluateExistsSubquery(node, variable, whereClause)
+	}
+
+	// Handle COUNT { } subquery with comparison (whitespace-flexible)
+	if hasSubqueryPattern(whereClause, countSubqueryRe) {
+		return e.evaluateCountSubqueryComparison(node, variable, whereClause)
 	}
 
 	// Handle NOT prefix
@@ -2068,19 +2094,35 @@ func (e *StorageExecutor) extractSubquery(whereClause, prefix string) string {
 // checkSubqueryMatch checks if the subquery matches for a given node
 func (e *StorageExecutor) checkSubqueryMatch(node *storage.Node, variable, subquery string) bool {
 	// Parse the MATCH pattern from the subquery
-	// Format: MATCH (var)<-[:TYPE]-(other) or MATCH (var)-[:TYPE]->(other)
+	// Format: MATCH (var)<-[:TYPE]-(other) WHERE ...
 	upperSub := strings.ToUpper(subquery)
 
 	if !strings.HasPrefix(upperSub, "MATCH ") {
 		return false
 	}
 
+	// Split out any WHERE clause from the pattern
 	pattern := strings.TrimSpace(subquery[6:])
+	innerWhere := ""
+
+	// Use regex to find WHERE with any whitespace before it (including newlines)
+	whereRe := regexp.MustCompile(`(?i)\s+WHERE\s+`)
+	if loc := whereRe.FindStringIndex(pattern); loc != nil {
+		innerWhere = strings.TrimSpace(pattern[loc[1]:])
+		pattern = strings.TrimSpace(pattern[:loc[0]])
+	}
+
+	// DEBUG: Uncomment to trace execution
+	// fmt.Printf("DEBUG checkSubqueryMatch: node=%v, variable=%s, pattern=%s, innerWhere=%s\n",
+	//     node.Properties["name"], variable, pattern, innerWhere)
 
 	// Check if pattern references our variable
 	if !strings.Contains(pattern, "("+variable+")") && !strings.Contains(pattern, "("+variable+":") {
 		return false
 	}
+
+	// Extract the target variable name from pattern (e.g., "report" from "(m)-[:MANAGES]->(report)")
+	targetVar := e.extractTargetVariable(pattern, variable)
 
 	// Parse relationship pattern
 	// Simplified: check for incoming or outgoing relationships
@@ -2102,6 +2144,13 @@ func (e *StorageExecutor) checkSubqueryMatch(node *storage.Node, variable, subqu
 		edges, _ := e.storage.GetIncomingEdges(node.ID)
 		for _, edge := range edges {
 			if len(relTypes) == 0 || e.edgeTypeMatches(edge.Type, relTypes) {
+				// If there's an inner WHERE, check it against the connected node
+				if innerWhere != "" {
+					sourceNode, err := e.storage.GetNode(edge.StartNode)
+					if err != nil || !e.evaluateInnerWhere(sourceNode, targetVar, innerWhere) {
+						continue
+					}
+				}
 				return true
 			}
 		}
@@ -2111,6 +2160,13 @@ func (e *StorageExecutor) checkSubqueryMatch(node *storage.Node, variable, subqu
 		edges, _ := e.storage.GetOutgoingEdges(node.ID)
 		for _, edge := range edges {
 			if len(relTypes) == 0 || e.edgeTypeMatches(edge.Type, relTypes) {
+				// If there's an inner WHERE, check it against the connected node
+				if innerWhere != "" {
+					targetNode, err := e.storage.GetNode(edge.EndNode)
+					if err != nil || !e.evaluateInnerWhere(targetNode, targetVar, innerWhere) {
+						continue
+					}
+				}
 				return true
 			}
 		}
@@ -2124,6 +2180,63 @@ func (e *StorageExecutor) checkSubqueryMatch(node *storage.Node, variable, subqu
 	}
 
 	return false
+}
+
+// extractTargetVariable extracts the target variable name from a relationship pattern
+// e.g., from "(m)-[:MANAGES]->(report)" it extracts "report"
+func (e *StorageExecutor) extractTargetVariable(pattern, sourceVar string) string {
+	// Look for outgoing pattern: (source)-[...]->(target)
+	if arrowIdx := strings.Index(pattern, "]->"); arrowIdx >= 0 {
+		rest := pattern[arrowIdx+3:]
+		if parenIdx := strings.Index(rest, "("); parenIdx >= 0 {
+			rest = rest[parenIdx+1:]
+			// Extract variable name (before : or ))
+			endIdx := strings.IndexAny(rest, ":)")
+			if endIdx > 0 {
+				return strings.TrimSpace(rest[:endIdx])
+			}
+		}
+	}
+
+	// Look for incoming pattern: (target)<-[...]-(source)
+	if arrowIdx := strings.Index(pattern, "<-["); arrowIdx >= 0 {
+		// Target is before the arrow
+		before := pattern[:arrowIdx]
+		if parenIdx := strings.LastIndex(before, "("); parenIdx >= 0 {
+			inner := before[parenIdx+1:]
+			endIdx := strings.IndexAny(inner, ":)")
+			if endIdx > 0 {
+				return strings.TrimSpace(inner[:endIdx])
+			}
+		}
+	}
+
+	return ""
+}
+
+// evaluateInnerWhere evaluates an inner WHERE clause against a node
+// Handles nested EXISTS subqueries
+func (e *StorageExecutor) evaluateInnerWhere(node *storage.Node, variable, whereClause string) bool {
+	upperWhere := strings.ToUpper(whereClause)
+
+	// Check for nested EXISTS subquery
+	if hasSubqueryPattern(whereClause, existsSubqueryRe) {
+		// Check for NOT EXISTS first
+		if hasSubqueryPattern(whereClause, notExistsSubqueryRe) {
+			return e.evaluateNotExistsSubquery(node, variable, whereClause)
+		}
+		return e.evaluateExistsSubquery(node, variable, whereClause)
+	}
+
+	// Check for nested COUNT subquery
+	if hasSubqueryPattern(whereClause, countSubqueryRe) {
+		return e.evaluateCountSubqueryComparison(node, variable, whereClause)
+	}
+
+	// Simple property comparison (placeholder for basic WHERE support)
+	// For now, return true if no subquery patterns found
+	_ = upperWhere
+	return true
 }
 
 // extractRelTypesFromPattern extracts relationship types from a pattern
@@ -2334,6 +2447,423 @@ func (e *StorageExecutor) countSubqueryMatches(node *storage.Node, variable, sub
 	return count
 }
 
+// ===== CALL {} Subquery Support (Neo4j 4.0+) =====
+
+// isCallSubquery detects if a query is a CALL {} subquery vs CALL procedure()
+// CALL {} subqueries have "CALL" followed by optional whitespace and "{"
+// CALL procedures have "CALL procedure.name()"
+func isCallSubquery(cypher string) bool {
+	// Use regex for flexible whitespace matching: CALL followed by optional whitespace and {
+	return hasSubqueryPattern(cypher, callSubqueryRe)
+}
+
+// executeCallSubquery executes a CALL {} subquery
+// Syntax: CALL { <subquery> } [IN TRANSACTIONS [OF n ROWS]]
+// The subquery can contain MATCH, CREATE, RETURN, UNION, etc.
+func (e *StorageExecutor) executeCallSubquery(ctx context.Context, cypher string) (*ExecuteResult, error) {
+	// Substitute parameters
+	if params := getParamsFromContext(ctx); params != nil {
+		cypher = e.substituteParams(cypher, params)
+	}
+
+	// Extract the subquery body from CALL { ... }
+	subqueryBody, afterCall, inTransactions, batchSize := e.parseCallSubquery(cypher)
+	if subqueryBody == "" {
+		return nil, fmt.Errorf("invalid CALL {} subquery: empty body (expected CALL { <query> })")
+	}
+
+	// Execute the inner subquery
+	var innerResult *ExecuteResult
+	var err error
+
+	if inTransactions {
+		// Execute in batches (for large data operations)
+		innerResult, err = e.executeCallInTransactions(ctx, subqueryBody, batchSize)
+	} else {
+		// Execute as single query
+		innerResult, err = e.Execute(ctx, subqueryBody, nil)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("CALL subquery error: %w", err)
+	}
+
+	// If there's something after CALL { }, process it (e.g., RETURN)
+	if afterCall != "" {
+		return e.processAfterCallSubquery(ctx, innerResult, afterCall)
+	}
+
+	return innerResult, nil
+}
+
+// parseCallSubquery extracts the body from CALL { ... } and any trailing clauses
+// Returns: body, afterCall, inTransactions bool, batchSize int
+func (e *StorageExecutor) parseCallSubquery(cypher string) (body, afterCall string, inTransactions bool, batchSize int) {
+	batchSize = 1000 // Default batch size
+
+	trimmed := strings.TrimSpace(cypher)
+
+	// Find the opening brace
+	braceStart := strings.Index(trimmed, "{")
+	if braceStart == -1 {
+		return "", "", false, batchSize
+	}
+
+	// Find matching closing brace
+	depth := 0
+	braceEnd := -1
+	for i := braceStart; i < len(trimmed); i++ {
+		if trimmed[i] == '{' {
+			depth++
+		} else if trimmed[i] == '}' {
+			depth--
+			if depth == 0 {
+				braceEnd = i
+				break
+			}
+		}
+	}
+
+	if braceEnd == -1 {
+		return "", "", false, batchSize
+	}
+
+	// Extract body (between braces)
+	body = strings.TrimSpace(trimmed[braceStart+1 : braceEnd])
+
+	// Get what's after the closing brace
+	afterCall = strings.TrimSpace(trimmed[braceEnd+1:])
+
+	// Check for IN TRANSACTIONS
+	upperAfter := strings.ToUpper(afterCall)
+	if strings.HasPrefix(upperAfter, "IN TRANSACTIONS") {
+		inTransactions = true
+		afterTx := strings.TrimSpace(afterCall[15:])
+		upperAfterTx := strings.ToUpper(afterTx)
+
+		// Check for OF n ROWS
+		if strings.HasPrefix(upperAfterTx, "OF ") {
+			// Parse batch size
+			ofPart := afterTx[3:]
+			// Find ROWS keyword
+			rowsIdx := strings.Index(strings.ToUpper(ofPart), " ROWS")
+			if rowsIdx > 0 {
+				sizeStr := strings.TrimSpace(ofPart[:rowsIdx])
+				if size, err := strconv.Atoi(sizeStr); err == nil && size > 0 {
+					batchSize = size
+				}
+				afterCall = strings.TrimSpace(ofPart[rowsIdx+5:])
+			} else {
+				afterCall = ""
+			}
+		} else {
+			afterCall = afterTx
+		}
+	}
+
+	return body, afterCall, inTransactions, batchSize
+}
+
+// executeCallInTransactions executes a CALL {} IN TRANSACTIONS query
+// This batches operations for large datasets
+func (e *StorageExecutor) executeCallInTransactions(ctx context.Context, subquery string, batchSize int) (*ExecuteResult, error) {
+	// For now, execute as a single operation
+	// Full implementation would batch CREATE/SET operations
+	result, err := e.Execute(ctx, subquery, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// If the result has multiple rows and we need to batch, process them
+	// This is a simplified implementation - full Neo4j batches actual writes
+	return result, nil
+}
+
+// processAfterCallSubquery handles clauses after CALL { } like RETURN
+func (e *StorageExecutor) processAfterCallSubquery(ctx context.Context, innerResult *ExecuteResult, afterCall string) (*ExecuteResult, error) {
+	upperAfter := strings.ToUpper(afterCall)
+
+	// Handle RETURN clause
+	if strings.HasPrefix(upperAfter, "RETURN ") {
+		return e.processCallSubqueryReturn(innerResult, afterCall)
+	}
+
+	// Handle ORDER BY (without RETURN means use inner result's columns)
+	if strings.HasPrefix(upperAfter, "ORDER BY ") {
+		result := e.applyOrderByToResult(innerResult, afterCall)
+		// Check for LIMIT/SKIP after ORDER BY
+		return e.applyResultModifiers(result, afterCall)
+	}
+
+	// Unsupported clause after CALL {}
+	firstWord := strings.Split(upperAfter, " ")[0]
+	return nil, fmt.Errorf("unsupported clause after CALL {}: %s (supported: RETURN, ORDER BY, SKIP, LIMIT)", firstWord)
+}
+
+// processCallSubqueryReturn processes the RETURN clause after CALL {}
+func (e *StorageExecutor) processCallSubqueryReturn(innerResult *ExecuteResult, afterCall string) (*ExecuteResult, error) {
+	// Parse RETURN expressions
+	returnIdx := findKeywordIndex(afterCall, "RETURN")
+	if returnIdx == -1 {
+		return innerResult, nil
+	}
+
+	returnClause := strings.TrimSpace(afterCall[returnIdx+6:])
+
+	// Check for ORDER BY, LIMIT, SKIP
+	orderByIdx := findKeywordIndex(returnClause, "ORDER BY")
+	limitIdx := findKeywordIndex(returnClause, "LIMIT")
+	skipIdx := findKeywordIndex(returnClause, "SKIP")
+
+	// Find the earliest modifier
+	modifierIdx := len(returnClause)
+	if orderByIdx != -1 && orderByIdx < modifierIdx {
+		modifierIdx = orderByIdx
+	}
+	if limitIdx != -1 && limitIdx < modifierIdx {
+		modifierIdx = limitIdx
+	}
+	if skipIdx != -1 && skipIdx < modifierIdx {
+		modifierIdx = skipIdx
+	}
+
+	returnExprs := strings.TrimSpace(returnClause[:modifierIdx])
+	modifierClause := ""
+	if modifierIdx < len(returnClause) {
+		modifierClause = returnClause[modifierIdx:]
+	}
+
+	// Parse return expressions
+	parts := splitReturnExpressions(returnExprs)
+
+	// Build column mapping from inner result
+	colMap := make(map[string]int)
+	for i, col := range innerResult.Columns {
+		colMap[col] = i
+	}
+
+	// Project columns
+	newColumns := make([]string, 0, len(parts))
+	colIndices := make([]int, 0, len(parts))
+
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+
+		// Check for alias
+		alias := part
+		expr := part
+		upperPart := strings.ToUpper(part)
+		if asIdx := strings.Index(upperPart, " AS "); asIdx != -1 {
+			alias = strings.TrimSpace(part[asIdx+4:])
+			expr = strings.TrimSpace(part[:asIdx])
+		}
+
+		newColumns = append(newColumns, alias)
+
+		// Find column index
+		if idx, ok := colMap[expr]; ok {
+			colIndices = append(colIndices, idx)
+		} else {
+			// Not found in inner result, append -1 (will be nil)
+			colIndices = append(colIndices, -1)
+		}
+	}
+
+	// Project rows
+	newRows := make([][]interface{}, 0, len(innerResult.Rows))
+	for _, row := range innerResult.Rows {
+		newRow := make([]interface{}, len(colIndices))
+		for i, idx := range colIndices {
+			if idx >= 0 && idx < len(row) {
+				newRow[i] = row[idx]
+			} else {
+				newRow[i] = nil
+			}
+		}
+		newRows = append(newRows, newRow)
+	}
+
+	result := &ExecuteResult{
+		Columns: newColumns,
+		Rows:    newRows,
+		Stats:   innerResult.Stats,
+	}
+
+	// Apply modifiers (ORDER BY, LIMIT, SKIP)
+	if modifierClause != "" {
+		return e.applyResultModifiers(result, modifierClause)
+	}
+
+	return result, nil
+}
+
+// applyResultModifiers applies ORDER BY, LIMIT, SKIP to a result
+func (e *StorageExecutor) applyResultModifiers(result *ExecuteResult, modifiers string) (*ExecuteResult, error) {
+	// Apply ORDER BY
+	if orderByIdx := findKeywordIndex(modifiers, "ORDER BY"); orderByIdx != -1 {
+		result = e.applyOrderByToResult(result, modifiers[orderByIdx:])
+	}
+
+	// Apply SKIP
+	if skipIdx := findKeywordIndex(modifiers, "SKIP"); skipIdx != -1 {
+		skipPart := strings.TrimSpace(modifiers[skipIdx+4:])
+		// Find next keyword
+		nextKw := len(skipPart)
+		for _, kw := range []string{" LIMIT", " ORDER"} {
+			if idx := strings.Index(strings.ToUpper(skipPart), kw); idx != -1 && idx < nextKw {
+				nextKw = idx
+			}
+		}
+		skipStr := strings.TrimSpace(skipPart[:nextKw])
+		if skip, err := strconv.Atoi(skipStr); err == nil && skip > 0 {
+			if skip < len(result.Rows) {
+				result.Rows = result.Rows[skip:]
+			} else {
+				result.Rows = [][]interface{}{}
+			}
+		}
+	}
+
+	// Apply LIMIT
+	if limitIdx := findKeywordIndex(modifiers, "LIMIT"); limitIdx != -1 {
+		limitPart := strings.TrimSpace(modifiers[limitIdx+5:])
+		// Find next keyword
+		nextKw := len(limitPart)
+		for _, kw := range []string{" SKIP", " ORDER"} {
+			if idx := strings.Index(strings.ToUpper(limitPart), kw); idx != -1 && idx < nextKw {
+				nextKw = idx
+			}
+		}
+		limitStr := strings.TrimSpace(limitPart[:nextKw])
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit >= 0 {
+			if limit < len(result.Rows) {
+				result.Rows = result.Rows[:limit]
+			}
+		}
+	}
+
+	return result, nil
+}
+
+// applyOrderByToResult applies ORDER BY to a result set
+func (e *StorageExecutor) applyOrderByToResult(result *ExecuteResult, orderByClause string) *ExecuteResult {
+	// Parse ORDER BY column [DESC|ASC]
+	clause := strings.TrimSpace(orderByClause)
+	if idx := findKeywordIndex(clause, "ORDER BY"); idx != -1 {
+		clause = strings.TrimSpace(clause[idx+8:])
+	}
+
+	// Find end of ORDER BY (before LIMIT, SKIP)
+	endIdx := len(clause)
+	for _, kw := range []string{" LIMIT", " SKIP"} {
+		if idx := strings.Index(strings.ToUpper(clause), kw); idx != -1 && idx < endIdx {
+			endIdx = idx
+		}
+	}
+	clause = strings.TrimSpace(clause[:endIdx])
+
+	// Parse column and direction
+	parts := strings.Fields(clause)
+	if len(parts) == 0 {
+		return result
+	}
+
+	colName := parts[0]
+	descending := false
+	if len(parts) > 1 && strings.ToUpper(parts[1]) == "DESC" {
+		descending = true
+	}
+
+	// Find column index
+	colIdx := -1
+	for i, col := range result.Columns {
+		if col == colName {
+			colIdx = i
+			break
+		}
+	}
+
+	if colIdx == -1 {
+		return result
+	}
+
+	// Sort rows
+	sort.SliceStable(result.Rows, func(i, j int) bool {
+		vi := result.Rows[i][colIdx]
+		vj := result.Rows[j][colIdx]
+		cmp := compareValuesForSort(vi, vj)
+		if descending {
+			return cmp > 0
+		}
+		return cmp < 0
+	})
+
+	return result
+}
+
+// compareValuesForSort compares two values for sorting, returns -1, 0, or 1
+func compareValuesForSort(a, b interface{}) int {
+	if a == nil && b == nil {
+		return 0
+	}
+	if a == nil {
+		return -1
+	}
+	if b == nil {
+		return 1
+	}
+
+	// Try numeric comparison
+	switch va := a.(type) {
+	case int:
+		if vb, ok := b.(int); ok {
+			if va < vb {
+				return -1
+			} else if va > vb {
+				return 1
+			}
+			return 0
+		}
+	case int64:
+		if vb, ok := b.(int64); ok {
+			if va < vb {
+				return -1
+			} else if va > vb {
+				return 1
+			}
+			return 0
+		}
+	case float64:
+		if vb, ok := b.(float64); ok {
+			if va < vb {
+				return -1
+			} else if va > vb {
+				return 1
+			}
+			return 0
+		}
+	case string:
+		if vb, ok := b.(string); ok {
+			if va < vb {
+				return -1
+			} else if va > vb {
+				return 1
+			}
+			return 0
+		}
+	}
+
+	// Fallback to string comparison
+	sa := fmt.Sprintf("%v", a)
+	sb := fmt.Sprintf("%v", b)
+	if sa < sb {
+		return -1
+	} else if sa > sb {
+		return 1
+	}
+	return 0
+}
+
 // ===== SHOW Commands (Neo4j compatibility) =====
 
 // executeShowIndexes handles SHOW INDEXES command
@@ -2506,4 +3036,13 @@ func (e *StorageExecutor) executeShowDatabase(ctx context.Context, cypher string
 			RelationshipsCreated: int(edgeCount),
 		},
 	}, nil
+}
+
+// truncateQuery truncates a query string to maxLen characters for error messages
+func truncateQuery(query string, maxLen int) string {
+	query = strings.TrimSpace(query)
+	if len(query) <= maxLen {
+		return query
+	}
+	return query[:maxLen] + "..."
 }

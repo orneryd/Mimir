@@ -123,6 +123,7 @@
 package nornicdb
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -1325,6 +1326,36 @@ func (db *DB) Recall(ctx context.Context, id string) (*Memory, error) {
 	return mem, nil
 }
 
+// DecayInfo contains decay system information for monitoring.
+type DecayInfo struct {
+	Enabled          bool          `json:"enabled"`
+	ArchiveThreshold float64       `json:"archiveThreshold"`
+	RecalcInterval   time.Duration `json:"recalculateInterval"`
+	RecencyWeight    float64       `json:"recencyWeight"`
+	FrequencyWeight  float64       `json:"frequencyWeight"`
+	ImportanceWeight float64       `json:"importanceWeight"`
+}
+
+// GetDecayInfo returns information about the decay system configuration.
+func (db *DB) GetDecayInfo() *DecayInfo {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	if db.decay == nil {
+		return &DecayInfo{Enabled: false}
+	}
+
+	cfg := db.decay.GetConfig()
+	return &DecayInfo{
+		Enabled:          true,
+		ArchiveThreshold: cfg.ArchiveThreshold,
+		RecalcInterval:   cfg.RecalculateInterval,
+		RecencyWeight:    cfg.RecencyWeight,
+		FrequencyWeight:  cfg.FrequencyWeight,
+		ImportanceWeight: cfg.ImportanceWeight,
+	}
+}
+
 // Cypher executes a Cypher query.
 func (db *DB) Cypher(ctx context.Context, query string, params map[string]any) ([]map[string]any, error) {
 	db.mu.RLock()
@@ -2477,26 +2508,140 @@ type IndexInfo struct {
 	Type     string `json:"type"` // btree, fulltext, vector
 }
 
-// GetIndexes returns all indexes.
+// toStringValue safely converts interface{} to string
+func toStringValue(v interface{}) string {
+	if v == nil {
+		return ""
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return fmt.Sprintf("%v", v)
+}
+
+// GetIndexes returns all indexes from the storage schema manager.
 func (db *DB) GetIndexes(ctx context.Context) ([]*IndexInfo, error) {
-	// TODO: Implement index management
-	return []*IndexInfo{}, nil
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	if db.closed {
+		return nil, ErrClosed
+	}
+
+	schema := db.storage.GetSchema()
+	if schema == nil {
+		return []*IndexInfo{}, nil
+	}
+
+	// Get all indexes from schema manager
+	rawIndexes := schema.GetIndexes()
+	result := make([]*IndexInfo, 0, len(rawIndexes))
+
+	for _, idx := range rawIndexes {
+		if m, ok := idx.(map[string]interface{}); ok {
+			info := &IndexInfo{
+				Name:  toStringValue(m["name"]),
+				Label: toStringValue(m["label"]),
+				Type:  strings.ToLower(toStringValue(m["type"])),
+			}
+			// Handle single property or first property from array
+			if prop, ok := m["property"].(string); ok {
+				info.Property = prop
+			} else if props, ok := m["properties"].([]string); ok && len(props) > 0 {
+				info.Property = props[0]
+			}
+			result = append(result, info)
+		}
+	}
+
+	return result, nil
 }
 
-// CreateIndex creates a new index.
+// CreateIndex creates a new index on a label/property combination.
+// Supported types: "property", "fulltext", "vector", "range"
 func (db *DB) CreateIndex(ctx context.Context, label, property, indexType string) error {
-	// TODO: Implement index management
-	return nil
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	if db.closed {
+		return ErrClosed
+	}
+
+	schema := db.storage.GetSchema()
+	if schema == nil {
+		return fmt.Errorf("schema manager not initialized")
+	}
+
+	indexName := fmt.Sprintf("idx_%s_%s", strings.ToLower(label), strings.ToLower(property))
+
+	switch strings.ToLower(indexType) {
+	case "property", "btree":
+		return schema.AddPropertyIndex(indexName, label, []string{property})
+	case "fulltext":
+		return schema.AddFulltextIndex(indexName, []string{label}, []string{property})
+	case "vector":
+		return schema.AddVectorIndex(indexName, label, property, 1024, "cosine")
+	case "range":
+		return schema.AddRangeIndex(indexName, label, property)
+	default:
+		return fmt.Errorf("unsupported index type: %s (use: property, fulltext, vector, range)", indexType)
+	}
 }
 
-// Backup creates a database backup.
+// BackupableEngine is an interface for engines that support backup.
+type BackupableEngine interface {
+	Backup(path string) error
+}
+
+// Backup creates a database backup to the specified path.
+// For BadgerDB, this creates a streaming backup that is consistent and portable.
+// For in-memory databases, it exports all data as JSON.
 func (db *DB) Backup(ctx context.Context, path string) error {
-	// TODO: Implement backup
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	if db.closed {
+		return ErrClosed
+	}
+
+	// Check if storage engine supports backup
+	if backupable, ok := db.storage.(BackupableEngine); ok {
+		return backupable.Backup(path)
+	}
+
+	// Fallback: Export as JSON for non-backupable engines (memory)
+	nodes, err := db.storage.AllNodes()
+	if err != nil {
+		return fmt.Errorf("failed to get nodes: %w", err)
+	}
+
+	edges, err := db.storage.AllEdges()
+	if err != nil {
+		return fmt.Errorf("failed to get edges: %w", err)
+	}
+
+	backup := map[string]interface{}{
+		"version":    "1.0",
+		"created_at": time.Now().Format(time.RFC3339),
+		"nodes":      nodes,
+		"edges":      edges,
+	}
+
+	data, err := json.MarshalIndent(backup, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal backup: %w", err)
+	}
+
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return fmt.Errorf("failed to write backup: %w", err)
+	}
+
 	return nil
 }
 
 // ExportUserData exports all data for a user (GDPR compliance).
 // Uses streaming iteration to avoid loading all nodes into memory.
+// Supports "json" (default) and "csv" formats.
 func (db *DB) ExportUserData(ctx context.Context, userID, format string) ([]byte, error) {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
@@ -2524,8 +2669,7 @@ func (db *DB) ExportUserData(ctx context.Context, userID, format string) ([]byte
 
 	// Format output
 	if format == "csv" {
-		// TODO: Implement CSV export
-		return []byte("id,labels,properties\n"), nil
+		return db.exportUserDataCSV(userData)
 	}
 
 	// Default to JSON
@@ -2534,6 +2678,81 @@ func (db *DB) ExportUserData(ctx context.Context, userID, format string) ([]byte
 		"data":        userData,
 		"exported_at": time.Now(),
 	})
+}
+
+// exportUserDataCSV converts user data to CSV format.
+func (db *DB) exportUserDataCSV(userData []map[string]interface{}) ([]byte, error) {
+	var buf bytes.Buffer
+
+	// Collect all unique property keys across all nodes
+	propertyKeys := make(map[string]bool)
+	for _, data := range userData {
+		if props, ok := data["properties"].(map[string]interface{}); ok {
+			for k := range props {
+				propertyKeys[k] = true
+			}
+		}
+	}
+
+	// Sort property keys for consistent output
+	sortedKeys := make([]string, 0, len(propertyKeys))
+	for k := range propertyKeys {
+		sortedKeys = append(sortedKeys, k)
+	}
+	sort.Strings(sortedKeys)
+
+	// Write CSV header
+	headers := []string{"id", "labels", "created_at"}
+	headers = append(headers, sortedKeys...)
+	buf.WriteString(strings.Join(headers, ",") + "\n")
+
+	// Write data rows
+	for _, data := range userData {
+		row := make([]string, len(headers))
+
+		// ID
+		row[0] = escapeCSV(toStringValue(data["id"]))
+
+		// Labels
+		if labels, ok := data["labels"].([]string); ok {
+			row[1] = escapeCSV(strings.Join(labels, ";"))
+		} else {
+			row[1] = ""
+		}
+
+		// Created at
+		if createdAt, ok := data["created_at"].(time.Time); ok {
+			row[2] = escapeCSV(createdAt.Format(time.RFC3339))
+		} else {
+			row[2] = ""
+		}
+
+		// Properties
+		if props, ok := data["properties"].(map[string]interface{}); ok {
+			for i, key := range sortedKeys {
+				if val, exists := props[key]; exists {
+					row[3+i] = escapeCSV(toStringValue(val))
+				} else {
+					row[3+i] = ""
+				}
+			}
+		}
+
+		buf.WriteString(strings.Join(row, ",") + "\n")
+	}
+
+	return buf.Bytes(), nil
+}
+
+// escapeCSV escapes a string for CSV output
+func escapeCSV(s string) string {
+	needsQuote := strings.ContainsAny(s, ",\"\n\r")
+	if !needsQuote {
+		return s
+	}
+	// Escape double quotes by doubling them
+	escaped := strings.ReplaceAll(s, "\"", "\"\"")
+	return "\"" + escaped + "\""
 }
 
 // DeleteUserData deletes all data for a user (GDPR compliance).

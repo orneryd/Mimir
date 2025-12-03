@@ -5,6 +5,7 @@
 ## 📚 Documentation Sections
 
 ### Cypher Functions
+
 - **[Function Index](cypher-functions/)** - Complete list of all 52 functions
 - **[String Functions](cypher-functions/README.md#string-functions)** - Text manipulation
 - **[Math Functions](cypher-functions/README.md#mathematical-functions)** - Calculations
@@ -14,12 +15,14 @@
 - **[Graph Functions](cypher-functions/README.md#graph-functions)** - Node/relationship operations
 
 ### HTTP API
+
 - **[REST Endpoints](http-api.md)** - HTTP API documentation
 - **[Transaction API](http-api.md#transactions)** - ACID transactions
 - **[Search Endpoints](http-api.md#search)** - Vector and hybrid search
 - **[Admin Endpoints](http-api.md#admin)** - System management
 
 ### Protocols
+
 - **[Bolt Protocol](bolt-protocol.md)** - Binary protocol specification
 - **[Client Drivers](client-drivers.md)** - Compatible drivers
 
@@ -43,7 +46,7 @@ RETURN count(p) AS total, avg(p.age) AS averageAge
 
 ```bash
 # Execute Cypher query
-curl -X POST http://localhost:7474/db/neo4j/tx/commit \
+curl -X POST http://localhost:7474/db/data/tx/commit \
   -H "Content-Type: application/json" \
   -d '{
     "statements": [{
@@ -67,6 +70,7 @@ with driver.session() as session:
 ## 📖 Function Categories
 
 ### String Functions (15 functions)
+
 Transform and manipulate text data.
 
 **Common:** `toLower()`, `toUpper()`, `trim()`, `substring()`, `replace()`
@@ -74,6 +78,7 @@ Transform and manipulate text data.
 [See all string functions →](cypher-functions/README.md#string-functions)
 
 ### Mathematical Functions (7 functions)
+
 Perform calculations and transformations.
 
 **Common:** `abs()`, `round()`, `sqrt()`, `rand()`
@@ -81,6 +86,7 @@ Perform calculations and transformations.
 [See all math functions →](cypher-functions/README.md#mathematical-functions)
 
 ### Aggregation Functions (6 functions)
+
 Summarize data across multiple rows.
 
 **Common:** `count()`, `sum()`, `avg()`, `min()`, `max()`, `collect()`
@@ -88,6 +94,7 @@ Summarize data across multiple rows.
 [See all aggregation functions →](cypher-functions/README.md#aggregation-functions)
 
 ### List Functions (8 functions)
+
 Work with arrays and collections.
 
 **Common:** `size()`, `head()`, `tail()`, `range()`
@@ -95,6 +102,7 @@ Work with arrays and collections.
 [See all list functions →](cypher-functions/README.md#list-functions)
 
 ### Temporal Functions (4 functions)
+
 Handle dates, times, and durations.
 
 **Common:** `timestamp()`, `date()`, `datetime()`, `duration()`
@@ -102,6 +110,7 @@ Handle dates, times, and durations.
 [See all temporal functions →](cypher-functions/README.md#temporal-functions)
 
 ### Graph Functions (11 functions)
+
 Access graph structure and metadata.
 
 **Common:** `id()`, `labels()`, `type()`, `properties()`, `nodes()`, `relationships()`
@@ -154,12 +163,13 @@ NornicDB is compatible with official Neo4j drivers:
 ### Example Usage
 
 **Python:**
+
 ```python
 from neo4j import GraphDatabase
 
 driver = GraphDatabase.driver(
     "bolt://localhost:7687",
-    auth=("admin", "password")
+    auth=("admin", "admin")
 )
 
 with driver.session() as session:
@@ -172,22 +182,22 @@ with driver.session() as session:
 ```
 
 **JavaScript:**
+
 ```javascript
-const neo4j = require('neo4j-driver');
+const neo4j = require("neo4j-driver");
 
 const driver = neo4j.driver(
-    'bolt://localhost:7687',
-    neo4j.auth.basic('admin', 'password')
+  "bolt://localhost:7687",
+  neo4j.auth.basic("admin", "admin")
 );
 
 const session = driver.session();
-const result = await session.run(
-    'MATCH (p:Person {name: $name}) RETURN p',
-    { name: 'Alice' }
-);
+const result = await session.run("MATCH (p:Person {name: $name}) RETURN p", {
+  name: "Alice",
+});
 
-result.records.forEach(record => {
-    console.log(record.get('p'));
+result.records.forEach((record) => {
+  console.log(record.get("p"));
 });
 ```
 

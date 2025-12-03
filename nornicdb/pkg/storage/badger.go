@@ -5,11 +5,13 @@
 package storage
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -2357,6 +2359,46 @@ func (b *BadgerEngine) ClearAllEmbeddings() (int, error) {
 
 	log.Printf("✓ Cleared embeddings from %d nodes", cleared)
 	return cleared, nil
+}
+
+// Backup creates a backup of the database to the specified file path.
+// Uses BadgerDB's streaming backup which creates a consistent snapshot.
+// The backup file is a self-contained, portable copy of the database.
+func (b *BadgerEngine) Backup(path string) error {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	if b.closed {
+		return ErrStorageClosed
+	}
+
+	// Create backup file
+	f, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("failed to create backup file: %w", err)
+	}
+	defer f.Close()
+
+	// Use BufferedWriter for better performance
+	buf := bufio.NewWriterSize(f, 16*1024*1024) // 16MB buffer
+
+	// Stream backup (since=0 means full backup)
+	_, err = b.db.Backup(buf, 0)
+	if err != nil {
+		return fmt.Errorf("backup failed: %w", err)
+	}
+
+	// Flush buffer
+	if err := buf.Flush(); err != nil {
+		return fmt.Errorf("failed to flush backup: %w", err)
+	}
+
+	// Sync to disk
+	if err := f.Sync(); err != nil {
+		return fmt.Errorf("failed to sync backup: %w", err)
+	}
+
+	return nil
 }
 
 // Verify BadgerEngine implements Engine interface

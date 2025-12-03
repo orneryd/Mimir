@@ -26,8 +26,23 @@ var Storage storage.Storage = storage.NewInMemoryStorage()
 //
 //	apoc.search.node('Person', 'name', 'Alice') => matching nodes
 func Node(label, property string, value interface{}) []*NodeType {
-	// Placeholder - would query database
-	return []*NodeType{}
+	nodes, err := Storage.AllNodes()
+	if err != nil {
+		return []*NodeType{}
+	}
+
+	results := make([]*NodeType, 0)
+	for _, node := range nodes {
+		if !hasLabel(node, label) {
+			continue
+		}
+		if propVal, ok := node.Properties[property]; ok {
+			if propVal == value {
+				results = append(results, node)
+			}
+		}
+	}
+	return results
 }
 
 // NodeAll searches nodes matching all criteria.
@@ -36,8 +51,29 @@ func Node(label, property string, value interface{}) []*NodeType {
 //
 //	apoc.search.nodeAll('Person', {name: 'Alice', age: 30}) => matching nodes
 func NodeAll(label string, criteria map[string]interface{}) []*NodeType {
-	// Placeholder - would query database
-	return []*NodeType{}
+	nodes, err := Storage.AllNodes()
+	if err != nil {
+		return []*NodeType{}
+	}
+
+	results := make([]*NodeType, 0)
+	for _, node := range nodes {
+		if !hasLabel(node, label) {
+			continue
+		}
+		
+		matches := true
+		for key, value := range criteria {
+			if propVal, ok := node.Properties[key]; !ok || propVal != value {
+				matches = false
+				break
+			}
+		}
+		if matches {
+			results = append(results, node)
+		}
+	}
+	return results
 }
 
 // NodeAny searches nodes matching any criteria.
@@ -46,8 +82,25 @@ func NodeAll(label string, criteria map[string]interface{}) []*NodeType {
 //
 //	apoc.search.nodeAny('Person', {name: 'Alice', name: 'Bob'}) => matching nodes
 func NodeAny(label string, criteria map[string]interface{}) []*NodeType {
-	// Placeholder - would query database
-	return []*NodeType{}
+	nodes, err := Storage.AllNodes()
+	if err != nil {
+		return []*NodeType{}
+	}
+
+	results := make([]*NodeType, 0)
+	for _, node := range nodes {
+		if !hasLabel(node, label) {
+			continue
+		}
+		
+		for key, value := range criteria {
+			if propVal, ok := node.Properties[key]; ok && propVal == value {
+				results = append(results, node)
+				break
+			}
+		}
+	}
+	return results
 }
 
 // NodeReduced searches with reduced results.
@@ -107,8 +160,32 @@ func Parallel(labels []string, property string, value interface{}) []*NodeType {
 //
 //	apoc.search.fullText('Person', 'name', 'Alice Bob') => matching nodes
 func FullText(label, property, query string) []*NodeType {
-	// Placeholder - would perform full-text search
-	return []*NodeType{}
+	nodes, err := Storage.AllNodes()
+	if err != nil {
+		return []*NodeType{}
+	}
+
+	queryLower := strings.ToLower(query)
+	words := strings.Fields(queryLower)
+	
+	results := make([]*NodeType, 0)
+	for _, node := range nodes {
+		if !hasLabel(node, label) {
+			continue
+		}
+		if propVal, ok := node.Properties[property]; ok {
+			if strVal, ok := propVal.(string); ok {
+				strLower := strings.ToLower(strVal)
+				for _, word := range words {
+					if strings.Contains(strLower, word) {
+						results = append(results, node)
+						break
+					}
+				}
+			}
+		}
+	}
+	return results
 }
 
 // Fuzzy performs fuzzy search.
@@ -117,8 +194,28 @@ func FullText(label, property, query string) []*NodeType {
 //
 //	apoc.search.fuzzy('Person', 'name', 'Alise', 2) => matches within edit distance 2
 func Fuzzy(label, property, value string, maxDistance int) []*NodeType {
-	// Placeholder - would perform fuzzy matching
-	return []*NodeType{}
+	nodes, err := Storage.AllNodes()
+	if err != nil {
+		return []*NodeType{}
+	}
+
+	valueLower := strings.ToLower(value)
+	
+	results := make([]*NodeType, 0)
+	for _, node := range nodes {
+		if !hasLabel(node, label) {
+			continue
+		}
+		if propVal, ok := node.Properties[property]; ok {
+			if strVal, ok := propVal.(string); ok {
+				distance := levenshteinDistance(strings.ToLower(strVal), valueLower)
+				if distance <= maxDistance {
+					results = append(results, node)
+				}
+			}
+		}
+	}
+	return results
 }
 
 // Regex searches using regular expressions.
@@ -127,8 +224,30 @@ func Fuzzy(label, property, value string, maxDistance int) []*NodeType {
 //
 //	apoc.search.regex('Person', 'email', '.*@example\\.com') => matching nodes
 func Regex(label, property, pattern string) []*NodeType {
-	// Placeholder - would search with regex
-	return []*NodeType{}
+	nodes, err := Storage.AllNodes()
+	if err != nil {
+		return []*NodeType{}
+	}
+
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return []*NodeType{}
+	}
+	
+	results := make([]*NodeType, 0)
+	for _, node := range nodes {
+		if !hasLabel(node, label) {
+			continue
+		}
+		if propVal, ok := node.Properties[property]; ok {
+			if strVal, ok := propVal.(string); ok {
+				if re.MatchString(strVal) {
+					results = append(results, node)
+				}
+			}
+		}
+	}
+	return results
 }
 
 // Prefix searches by prefix.
@@ -137,8 +256,27 @@ func Regex(label, property, pattern string) []*NodeType {
 //
 //	apoc.search.prefix('Person', 'name', 'Ali') => names starting with 'Ali'
 func Prefix(label, property, prefix string) []*NodeType {
-	// Placeholder - would search by prefix
-	return []*NodeType{}
+	nodes, err := Storage.AllNodes()
+	if err != nil {
+		return []*NodeType{}
+	}
+
+	prefixLower := strings.ToLower(prefix)
+	
+	results := make([]*NodeType, 0)
+	for _, node := range nodes {
+		if !hasLabel(node, label) {
+			continue
+		}
+		if propVal, ok := node.Properties[property]; ok {
+			if strVal, ok := propVal.(string); ok {
+				if strings.HasPrefix(strings.ToLower(strVal), prefixLower) {
+					results = append(results, node)
+				}
+			}
+		}
+	}
+	return results
 }
 
 // Suffix searches by suffix.
@@ -147,8 +285,27 @@ func Prefix(label, property, prefix string) []*NodeType {
 //
 //	apoc.search.suffix('Person', 'email', '@example.com') => emails ending with suffix
 func Suffix(label, property, suffix string) []*NodeType {
-	// Placeholder - would search by suffix
-	return []*NodeType{}
+	nodes, err := Storage.AllNodes()
+	if err != nil {
+		return []*NodeType{}
+	}
+
+	suffixLower := strings.ToLower(suffix)
+	
+	results := make([]*NodeType, 0)
+	for _, node := range nodes {
+		if !hasLabel(node, label) {
+			continue
+		}
+		if propVal, ok := node.Properties[property]; ok {
+			if strVal, ok := propVal.(string); ok {
+				if strings.HasSuffix(strings.ToLower(strVal), suffixLower) {
+					results = append(results, node)
+				}
+			}
+		}
+	}
+	return results
 }
 
 // Contains searches for substring.
@@ -157,8 +314,27 @@ func Suffix(label, property, suffix string) []*NodeType {
 //
 //	apoc.search.contains('Person', 'name', 'lic') => names containing 'lic'
 func Contains(label, property, substring string) []*NodeType {
-	// Placeholder - would search for substring
-	return []*NodeType{}
+	nodes, err := Storage.AllNodes()
+	if err != nil {
+		return []*NodeType{}
+	}
+
+	substringLower := strings.ToLower(substring)
+	
+	results := make([]*NodeType, 0)
+	for _, node := range nodes {
+		if !hasLabel(node, label) {
+			continue
+		}
+		if propVal, ok := node.Properties[property]; ok {
+			if strVal, ok := propVal.(string); ok {
+				if strings.Contains(strings.ToLower(strVal), substringLower) {
+					results = append(results, node)
+				}
+			}
+		}
+	}
+	return results
 }
 
 // Range searches within a range.
@@ -166,9 +342,83 @@ func Contains(label, property, substring string) []*NodeType {
 // Example:
 //
 //	apoc.search.range('Person', 'age', 18, 65) => nodes with age 18-65
-func Range(label, property string, min, max interface{}) []*NodeType {
-	// Placeholder - would search within range
-	return []*NodeType{}
+func Range(label, property string, minVal, maxVal interface{}) []*NodeType {
+	nodes, err := Storage.AllNodes()
+	if err != nil {
+		return []*NodeType{}
+	}
+
+	results := make([]*NodeType, 0)
+	for _, node := range nodes {
+		if !hasLabel(node, label) {
+			continue
+		}
+		if propVal, ok := node.Properties[property]; ok {
+			if inRange(propVal, minVal, maxVal) {
+				results = append(results, node)
+			}
+		}
+	}
+	return results
+}
+
+// inRange checks if value is within range
+func inRange(value, minVal, maxVal interface{}) bool {
+	switch v := value.(type) {
+	case int:
+		min, minOk := toInt(minVal)
+		max, maxOk := toInt(maxVal)
+		return minOk && maxOk && v >= min && v <= max
+	case int64:
+		min, minOk := toInt64(minVal)
+		max, maxOk := toInt64(maxVal)
+		return minOk && maxOk && v >= min && v <= max
+	case float64:
+		min, minOk := toFloat64(minVal)
+		max, maxOk := toFloat64(maxVal)
+		return minOk && maxOk && v >= min && v <= max
+	case string:
+		minStr, minOk := minVal.(string)
+		maxStr, maxOk := maxVal.(string)
+		return minOk && maxOk && v >= minStr && v <= maxStr
+	}
+	return false
+}
+
+func toInt(v interface{}) (int, bool) {
+	switch val := v.(type) {
+	case int:
+		return val, true
+	case int64:
+		return int(val), true
+	case float64:
+		return int(val), true
+	}
+	return 0, false
+}
+
+func toInt64(v interface{}) (int64, bool) {
+	switch val := v.(type) {
+	case int:
+		return int64(val), true
+	case int64:
+		return val, true
+	case float64:
+		return int64(val), true
+	}
+	return 0, false
+}
+
+func toFloat64(v interface{}) (float64, bool) {
+	switch val := v.(type) {
+	case int:
+		return float64(val), true
+	case int64:
+		return float64(val), true
+	case float64:
+		return val, true
+	}
+	return 0, false
 }
 
 // In searches for values in a list.
@@ -177,8 +427,28 @@ func Range(label, property string, min, max interface{}) []*NodeType {
 //
 //	apoc.search.in('Person', 'status', ['active', 'pending']) => matching nodes
 func In(label, property string, values []interface{}) []*NodeType {
-	// Placeholder - would search for values in list
-	return []*NodeType{}
+	nodes, err := Storage.AllNodes()
+	if err != nil {
+		return []*NodeType{}
+	}
+
+	valueSet := make(map[interface{}]bool)
+	for _, v := range values {
+		valueSet[v] = true
+	}
+	
+	results := make([]*NodeType, 0)
+	for _, node := range nodes {
+		if !hasLabel(node, label) {
+			continue
+		}
+		if propVal, ok := node.Properties[property]; ok {
+			if valueSet[propVal] {
+				results = append(results, node)
+			}
+		}
+	}
+	return results
 }
 
 // NotIn searches for values not in a list.
@@ -187,8 +457,28 @@ func In(label, property string, values []interface{}) []*NodeType {
 //
 //	apoc.search.notIn('Person', 'status', ['deleted', 'banned']) => matching nodes
 func NotIn(label, property string, values []interface{}) []*NodeType {
-	// Placeholder - would search for values not in list
-	return []*NodeType{}
+	nodes, err := Storage.AllNodes()
+	if err != nil {
+		return []*NodeType{}
+	}
+
+	valueSet := make(map[interface{}]bool)
+	for _, v := range values {
+		valueSet[v] = true
+	}
+	
+	results := make([]*NodeType, 0)
+	for _, node := range nodes {
+		if !hasLabel(node, label) {
+			continue
+		}
+		if propVal, ok := node.Properties[property]; ok {
+			if !valueSet[propVal] {
+				results = append(results, node)
+			}
+		}
+	}
+	return results
 }
 
 // Exists searches for nodes with property.
@@ -197,8 +487,21 @@ func NotIn(label, property string, values []interface{}) []*NodeType {
 //
 //	apoc.search.exists('Person', 'email') => nodes with email property
 func Exists(label, property string) []*NodeType {
-	// Placeholder - would search for property existence
-	return []*NodeType{}
+	nodes, err := Storage.AllNodes()
+	if err != nil {
+		return []*NodeType{}
+	}
+
+	results := make([]*NodeType, 0)
+	for _, node := range nodes {
+		if !hasLabel(node, label) {
+			continue
+		}
+		if _, ok := node.Properties[property]; ok {
+			results = append(results, node)
+		}
+	}
+	return results
 }
 
 // Missing searches for nodes without property.
@@ -207,8 +510,21 @@ func Exists(label, property string) []*NodeType {
 //
 //	apoc.search.missing('Person', 'email') => nodes without email
 func Missing(label, property string) []*NodeType {
-	// Placeholder - would search for missing property
-	return []*NodeType{}
+	nodes, err := Storage.AllNodes()
+	if err != nil {
+		return []*NodeType{}
+	}
+
+	results := make([]*NodeType, 0)
+	for _, node := range nodes {
+		if !hasLabel(node, label) {
+			continue
+		}
+		if _, ok := node.Properties[property]; !ok {
+			results = append(results, node)
+		}
+	}
+	return results
 }
 
 // Null searches for nodes with null property.
@@ -217,8 +533,21 @@ func Missing(label, property string) []*NodeType {
 //
 //	apoc.search.null('Person', 'middleName') => nodes with null middleName
 func Null(label, property string) []*NodeType {
-	// Placeholder - would search for null values
-	return []*NodeType{}
+	nodes, err := Storage.AllNodes()
+	if err != nil {
+		return []*NodeType{}
+	}
+
+	results := make([]*NodeType, 0)
+	for _, node := range nodes {
+		if !hasLabel(node, label) {
+			continue
+		}
+		if propVal, ok := node.Properties[property]; ok && propVal == nil {
+			results = append(results, node)
+		}
+	}
+	return results
 }
 
 // NotNull searches for nodes with non-null property.
@@ -227,8 +556,31 @@ func Null(label, property string) []*NodeType {
 //
 //	apoc.search.notNull('Person', 'email') => nodes with non-null email
 func NotNull(label, property string) []*NodeType {
-	// Placeholder - would search for non-null values
-	return []*NodeType{}
+	nodes, err := Storage.AllNodes()
+	if err != nil {
+		return []*NodeType{}
+	}
+
+	results := make([]*NodeType, 0)
+	for _, node := range nodes {
+		if !hasLabel(node, label) {
+			continue
+		}
+		if propVal, ok := node.Properties[property]; ok && propVal != nil {
+			results = append(results, node)
+		}
+	}
+	return results
+}
+
+// hasLabel checks if node has a specific label
+func hasLabel(node *NodeType, label string) bool {
+	for _, l := range node.Labels {
+		if l == label {
+			return true
+		}
+	}
+	return false
 }
 
 // Match matches pattern against property.
@@ -358,8 +710,20 @@ func Highlight(text, query, prefix, suffix string) string {
 //
 //	apoc.search.suggest('Person', 'name', 'Ali', 5) => ['Alice', 'Alison', ...]
 func Suggest(label, property, prefix string, limit int) []string {
-	// Placeholder - would provide suggestions
-	return []string{}
+	nodes := Prefix(label, property, prefix)
+	
+	suggestions := make([]string, 0, limit)
+	for i, node := range nodes {
+		if i >= limit {
+			break
+		}
+		if propVal, ok := node.Properties[property]; ok {
+			if strVal, ok := propVal.(string); ok {
+				suggestions = append(suggestions, strVal)
+			}
+		}
+	}
+	return suggestions
 }
 
 // Autocomplete provides autocomplete suggestions.
@@ -377,8 +741,18 @@ func Autocomplete(label, property, prefix string) []string {
 //
 //	apoc.search.didYouMean('Person', 'name', 'Alise') => ['Alice']
 func DidYouMean(label, property, query string) []string {
-	// Placeholder - would provide spelling suggestions
-	return []string{}
+	// Get fuzzy matches within distance 2
+	nodes := Fuzzy(label, property, query, 2)
+	
+	suggestions := make([]string, 0)
+	for _, node := range nodes {
+		if propVal, ok := node.Properties[property]; ok {
+			if strVal, ok := propVal.(string); ok {
+				suggestions = append(suggestions, strVal)
+			}
+		}
+	}
+	return suggestions
 }
 
 // Index creates a search index.

@@ -8,6 +8,8 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -57,9 +59,15 @@ func JsonAll(nodes []*Node, rels []*Relationship, filePath string) error {
 		return err
 	}
 
-	// In production, would write to file
-	_ = jsonStr
-	_ = filePath
+	// Write to file if path provided
+	if filePath != "" {
+		if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
+			return fmt.Errorf("failed to create directory: %w", err)
+		}
+		if err := os.WriteFile(filePath, []byte(jsonStr), 0644); err != nil {
+			return fmt.Errorf("failed to write file: %w", err)
+		}
+	}
 
 	return nil
 }
@@ -110,8 +118,15 @@ func Csv(nodes []*Node, filePath string) error {
 
 	writer.Flush()
 
-	// In production, would write to file
-	_ = filePath
+	// Write to file if path provided
+	if filePath != "" {
+		if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
+			return fmt.Errorf("failed to create directory: %w", err)
+		}
+		if err := os.WriteFile(filePath, []byte(builder.String()), 0644); err != nil {
+			return fmt.Errorf("failed to write file: %w", err)
+		}
+	}
 
 	return nil
 }

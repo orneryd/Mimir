@@ -84,6 +84,13 @@ func Initialize(storage storage.Storage, cfg *Config) error {
 			config = cfg
 		}
 
+		// Inject storage into subpackages
+		label.SetStorage(storage)
+		// TODO: Add SetStorage for other packages as they're implemented
+		// apoccypher.SetStorage(storage)
+		// apoclog.SetStorage(storage)
+		// xml.SetStorage(storage)
+
 		functions = make(map[string]Function)
 		err = registerAllFunctions()
 	})
@@ -95,6 +102,14 @@ func SetStorage(s storage.Storage) {
 	mu.Lock()
 	defer mu.Unlock()
 	store = s
+}
+
+// GetStorage returns the current storage backend for use by APOC functions.
+// This allows subpackages to access the database without tight coupling.
+func GetStorage() storage.Storage {
+	mu.RLock()
+	defer mu.RUnlock()
+	return store
 }
 
 // Call executes an APOC function by name.

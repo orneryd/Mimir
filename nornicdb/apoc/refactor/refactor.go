@@ -261,34 +261,100 @@ func CategorizeProperty(node *Node, property, newProperty string, categories [][
 	return node
 }
 
-// RenameLabel renames a label on nodes.
+// RenameLabel renames a label on all nodes that have it.
 //
 // Example:
 //
 //	apoc.refactor.rename.label('OldLabel', 'NewLabel') => count
 func RenameLabel(oldLabel, newLabel string) int {
-	// Placeholder - would update all nodes with oldLabel
-	return 0
+	nodes, err := Storage.AllNodes()
+	if err != nil {
+		return 0
+	}
+
+	count := 0
+	for _, node := range nodes {
+		for i, label := range node.Labels {
+			if label == oldLabel {
+				node.Labels[i] = newLabel
+				if err := Storage.UpdateNodeLabels(node.ID, node.Labels); err == nil {
+					count++
+				}
+				break
+			}
+		}
+	}
+	return count
 }
 
-// RenameType renames a relationship type.
+// RenameType renames a relationship type on all relationships.
 //
 // Example:
 //
 //	apoc.refactor.rename.type('OLD_TYPE', 'NEW_TYPE') => count
 func RenameType(oldType, newType string) int {
-	// Placeholder - would update all relationships with oldType
-	return 0
+	rels, err := Storage.AllRelationships()
+	if err != nil {
+		return 0
+	}
+
+	count := 0
+	for _, rel := range rels {
+		if rel.Type == oldType {
+			if err := Storage.UpdateRelationshipType(rel.ID, newType); err == nil {
+				count++
+			}
+		}
+	}
+	return count
 }
 
-// RenameProperty renames a property on nodes.
+// RenameProperty renames a property on all nodes that have it.
 //
 // Example:
 //
 //	apoc.refactor.rename.nodeProperty('oldName', 'newName') => count
 func RenameProperty(oldName, newName string) int {
-	// Placeholder - would rename property on all nodes
-	return 0
+	nodes, err := Storage.AllNodes()
+	if err != nil {
+		return 0
+	}
+
+	count := 0
+	for _, node := range nodes {
+		if val, exists := node.Properties[oldName]; exists {
+			delete(node.Properties, oldName)
+			node.Properties[newName] = val
+			if err := Storage.UpdateNode(node.ID, node.Properties); err == nil {
+				count++
+			}
+		}
+	}
+	return count
+}
+
+// RenameRelProperty renames a property on all relationships that have it.
+//
+// Example:
+//
+//	apoc.refactor.rename.relProperty('oldName', 'newName') => count
+func RenameRelProperty(oldName, newName string) int {
+	rels, err := Storage.AllRelationships()
+	if err != nil {
+		return 0
+	}
+
+	count := 0
+	for _, rel := range rels {
+		if val, exists := rel.Properties[oldName]; exists {
+			delete(rel.Properties, oldName)
+			rel.Properties[newName] = val
+			if err := Storage.UpdateRelationship(rel.ID, rel.Properties); err == nil {
+				count++
+			}
+		}
+	}
+	return count
 }
 
 // SetType changes relationship type.

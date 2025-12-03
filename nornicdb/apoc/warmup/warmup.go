@@ -5,7 +5,7 @@
 package warmup
 
 import (
-	"fmt"
+	"sync"
 	"time"
 
 	"github.com/orneryd/nornicdb/apoc/storage"
@@ -20,6 +20,39 @@ type Relationship = storage.Relationship
 // Storage is the interface for database operations.
 var Storage storage.Storage = storage.NewInMemoryStorage()
 
+// WarmupCache holds cached data for quick access.
+type WarmupCache struct {
+	mu              sync.RWMutex
+	nodes           map[int64]*Node
+	relationships   map[int64]*Relationship
+	nodesByLabel    map[string][]*Node
+	relsByType      map[string][]*Relationship
+	properties      map[string][]interface{}
+	queries         map[string]interface{}
+	stats           CacheStats
+	lastRun         *time.Time
+	nextRun         *time.Time
+	running         bool
+	scheduledCron   string
+}
+
+// CacheStats tracks cache statistics.
+type CacheStats struct {
+	Hits       int64
+	Misses     int64
+	MemoryUsed int64
+}
+
+// Global cache instance
+var cache = &WarmupCache{
+	nodes:         make(map[int64]*Node),
+	relationships: make(map[int64]*Relationship),
+	nodesByLabel:  make(map[string][]*Node),
+	relsByType:    make(map[string][]*Relationship),
+	properties:    make(map[string][]interface{}),
+	queries:       make(map[string]interface{}),
+}
+
 // Run performs a full database warmup.
 //
 // Example:
@@ -28,20 +61,62 @@ var Storage storage.Storage = storage.NewInMemoryStorage()
 func Run() map[string]interface{} {
 	start := time.Now()
 
+	cache.mu.Lock()
+	cache.running = true
+	cache.mu.Unlock()
+
+	defer func() {
+		cache.mu.Lock()
+		cache.running = false
+		now := time.Now()
+		cache.lastRun = &now
+		cache.mu.Unlock()
+	}()
+
 	nodesLoaded := 0
 	relsLoaded := 0
+	propertiesLoaded := 0
 
-	// Placeholder - would load all data into memory
-	fmt.Println("Warming up database...")
+	// Load all nodes
+	nodes, err := Storage.AllNodes()
+	if err == nil {
+		cache.mu.Lock()
+		for _, node := range nodes {
+			cache.nodes[node.ID] = node
+			nodesLoaded++
+			propertiesLoaded += len(node.Properties)
+
+			// Index by label
+			for _, label := range node.Labels {
+				cache.nodesByLabel[label] = append(cache.nodesByLabel[label], node)
+			}
+		}
+		cache.mu.Unlock()
+	}
+
+	// Load all relationships
+	rels, err := Storage.AllRelationships()
+	if err == nil {
+		cache.mu.Lock()
+		for _, rel := range rels {
+			cache.relationships[rel.ID] = rel
+			relsLoaded++
+			propertiesLoaded += len(rel.Properties)
+
+			// Index by type
+			cache.relsByType[rel.Type] = append(cache.relsByType[rel.Type], rel)
+		}
+		cache.mu.Unlock()
+	}
 
 	elapsed := time.Since(start).Milliseconds()
 
 	return map[string]interface{}{
-		"nodesLoaded":          nodesLoaded,
-		"relationshipsLoaded":  relsLoaded,
-		"propertiesLoaded":     0,
-		"indexesLoaded":        0,
-		"timeTaken":            elapsed,
+		"nodesLoaded":         nodesLoaded,
+		"relationshipsLoaded": relsLoaded,
+		"propertiesLoaded":    propertiesLoaded,
+		"indexesLoaded":       len(cache.nodesByLabel) + len(cache.relsByType),
+		"timeTaken":           elapsed,
 	}
 }
 
@@ -58,6 +133,11 @@ func RunWithParams(params map[string]interface{}) map[string]interface{} {
 		labels = l
 	}
 
+	types := []string{}
+	if t, ok := params["types"].([]string); ok {
+		types = t
+	}
+
 	loadIndexes := true
 	if li, ok := params["loadIndexes"].(bool); ok {
 		loadIndexes = li
@@ -67,30 +147,41 @@ func RunWithParams(params map[string]interface{}) map[string]interface{} {
 	relsLoaded := 0
 	indexesLoaded := 0
 
-	// Load specific labels
-	for _, label := range labels {
-		fmt.Printf("Loading nodes with label: %s\n", label)
-		// Placeholder - would load nodes
-		nodesLoaded += 100
+	// Load nodes by specific labels
+	if len(labels) > 0 {
+		result := Nodes(labels)
+		nodesLoaded = result["nodesLoaded"].(int)
+		if loadIndexes {
+			indexesLoaded += len(labels)
+		}
 	}
 
-	// Load indexes
-	if loadIndexes {
-		fmt.Println("Loading indexes...")
-		indexesLoaded = 10
+	// Load relationships by specific types
+	if len(types) > 0 {
+		result := Relationships(types)
+		relsLoaded = result["relationshipsLoaded"].(int)
+		if loadIndexes {
+			indexesLoaded += len(types)
+		}
+	}
+
+	// If no specific labels/types, load all
+	if len(labels) == 0 && len(types) == 0 {
+		fullResult := Run()
+		return fullResult
 	}
 
 	elapsed := time.Since(start).Milliseconds()
 
 	return map[string]interface{}{
-		"nodesLoaded":          nodesLoaded,
-		"relationshipsLoaded":  relsLoaded,
-		"indexesLoaded":        indexesLoaded,
-		"timeTaken":            elapsed,
+		"nodesLoaded":         nodesLoaded,
+		"relationshipsLoaded": relsLoaded,
+		"indexesLoaded":       indexesLoaded,
+		"timeTaken":           elapsed,
 	}
 }
 
-// Nodes warms up specific nodes.
+// Nodes warms up specific nodes by label.
 //
 // Example:
 //
@@ -99,11 +190,33 @@ func Nodes(labels []string) map[string]interface{} {
 	start := time.Now()
 	nodesLoaded := 0
 
-	for _, label := range labels {
-		fmt.Printf("Warming up nodes with label: %s\n", label)
-		// Placeholder - would load nodes
-		nodesLoaded += 100
+	nodes, err := Storage.AllNodes()
+	if err != nil {
+		return map[string]interface{}{
+			"nodesLoaded": 0,
+			"labels":      labels,
+			"timeTaken":   time.Since(start).Milliseconds(),
+			"error":       err.Error(),
+		}
 	}
+
+	labelSet := make(map[string]bool)
+	for _, label := range labels {
+		labelSet[label] = true
+	}
+
+	cache.mu.Lock()
+	for _, node := range nodes {
+		for _, label := range node.Labels {
+			if labelSet[label] {
+				cache.nodes[node.ID] = node
+				cache.nodesByLabel[label] = append(cache.nodesByLabel[label], node)
+				nodesLoaded++
+				break
+			}
+		}
+	}
+	cache.mu.Unlock()
 
 	elapsed := time.Since(start).Milliseconds()
 
@@ -114,7 +227,7 @@ func Nodes(labels []string) map[string]interface{} {
 	}
 }
 
-// Relationships warms up specific relationships.
+// Relationships warms up specific relationships by type.
 //
 // Example:
 //
@@ -123,11 +236,30 @@ func Relationships(types []string) map[string]interface{} {
 	start := time.Now()
 	relsLoaded := 0
 
-	for _, relType := range types {
-		fmt.Printf("Warming up relationships of type: %s\n", relType)
-		// Placeholder - would load relationships
-		relsLoaded += 200
+	rels, err := Storage.AllRelationships()
+	if err != nil {
+		return map[string]interface{}{
+			"relationshipsLoaded": 0,
+			"types":               types,
+			"timeTaken":           time.Since(start).Milliseconds(),
+			"error":               err.Error(),
+		}
 	}
+
+	typeSet := make(map[string]bool)
+	for _, t := range types {
+		typeSet[t] = true
+	}
+
+	cache.mu.Lock()
+	for _, rel := range rels {
+		if typeSet[rel.Type] {
+			cache.relationships[rel.ID] = rel
+			cache.relsByType[rel.Type] = append(cache.relsByType[rel.Type], rel)
+			relsLoaded++
+		}
+	}
+	cache.mu.Unlock()
 
 	elapsed := time.Since(start).Milliseconds()
 
@@ -138,29 +270,53 @@ func Relationships(types []string) map[string]interface{} {
 	}
 }
 
-// Indexes warms up indexes.
+// Indexes warms up indexes (pre-builds label and type indexes).
 //
 // Example:
 //
 //	apoc.warmup.indexes() => indexes loaded
 func Indexes() map[string]interface{} {
 	start := time.Now()
-
-	fmt.Println("Warming up indexes...")
 	indexesLoaded := 0
 
-	// Placeholder - would load indexes
-	indexesLoaded = 10
+	// Build node label index
+	nodes, err := Storage.AllNodes()
+	if err == nil {
+		cache.mu.Lock()
+		// Clear existing indexes
+		cache.nodesByLabel = make(map[string][]*Node)
+		for _, node := range nodes {
+			for _, label := range node.Labels {
+				cache.nodesByLabel[label] = append(cache.nodesByLabel[label], node)
+			}
+		}
+		indexesLoaded += len(cache.nodesByLabel)
+		cache.mu.Unlock()
+	}
+
+	// Build relationship type index
+	rels, err := Storage.AllRelationships()
+	if err == nil {
+		cache.mu.Lock()
+		cache.relsByType = make(map[string][]*Relationship)
+		for _, rel := range rels {
+			cache.relsByType[rel.Type] = append(cache.relsByType[rel.Type], rel)
+		}
+		indexesLoaded += len(cache.relsByType)
+		cache.mu.Unlock()
+	}
 
 	elapsed := time.Since(start).Milliseconds()
 
 	return map[string]interface{}{
 		"indexesLoaded": indexesLoaded,
+		"labelIndexes":  len(cache.nodesByLabel),
+		"typeIndexes":   len(cache.relsByType),
 		"timeTaken":     elapsed,
 	}
 }
 
-// Properties warms up property data.
+// Properties warms up property data by collecting unique values.
 //
 // Example:
 //
@@ -169,10 +325,37 @@ func Properties(keys []string) map[string]interface{} {
 	start := time.Now()
 	propertiesLoaded := 0
 
+	keySet := make(map[string]bool)
 	for _, key := range keys {
-		fmt.Printf("Warming up property: %s\n", key)
-		// Placeholder - would load property data
-		propertiesLoaded += 1000
+		keySet[key] = true
+	}
+
+	nodes, err := Storage.AllNodes()
+	if err == nil {
+		cache.mu.Lock()
+		for _, node := range nodes {
+			for key, value := range node.Properties {
+				if keySet[key] {
+					cache.properties[key] = append(cache.properties[key], value)
+					propertiesLoaded++
+				}
+			}
+		}
+		cache.mu.Unlock()
+	}
+
+	rels, err := Storage.AllRelationships()
+	if err == nil {
+		cache.mu.Lock()
+		for _, rel := range rels {
+			for key, value := range rel.Properties {
+				if keySet[key] {
+					cache.properties[key] = append(cache.properties[key], value)
+					propertiesLoaded++
+				}
+			}
+		}
+		cache.mu.Unlock()
 	}
 
 	elapsed := time.Since(start).Milliseconds()
@@ -184,29 +367,42 @@ func Properties(keys []string) map[string]interface{} {
 	}
 }
 
-// Subgraph warms up a subgraph.
+// Subgraph warms up a subgraph starting from a node.
 //
 // Example:
 //
 //	apoc.warmup.subgraph(startNode, 3) => subgraph loaded
-func Subgraph(start *Node, depth int) map[string]interface{} {
+func Subgraph(startNode *Node, depth int) map[string]interface{} {
 	startTime := time.Now()
 
 	nodesLoaded := 0
 	relsLoaded := 0
 
+	if startNode == nil {
+		return map[string]interface{}{
+			"nodesLoaded":         0,
+			"relationshipsLoaded": 0,
+			"depth":               depth,
+			"timeTaken":           time.Since(startTime).Milliseconds(),
+			"error":               "start node is nil",
+		}
+	}
+
 	// BFS to load subgraph
 	visited := make(map[int64]bool)
-	queue := []*Node{start}
-	visited[start.ID] = true
+	queue := []*Node{startNode}
+	visited[startNode.ID] = true
 	currentDepth := 0
+
+	cache.mu.Lock()
+	cache.nodes[startNode.ID] = startNode
+	nodesLoaded++
 
 	for len(queue) > 0 && currentDepth < depth {
 		levelSize := len(queue)
 		for i := 0; i < levelSize; i++ {
 			current := queue[0]
 			queue = queue[1:]
-			nodesLoaded++
 
 			neighbors, err := Storage.GetNodeNeighbors(current.ID, "", storage.DirectionBoth)
 			if err == nil {
@@ -214,6 +410,18 @@ func Subgraph(start *Node, depth int) map[string]interface{} {
 					if !visited[neighbor.ID] {
 						visited[neighbor.ID] = true
 						queue = append(queue, neighbor)
+						cache.nodes[neighbor.ID] = neighbor
+						nodesLoaded++
+					}
+				}
+			}
+
+			// Also cache the relationships
+			rels, err := Storage.GetNodeRelationships(current.ID, "", storage.DirectionBoth)
+			if err == nil {
+				for _, rel := range rels {
+					if _, exists := cache.relationships[rel.ID]; !exists {
+						cache.relationships[rel.ID] = rel
 						relsLoaded++
 					}
 				}
@@ -221,6 +429,7 @@ func Subgraph(start *Node, depth int) map[string]interface{} {
 		}
 		currentDepth++
 	}
+	cache.mu.Unlock()
 
 	elapsed := time.Since(startTime).Milliseconds()
 
@@ -236,15 +445,21 @@ func Subgraph(start *Node, depth int) map[string]interface{} {
 //
 // Example:
 //
-//	apoc.warmup.path(path) => path loaded
+//	apoc.warmup.path(nodes, rels) => path loaded
 func Path(nodes []*Node, rels []*Relationship) map[string]interface{} {
 	start := time.Now()
 
-	// Load nodes and relationships in path
+	cache.mu.Lock()
+	for _, node := range nodes {
+		cache.nodes[node.ID] = node
+	}
+	for _, rel := range rels {
+		cache.relationships[rel.ID] = rel
+	}
+	cache.mu.Unlock()
+
 	nodesLoaded := len(nodes)
 	relsLoaded := len(rels)
-
-	fmt.Printf("Warming up path with %d nodes and %d relationships\n", nodesLoaded, relsLoaded)
 
 	elapsed := time.Since(start).Milliseconds()
 
@@ -255,23 +470,31 @@ func Path(nodes []*Node, rels []*Relationship) map[string]interface{} {
 	}
 }
 
-// Cache warms up cache for specific queries.
+// Cache warms up cache for specific queries (stores query results).
 //
 // Example:
 //
 //	apoc.warmup.cache(['MATCH (n:Person) RETURN n']) => cache warmed
 func Cache(queries []string) map[string]interface{} {
 	start := time.Now()
+	queriesWarmed := 0
 
+	cache.mu.Lock()
 	for _, query := range queries {
-		fmt.Printf("Warming up cache for query: %s\n", query)
-		// Placeholder - would execute and cache query
+		// Store a placeholder for the query result
+		// In a real implementation, this would execute the query and cache results
+		cache.queries[query] = map[string]interface{}{
+			"cached":   true,
+			"cachedAt": time.Now(),
+		}
+		queriesWarmed++
 	}
+	cache.mu.Unlock()
 
 	elapsed := time.Since(start).Milliseconds()
 
 	return map[string]interface{}{
-		"queriesWarmed": len(queries),
+		"queriesWarmed": queriesWarmed,
 		"timeTaken":     elapsed,
 	}
 }
@@ -282,12 +505,31 @@ func Cache(queries []string) map[string]interface{} {
 //
 //	apoc.warmup.stats() => {cacheHitRate: 0.95, ...}
 func Stats() map[string]interface{} {
-	// Placeholder - would return actual cache statistics
+	cache.mu.RLock()
+	defer cache.mu.RUnlock()
+
+	totalRequests := cache.stats.Hits + cache.stats.Misses
+	hitRate := 0.0
+	missRate := 0.0
+	if totalRequests > 0 {
+		hitRate = float64(cache.stats.Hits) / float64(totalRequests)
+		missRate = float64(cache.stats.Misses) / float64(totalRequests)
+	}
+
+	itemsCached := len(cache.nodes) + len(cache.relationships) + len(cache.queries)
+
 	return map[string]interface{}{
-		"cacheHitRate":     0.0,
-		"cacheMissRate":    0.0,
-		"memoryUsed":       0,
-		"itemsCached":      0,
+		"cacheHitRate":        hitRate,
+		"cacheMissRate":       missRate,
+		"cacheHits":           cache.stats.Hits,
+		"cacheMisses":         cache.stats.Misses,
+		"memoryUsed":          cache.stats.MemoryUsed,
+		"itemsCached":         itemsCached,
+		"nodesCached":         len(cache.nodes),
+		"relationshipsCached": len(cache.relationships),
+		"queriesCached":       len(cache.queries),
+		"labelIndexes":        len(cache.nodesByLabel),
+		"typeIndexes":         len(cache.relsByType),
 	}
 }
 
@@ -297,15 +539,26 @@ func Stats() map[string]interface{} {
 //
 //	apoc.warmup.clear() => cache cleared
 func Clear() map[string]interface{} {
-	fmt.Println("Clearing warmup cache...")
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
 
-	// Placeholder - would clear cache
+	itemsCleared := len(cache.nodes) + len(cache.relationships) + len(cache.queries)
+
+	cache.nodes = make(map[int64]*Node)
+	cache.relationships = make(map[int64]*Relationship)
+	cache.nodesByLabel = make(map[string][]*Node)
+	cache.relsByType = make(map[string][]*Relationship)
+	cache.properties = make(map[string][]interface{})
+	cache.queries = make(map[string]interface{})
+	cache.stats = CacheStats{}
+
 	return map[string]interface{}{
-		"cleared": true,
+		"cleared":      true,
+		"itemsCleared": itemsCleared,
 	}
 }
 
-// Optimize optimizes warmup strategy.
+// Optimize analyzes cache usage and provides recommendations.
 //
 // Example:
 //
@@ -313,30 +566,63 @@ func Clear() map[string]interface{} {
 func Optimize() map[string]interface{} {
 	start := time.Now()
 
-	fmt.Println("Optimizing warmup strategy...")
+	cache.mu.RLock()
+	recommendations := []string{}
 
-	// Placeholder - would analyze and optimize
+	// Analyze cache and provide recommendations
+	if len(cache.nodes) == 0 {
+		recommendations = append(recommendations, "Consider running warmup.Run() to cache nodes")
+	}
+
+	if len(cache.nodesByLabel) == 0 {
+		recommendations = append(recommendations, "Consider running warmup.Indexes() to build label indexes")
+	}
+
+	totalRequests := cache.stats.Hits + cache.stats.Misses
+	if totalRequests > 0 {
+		hitRate := float64(cache.stats.Hits) / float64(totalRequests)
+		if hitRate < 0.5 {
+			recommendations = append(recommendations, "Low cache hit rate - consider warming up more frequently accessed data")
+		}
+	}
+
+	// Find most used labels
+	topLabels := []string{}
+	for label, nodes := range cache.nodesByLabel {
+		if len(nodes) > 10 {
+			topLabels = append(topLabels, label)
+		}
+	}
+	if len(topLabels) > 0 {
+		recommendations = append(recommendations, "Frequently used labels detected - consider prioritizing: "+joinStrings(topLabels, ", "))
+	}
+
+	cache.mu.RUnlock()
+
+	if len(recommendations) == 0 {
+		recommendations = append(recommendations, "Cache is well optimized")
+	}
+
 	elapsed := time.Since(start).Milliseconds()
 
 	return map[string]interface{}{
-		"optimized":     true,
-		"timeTaken":     elapsed,
-		"recommendations": []string{
-			"Consider warming up frequently accessed nodes",
-			"Index warmup recommended for Person.name",
-		},
+		"optimized":       true,
+		"timeTaken":       elapsed,
+		"recommendations": recommendations,
 	}
 }
 
-// Schedule schedules periodic warmup.
+// Schedule schedules periodic warmup (stores cron expression).
 //
 // Example:
 //
 //	apoc.warmup.schedule('0 0 * * *') => scheduled
 func Schedule(cron string) map[string]interface{} {
-	fmt.Printf("Scheduling warmup with cron: %s\n", cron)
+	cache.mu.Lock()
+	cache.scheduledCron = cron
+	// In a real implementation, this would set up a cron job
+	cache.mu.Unlock()
 
-	// Placeholder - would schedule periodic warmup
 	return map[string]interface{}{
 		"scheduled": true,
 		"cron":      cron,
@@ -349,11 +635,23 @@ func Schedule(cron string) map[string]interface{} {
 //
 //	apoc.warmup.status() => {running: false, lastRun: ...}
 func Status() map[string]interface{} {
+	cache.mu.RLock()
+	defer cache.mu.RUnlock()
+
+	var lastRunStr, nextRunStr interface{}
+	if cache.lastRun != nil {
+		lastRunStr = cache.lastRun.Format(time.RFC3339)
+	}
+	if cache.nextRun != nil {
+		nextRunStr = cache.nextRun.Format(time.RFC3339)
+	}
+
 	return map[string]interface{}{
-		"running":     false,
-		"lastRun":     nil,
-		"nextRun":     nil,
-		"itemsCached": 0,
+		"running":       cache.running,
+		"lastRun":       lastRunStr,
+		"nextRun":       nextRunStr,
+		"scheduledCron": cache.scheduledCron,
+		"itemsCached":   len(cache.nodes) + len(cache.relationships) + len(cache.queries),
 	}
 }
 
@@ -363,11 +661,89 @@ func Status() map[string]interface{} {
 //
 //	apoc.warmup.progress() => {percentage: 75, ...}
 func Progress() map[string]interface{} {
-	return map[string]interface{}{
-		"percentage":   0,
-		"nodesLoaded":  0,
-		"totalNodes":   0,
-		"relsLoaded":   0,
-		"totalRels":    0,
+	cache.mu.RLock()
+	defer cache.mu.RUnlock()
+
+	// Get totals from storage
+	allNodes, _ := Storage.AllNodes()
+	allRels, _ := Storage.AllRelationships()
+
+	totalNodes := len(allNodes)
+	totalRels := len(allRels)
+
+	cachedNodes := len(cache.nodes)
+	cachedRels := len(cache.relationships)
+
+	percentage := 0.0
+	if totalNodes+totalRels > 0 {
+		percentage = float64(cachedNodes+cachedRels) / float64(totalNodes+totalRels) * 100
 	}
+
+	return map[string]interface{}{
+		"percentage":  percentage,
+		"nodesLoaded": cachedNodes,
+		"totalNodes":  totalNodes,
+		"relsLoaded":  cachedRels,
+		"totalRels":   totalRels,
+	}
+}
+
+// GetCachedNode retrieves a node from cache (increments hit/miss stats).
+func GetCachedNode(id int64) (*Node, bool) {
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+
+	if node, exists := cache.nodes[id]; exists {
+		cache.stats.Hits++
+		return node, true
+	}
+	cache.stats.Misses++
+	return nil, false
+}
+
+// GetCachedRelationship retrieves a relationship from cache.
+func GetCachedRelationship(id int64) (*Relationship, bool) {
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+
+	if rel, exists := cache.relationships[id]; exists {
+		cache.stats.Hits++
+		return rel, true
+	}
+	cache.stats.Misses++
+	return nil, false
+}
+
+// GetNodesByLabel retrieves nodes by label from cache.
+func GetNodesByLabel(label string) ([]*Node, bool) {
+	cache.mu.RLock()
+	defer cache.mu.RUnlock()
+
+	if nodes, exists := cache.nodesByLabel[label]; exists {
+		return nodes, true
+	}
+	return nil, false
+}
+
+// GetRelationshipsByType retrieves relationships by type from cache.
+func GetRelationshipsByType(relType string) ([]*Relationship, bool) {
+	cache.mu.RLock()
+	defer cache.mu.RUnlock()
+
+	if rels, exists := cache.relsByType[relType]; exists {
+		return rels, true
+	}
+	return nil, false
+}
+
+// Helper function to join strings
+func joinStrings(strs []string, sep string) string {
+	if len(strs) == 0 {
+		return ""
+	}
+	result := strs[0]
+	for i := 1; i < len(strs); i++ {
+		result += sep + strs[i]
+	}
+	return result
 }

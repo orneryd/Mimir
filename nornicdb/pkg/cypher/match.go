@@ -33,8 +33,8 @@ func (e *StorageExecutor) executeMatch(ctx context.Context, cypher string) (*Exe
 	// But NOT: MATCH (a) RETURN a UNION MATCH (b) RETURN b
 	// And NOT: MATCH (n) WHERE EXISTS { MATCH (m) ... } RETURN n
 	hasUnion := strings.Contains(upper, "UNION")
-	hasExists := strings.Contains(upper, "EXISTS")
-	hasCountSubquery := strings.Contains(upper, "COUNT {")
+	hasExists := hasSubqueryPattern(cypher, existsSubqueryRe)
+	hasCountSubquery := hasSubqueryPattern(cypher, countSubqueryRe)
 	hasWith := findKeywordIndex(cypher, "WITH") > 0
 
 	if !hasUnion && !hasExists && !hasCountSubquery && !hasWith {
@@ -2176,7 +2176,7 @@ func (e *StorageExecutor) executeMatchUnwind(ctx context.Context, cypher string)
 	returnIdx := findKeywordIndex(cypher, "RETURN")
 
 	if matchIdx == -1 || unwindIdx == -1 {
-		return nil, fmt.Errorf("MATCH and UNWIND clauses required")
+		return nil, fmt.Errorf("MATCH and UNWIND clauses required (e.g., MATCH (n) UNWIND n.items AS item RETURN item)")
 	}
 
 	// Parse MATCH clause
@@ -2227,7 +2227,7 @@ func (e *StorageExecutor) executeMatchUnwind(ctx context.Context, cypher string)
 	// Find AS keyword
 	asIdx := strings.Index(strings.ToUpper(unwindPart), " AS ")
 	if asIdx == -1 {
-		return nil, fmt.Errorf("UNWIND requires AS clause")
+		return nil, fmt.Errorf("UNWIND requires AS clause (e.g., UNWIND [1,2,3] AS x)")
 	}
 
 	unwindExpr = strings.TrimSpace(unwindPart[:asIdx])
@@ -2548,7 +2548,7 @@ func (e *StorageExecutor) executeMatchWithUnwind(ctx context.Context, cypher str
 	returnIdx := findKeywordIndex(cypher, "RETURN")
 
 	if matchIdx == -1 || withIdx == -1 || unwindIdx == -1 || returnIdx == -1 {
-		return nil, fmt.Errorf("MATCH, WITH, UNWIND, and RETURN clauses required")
+		return nil, fmt.Errorf("MATCH, WITH, UNWIND, and RETURN clauses required (e.g., MATCH (n) WITH n UNWIND n.items AS item RETURN item)")
 	}
 
 	// Step 1: Parse MATCH clause
@@ -2637,7 +2637,7 @@ func (e *StorageExecutor) executeMatchWithUnwind(ctx context.Context, cypher str
 	unwindSection := strings.TrimSpace(cypher[unwindIdx+7:]) // Skip " UNWIND "
 	asIdx := strings.Index(strings.ToUpper(unwindSection), " AS ")
 	if asIdx == -1 {
-		return nil, fmt.Errorf("UNWIND requires AS clause")
+		return nil, fmt.Errorf("UNWIND requires AS clause (e.g., UNWIND [1,2,3] AS x)")
 	}
 
 	unwindExpr := strings.TrimSpace(unwindSection[:asIdx])

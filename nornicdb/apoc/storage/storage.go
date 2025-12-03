@@ -13,22 +13,30 @@ type Storage interface {
 	DeleteNode(id int64) error
 	AddLabels(id int64, labels []string) error
 	RemoveLabels(id int64, labels []string) error
-	
+
+	// Bulk node operations
+	AllNodes() ([]*Node, error)
+	UpdateNodeLabels(id int64, labels []string) error
+
 	// Relationship operations
 	GetRelationship(id int64) (*Relationship, error)
 	CreateRelationship(startID, endID int64, relType string, properties map[string]interface{}) (*Relationship, error)
 	UpdateRelationship(id int64, properties map[string]interface{}) error
 	DeleteRelationship(id int64) error
-	
+	UpdateRelationshipType(id int64, newType string) error
+
+	// Bulk relationship operations
+	AllRelationships() ([]*Relationship, error)
+
 	// Query operations
 	GetNodeRelationships(nodeID int64, relType string, direction Direction) ([]*Relationship, error)
 	GetNodeNeighbors(nodeID int64, relType string, direction Direction) ([]*Node, error)
 	GetNodeDegree(nodeID int64, relType string, direction Direction) (int, error)
-	
+
 	// Path operations
 	FindShortestPath(startID, endID int64, relType string, maxHops int) (*Path, error)
 	FindAllPaths(startID, endID int64, relType string, maxHops int) ([]*Path, error)
-	
+
 	// Traversal operations
 	BFS(startID int64, relType string, maxDepth int, visitor func(*Node) bool) error
 	DFS(startID int64, relType string, maxDepth int, visitor func(*Node) bool) error
@@ -207,6 +215,40 @@ func (s *InMemoryStorage) DeleteRelationship(id int64) error {
 	s.nodeRels[rel.EndNode] = removeRel(s.nodeRels[rel.EndNode], id)
 	
 	delete(s.relationships, id)
+	return nil
+}
+
+func (s *InMemoryStorage) AllNodes() ([]*Node, error) {
+	nodes := make([]*Node, 0, len(s.nodes))
+	for _, node := range s.nodes {
+		nodes = append(nodes, node)
+	}
+	return nodes, nil
+}
+
+func (s *InMemoryStorage) UpdateNodeLabels(id int64, labels []string) error {
+	node, err := s.GetNode(id)
+	if err != nil {
+		return err
+	}
+	node.Labels = labels
+	return nil
+}
+
+func (s *InMemoryStorage) AllRelationships() ([]*Relationship, error) {
+	rels := make([]*Relationship, 0, len(s.relationships))
+	for _, rel := range s.relationships {
+		rels = append(rels, rel)
+	}
+	return rels, nil
+}
+
+func (s *InMemoryStorage) UpdateRelationshipType(id int64, newType string) error {
+	rel, err := s.GetRelationship(id)
+	if err != nil {
+		return err
+	}
+	rel.Type = newType
 	return nil
 }
 

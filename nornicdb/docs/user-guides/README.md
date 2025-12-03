@@ -8,12 +8,17 @@
 - **[Vector Search](vector-search.md)** - Semantic search with embeddings
 - **[Hybrid Search (RRF)](hybrid-search.md)** - Combine vector + BM25 search
 - **[Transactions](transactions.md)** - ACID guarantees and transaction management
+- **[Clustering](clustering.md)** - High availability and replication ⭐ **NEW**
 - **[Complete Examples](complete-examples.md)** - Full application examples
 
 ### Query & Data Management
 - **[Cypher Queries](cypher-queries.md)** - Complete Cypher language guide
 - **[Graph Traversal](graph-traversal.md)** - Path queries and pattern matching
 - **[Data Import/Export](data-import-export.md)** - Neo4j compatibility
+
+### Operations
+- **[Clustering](clustering.md)** - Hot Standby, Raft, Multi-Region replication
+- **[Plugin System](plugin-system.md)** - APOC functions and custom plugins
 
 ## 🎯 Quick Start Paths
 
@@ -39,6 +44,9 @@
 
 **See complete examples**
 → [Complete Examples](complete-examples.md)
+
+**Set up high availability**
+→ [Clustering Guide](clustering.md)
 
 ## 📖 Learning Path
 

@@ -589,12 +589,12 @@ func (e *StorageExecutor) parseNeighborParams(cypher, variant string) (storage.N
 	openParen := strings.Index(remainder, "(")
 	closeParen := strings.LastIndex(remainder, ")")
 	if openParen < 0 || closeParen < 0 {
-		return "", "", 0, fmt.Errorf("invalid syntax")
+		return "", "", 0, fmt.Errorf("invalid syntax for %s: missing parentheses (expected %s(startNode, [relType], [maxHops]))", variant, variant)
 	}
 	args := remainder[openParen+1 : closeParen]
 	parts := strings.Split(args, ",")
 	if len(parts) < 1 {
-		return "", "", 0, fmt.Errorf("requires at least 1 argument")
+		return "", "", 0, fmt.Errorf("%s requires at least 1 argument: startNode", variant)
 	}
 	startID := storage.NodeID(strings.Trim(strings.TrimSpace(parts[0]), "'\""))
 	relType := ""

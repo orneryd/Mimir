@@ -26,7 +26,7 @@ func (e *StorageExecutor) executeMerge(ctx context.Context, cypher string) (*Exe
 	// Extract the main MERGE pattern - use word boundary detection
 	mergeIdx := findKeywordIndex(cypher, "MERGE")
 	if mergeIdx == -1 {
-		return nil, fmt.Errorf("MERGE clause not found")
+		return nil, fmt.Errorf("MERGE clause not found in query: %q", truncateQuery(cypher, 80))
 	}
 
 	// Find ON CREATE SET, ON MATCH SET, standalone SET, and RETURN clauses
@@ -1290,12 +1290,12 @@ func (e *StorageExecutor) executeMergeRelSegment(ctx context.Context, pattern st
 	// Extract start node variable
 	startParen := strings.Index(pattern, "(")
 	if startParen == -1 {
-		return fmt.Errorf("invalid relationship pattern: missing start node")
+		return fmt.Errorf("invalid relationship pattern: missing start node in %q", pattern)
 	}
 
 	endStartParen := strings.Index(pattern[startParen+1:], ")")
 	if endStartParen == -1 {
-		return fmt.Errorf("invalid relationship pattern: missing start node closing paren")
+		return fmt.Errorf("invalid relationship pattern: missing start node closing paren in %q", pattern)
 	}
 	startVar := strings.TrimSpace(pattern[startParen+1 : startParen+1+endStartParen])
 
@@ -1306,7 +1306,7 @@ func (e *StorageExecutor) executeMergeRelSegment(ctx context.Context, pattern st
 		relEnd = strings.Index(pattern, "]-")
 	}
 	if relStart == -1 || relEnd == -1 {
-		return fmt.Errorf("invalid relationship pattern: missing relationship brackets")
+		return fmt.Errorf("invalid relationship pattern: missing relationship brackets (expected -[type]-> or -[type]-) in %q", pattern)
 	}
 
 	relContent := pattern[relStart+2 : relEnd]
@@ -1330,7 +1330,7 @@ func (e *StorageExecutor) executeMergeRelSegment(ctx context.Context, pattern st
 	lastParenStart := strings.LastIndex(pattern, "(")
 	lastParenEnd := strings.LastIndex(pattern, ")")
 	if lastParenStart == -1 || lastParenEnd == -1 || lastParenEnd < lastParenStart {
-		return fmt.Errorf("invalid relationship pattern: missing end node")
+		return fmt.Errorf("invalid relationship pattern: missing end node in %q", pattern)
 	}
 	endVar := strings.TrimSpace(pattern[lastParenStart+1 : lastParenEnd])
 
@@ -1339,10 +1339,10 @@ func (e *StorageExecutor) executeMergeRelSegment(ctx context.Context, pattern st
 	endNode, endExists := nodeContext[endVar]
 
 	if !startExists {
-		return fmt.Errorf("start node variable '%s' not in context", startVar)
+		return fmt.Errorf("start node variable '%s' not in context (available: %v)", startVar, getKeys(nodeContext))
 	}
 	if !endExists {
-		return fmt.Errorf("end node variable '%s' not in context", endVar)
+		return fmt.Errorf("end node variable '%s' not in context (available: %v)", endVar, getKeys(nodeContext))
 	}
 
 	// Check if relationship already exists

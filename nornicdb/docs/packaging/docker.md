@@ -3,6 +3,7 @@
 ## Overview
 
 Docker is the **recommended deployment method** for NornicDB in production environments. It provides:
+
 - Consistent environment across platforms
 - Easy updates and rollbacks
 - Isolation from host system
@@ -10,17 +11,18 @@ Docker is the **recommended deployment method** for NornicDB in production envir
 
 ## Available Images
 
-| Image | Architecture | GPU | Size | Use Case |
-|-------|--------------|-----|------|----------|
-| `timothyswt/nornicdb-arm64-metal` | arm64 | Metal | ~150MB | Apple Silicon, ARM servers |
-| `timothyswt/nornicdb-arm64-metal-bge` | arm64 | Metal | ~500MB | ARM with embedded BGE model |
-| `timothyswt/nornicdb-amd64-cuda` | amd64 | CUDA | ~200MB | NVIDIA GPU servers |
-| `timothyswt/nornicdb-amd64-cuda-bge` | amd64 | CUDA | ~550MB | NVIDIA with embedded BGE |
-| `timothyswt/nornicdb-amd64-cpu` | amd64 | None | ~100MB | CPU-only, smallest |
+| Image                                 | Architecture | GPU   | Size   | Use Case                    |
+| ------------------------------------- | ------------ | ----- | ------ | --------------------------- |
+| `timothyswt/nornicdb-arm64-metal`     | arm64        | Metal | ~150MB | Apple Silicon, ARM servers  |
+| `timothyswt/nornicdb-arm64-metal-bge` | arm64        | Metal | ~500MB | ARM with embedded BGE model |
+| `timothyswt/nornicdb-amd64-cuda`      | amd64        | CUDA  | ~200MB | NVIDIA GPU servers          |
+| `timothyswt/nornicdb-amd64-cuda-bge`  | amd64        | CUDA  | ~550MB | NVIDIA with embedded BGE    |
+| `timothyswt/nornicdb-amd64-cpu`       | amd64        | None  | ~100MB | CPU-only, smallest          |
 
 ## Quick Start
 
 ### Basic Usage
+
 ```bash
 docker run -d \
   --name nornicdb \
@@ -31,6 +33,7 @@ docker run -d \
 ```
 
 ### With External Embeddings (Ollama)
+
 ```bash
 docker run -d \
   --name nornicdb \
@@ -44,6 +47,7 @@ docker run -d \
 ```
 
 ### With Embedded BGE Model
+
 ```bash
 docker run -d \
   --name nornicdb \
@@ -56,16 +60,17 @@ docker run -d \
 ## Docker Compose
 
 ### Basic Setup (`docker-compose.yml`)
+
 ```yaml
-version: '3.8'
+version: "3.8"
 
 services:
   nornicdb:
     image: timothyswt/nornicdb-arm64-metal:latest
     container_name: nornicdb
     ports:
-      - "7474:7474"  # HTTP/UI
-      - "7687:7687"  # Bolt protocol
+      - "7474:7474" # HTTP/UI
+      - "7687:7687" # Bolt protocol
     volumes:
       - nornicdb-data:/data
       - nornicdb-logs:/var/log/nornicdb
@@ -85,8 +90,9 @@ volumes:
 ```
 
 ### Full Stack with Ollama (`docker-compose.full.yml`)
+
 ```yaml
-version: '3.8'
+version: "3.8"
 
 services:
   nornicdb:
@@ -144,8 +150,9 @@ volumes:
 ```
 
 ### With Mimir Server (`docker-compose.mimir.yml`)
+
 ```yaml
-version: '3.8'
+version: "3.8"
 
 services:
   nornicdb:
@@ -169,8 +176,8 @@ services:
       - "3100:3100"
     environment:
       - NEO4J_URI=bolt://nornicdb:7687
-      - NEO4J_USER=neo4j
-      - NEO4J_PASSWORD=password
+      - NEO4J_USER=admin
+      - NEO4J_PASSWORD=admin
       - EMBEDDING_PROVIDER=ollama
       - OLLAMA_URL=http://ollama:11434
     depends_on:
@@ -194,25 +201,26 @@ volumes:
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `NORNICDB_PORT` | `7474` | HTTP server port |
-| `NORNICDB_BOLT_PORT` | `7687` | Bolt protocol port |
-| `NORNICDB_DATA_DIR` | `/data` | Data directory |
-| `NORNICDB_LOG_LEVEL` | `info` | Log level (debug, info, warn, error) |
-| `NORNICDB_AUTH_ENABLED` | `false` | Enable authentication |
-| `NORNICDB_AUTH_USER` | `neo4j` | Default username |
-| `NORNICDB_AUTH_PASSWORD` | `password` | Default password |
-| `NORNICDB_EMBEDDING_PROVIDER` | `none` | Embedding provider (none, ollama, openai) |
-| `NORNICDB_EMBEDDING_ENDPOINT` | - | Embedding API endpoint |
-| `NORNICDB_EMBEDDING_MODEL` | - | Embedding model name |
-| `NORNICDB_EMBEDDING_API_KEY` | - | API key for embeddings |
-| `NORNICDB_MCP_ENABLED` | `true` | Enable MCP server |
-| `NORNICDB_MCP_PORT` | `3100` | MCP server port |
+| Variable                      | Default | Description                               |
+| ----------------------------- | ------- | ----------------------------------------- |
+| `NORNICDB_PORT`               | `7474`  | HTTP server port                          |
+| `NORNICDB_BOLT_PORT`          | `7687`  | Bolt protocol port                        |
+| `NORNICDB_DATA_DIR`           | `/data` | Data directory                            |
+| `NORNICDB_LOG_LEVEL`          | `info`  | Log level (debug, info, warn, error)      |
+| `NORNICDB_AUTH_ENABLED`       | `false` | Enable authentication                     |
+| `NORNICDB_AUTH_USER`          | `admin` | Default username                          |
+| `NORNICDB_AUTH_PASSWORD`      | `admin` | Default password                          |
+| `NORNICDB_EMBEDDING_PROVIDER` | `none`  | Embedding provider (none, ollama, openai) |
+| `NORNICDB_EMBEDDING_ENDPOINT` | -       | Embedding API endpoint                    |
+| `NORNICDB_EMBEDDING_MODEL`    | -       | Embedding model name                      |
+| `NORNICDB_EMBEDDING_API_KEY`  | -       | API key for embeddings                    |
+| `NORNICDB_MCP_ENABLED`        | `true`  | Enable MCP server                         |
+| `NORNICDB_MCP_PORT`           | `3100`  | MCP server port                           |
 
 ## GPU Support
 
 ### NVIDIA CUDA (Linux)
+
 ```yaml
 services:
   nornicdb:
@@ -227,6 +235,7 @@ services:
 ```
 
 ### Apple Metal (macOS)
+
 Metal acceleration is automatic on Apple Silicon. No special configuration needed.
 
 ```bash
@@ -237,6 +246,7 @@ docker run --rm timothyswt/nornicdb-arm64-metal:latest nornicdb --version
 ## Volume Management
 
 ### Backup
+
 ```bash
 # Stop container
 docker stop nornicdb
@@ -252,6 +262,7 @@ docker start nornicdb
 ```
 
 ### Restore
+
 ```bash
 docker stop nornicdb
 
@@ -264,6 +275,7 @@ docker start nornicdb
 ```
 
 ### Migration
+
 ```bash
 # Export from old container
 docker exec nornicdb nornicdb export --format cypher > backup.cypher
@@ -304,6 +316,7 @@ docker logs --tail 100 nornicdb
 ## Security
 
 ### Run as Non-Root
+
 ```yaml
 services:
   nornicdb:
@@ -314,6 +327,7 @@ services:
 ```
 
 ### Read-Only Root Filesystem
+
 ```yaml
 services:
   nornicdb:
@@ -326,6 +340,7 @@ services:
 ```
 
 ### Network Isolation
+
 ```yaml
 services:
   nornicdb:
@@ -343,6 +358,7 @@ networks:
 ## Kubernetes
 
 ### Basic Deployment
+
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -359,37 +375,37 @@ spec:
         app: nornicdb
     spec:
       containers:
-      - name: nornicdb
-        image: timothyswt/nornicdb-arm64-metal:latest
-        ports:
-        - containerPort: 7474
-        - containerPort: 7687
-        volumeMounts:
-        - name: data
-          mountPath: /data
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "100m"
-          limits:
-            memory: "1Gi"
-            cpu: "1000m"
-        livenessProbe:
-          httpGet:
-            path: /status
-            port: 7474
-          initialDelaySeconds: 10
-          periodSeconds: 30
-        readinessProbe:
-          httpGet:
-            path: /status
-            port: 7474
-          initialDelaySeconds: 5
-          periodSeconds: 10
+        - name: nornicdb
+          image: timothyswt/nornicdb-arm64-metal:latest
+          ports:
+            - containerPort: 7474
+            - containerPort: 7687
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+          livenessProbe:
+            httpGet:
+              path: /status
+              port: 7474
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /status
+              port: 7474
+            initialDelaySeconds: 5
+            periodSeconds: 10
       volumes:
-      - name: data
-        persistentVolumeClaim:
-          claimName: nornicdb-pvc
+        - name: data
+          persistentVolumeClaim:
+            claimName: nornicdb-pvc
 ---
 apiVersion: v1
 kind: Service
@@ -399,10 +415,10 @@ spec:
   selector:
     app: nornicdb
   ports:
-  - name: http
-    port: 7474
-  - name: bolt
-    port: 7687
+    - name: http
+      port: 7474
+    - name: bolt
+      port: 7687
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -419,6 +435,7 @@ spec:
 ## Building Custom Images
 
 ### From Source
+
 ```bash
 cd nornicdb
 
@@ -431,6 +448,7 @@ make build-all
 ```
 
 ### Custom Dockerfile
+
 ```dockerfile
 FROM timothyswt/nornicdb-arm64-metal:latest
 
@@ -457,4 +475,3 @@ ENV NORNICDB_CONFIG=/etc/nornicdb/config.yaml
 - [ ] Add GitHub Container Registry
 - [ ] Document GPU passthrough
 - [ ] Create slim/alpine variants
-

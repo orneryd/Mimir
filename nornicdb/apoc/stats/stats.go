@@ -7,7 +7,12 @@ package stats
 import (
 	"math"
 	"sort"
+
+	"github.com/orneryd/nornicdb/apoc/storage"
 )
+
+// Storage is the interface for database operations.
+var Storage storage.Storage = storage.NewInMemoryStorage()
 
 // Degrees returns degree statistics for nodes.
 //
@@ -15,13 +20,43 @@ import (
 //
 //	apoc.stats.degrees('KNOWS') => {min: 0, max: 100, mean: 5.2, ...}
 func Degrees(relType string) map[string]interface{} {
-	// Placeholder - would calculate from database
+	nodes, err := Storage.AllNodes()
+	if err != nil {
+		return map[string]interface{}{
+			"min":    0,
+			"max":    0,
+			"mean":   0.0,
+			"median": 0.0,
+			"stdDev": 0.0,
+		}
+	}
+
+	degrees := make([]float64, 0, len(nodes))
+	for _, node := range nodes {
+		degree, err := Storage.GetNodeDegree(node.ID, relType, storage.DirectionBoth)
+		if err == nil {
+			degrees = append(degrees, float64(degree))
+		}
+	}
+
+	if len(degrees) == 0 {
+		return map[string]interface{}{
+			"min":    0,
+			"max":    0,
+			"mean":   0.0,
+			"median": 0.0,
+			"stdDev": 0.0,
+			"count":  0,
+		}
+	}
+
 	return map[string]interface{}{
-		"min":    0,
-		"max":    0,
-		"mean":   0.0,
-		"median": 0.0,
-		"stdDev": 0.0,
+		"min":    Min(degrees),
+		"max":    Max(degrees),
+		"mean":   Mean(degrees),
+		"median": Median(degrees),
+		"stdDev": StdDev(degrees),
+		"count":  len(degrees),
 	}
 }
 

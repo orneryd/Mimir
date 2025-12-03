@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 )
 
@@ -18,16 +19,55 @@ import (
 // Example:
 //
 //	apoc.load.json('http://example.com/data.json') => parsed data
-func Json(url string) (interface{}, error) {
-	// Placeholder - would fetch and parse JSON
+//	apoc.load.json('/path/to/file.json') => parsed data
+func Json(urlOrFile string) (interface{}, error) {
+	var data interface{}
+	var err error
+
+	// Check if it's a URL or file path
+	if strings.HasPrefix(urlOrFile, "http://") || strings.HasPrefix(urlOrFile, "https://") {
+		data, err = loadJsonFromURL(urlOrFile)
+	} else {
+		data, err = loadJsonFromFile(urlOrFile)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to load JSON: %w", err)
+	}
+
+	return data, nil
+}
+
+// loadJsonFromURL loads JSON from an HTTP(S) URL.
+func loadJsonFromURL(url string) (interface{}, error) {
 	resp, err := http.Get(url)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP error: %s", resp.Status)
+	}
+
 	var data interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return nil, err
+	}
+
+	return data, nil
+}
+
+// loadJsonFromFile loads JSON from a file path.
+func loadJsonFromFile(path string) (interface{}, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	var data interface{}
+	if err := json.NewDecoder(file).Decode(&data); err != nil {
 		return nil, err
 	}
 
@@ -106,16 +146,15 @@ func JsonParams(url string, headers map[string]string, method string) (interface
 //
 // Example:
 //
-//	apoc.load.csv('http://example.com/data.csv', {delimiter: ','}) => rows
-func Csv(url string, config map[string]interface{}) ([]map[string]interface{}, error) {
-	resp, err := http.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
+//	apoc.load.csv('http://example.com/data.csv', {delimiter: ',', header: true}) => rows
+//	apoc.load.csv('/path/to/file.csv', {delimiter: ',', header: true}) => rows
+func Csv(urlOrFile string, config map[string]interface{}) ([]map[string]interface{}, error) {
+	// Parse configuration
 	delimiter := ','
 	if d, ok := config["delimiter"].(string); ok && len(d) > 0 {
+		delimiter = rune(d[0])
+	}
+	if d, ok := config["sep"].(string); ok && len(d) > 0 {
 		delimiter = rune(d[0])
 	}
 
@@ -124,35 +163,72 @@ func Csv(url string, config map[string]interface{}) ([]map[string]interface{}, e
 		hasHeader = h
 	}
 
-	reader := csv.NewReader(resp.Body)
-	reader.Comma = delimiter
+	var reader *csv.Reader
+	var closer io.Closer
 
-	var headers []string
-	if hasHeader {
-		headers, err = reader.Read()
+	// Load from URL or file
+	if strings.HasPrefix(urlOrFile, "http://") || strings.HasPrefix(urlOrFile, "https://") {
+		resp, err := http.Get(urlOrFile)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to fetch CSV: %w", err)
 		}
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			return nil, fmt.Errorf("HTTP error: %s", resp.Status)
+		}
+		closer = resp.Body
+		reader = csv.NewReader(resp.Body)
+	} else {
+		file, err := os.Open(urlOrFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open CSV: %w", err)
+		}
+		closer = file
+		reader = csv.NewReader(file)
+	}
+	defer closer.Close()
+
+	reader.Comma = delimiter
+	reader.LazyQuotes = true
+
+	// Read all records
+	records, err := reader.ReadAll()
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse CSV: %w", err)
 	}
 
-	rows := make([]map[string]interface{}, 0)
-	for {
-		record, err := reader.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
+	if len(records) == 0 {
+		return []map[string]interface{}{}, nil
+	}
 
+	// Build result
+	rows := make([]map[string]interface{}, 0)
+	var headers []string
+
+	startRow := 0
+	if hasHeader && len(records) > 0 {
+		headers = records[0]
+		startRow = 1
+	}
+
+	for i := startRow; i < len(records); i++ {
+		record := records[i]
+
+		// Build map if we have headers
 		row := make(map[string]interface{})
-		for i, value := range record {
-			if hasHeader && i < len(headers) {
-				row[headers[i]] = value
-			} else {
-				row[fmt.Sprintf("col%d", i)] = value
+		if hasHeader && headers != nil {
+			for j, header := range headers {
+				if j < len(record) {
+					row[header] = record[j]
+				}
+			}
+		} else {
+			// No headers - use column indices
+			for j, value := range record {
+				row[fmt.Sprintf("col%d", j)] = value
 			}
 		}
+
 		rows = append(rows, row)
 	}
 
