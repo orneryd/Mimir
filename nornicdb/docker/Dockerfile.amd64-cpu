@@ -95,6 +95,6 @@ ENV NORNICDB_DATA_DIR=/data \
     NORNICDB_NO_AUTH=true \
     NORNICDB_GPU_ENABLED=false \
     NORNICDB_HEADLESS=${HEADLESS} \
-    NORNICDB_APOC_PLUGINS_DIR=/app/plugins
+    NORNICDB_PLUGINS_DIR=/app/plugins
 
 ENTRYPOINT ["/app/entrypoint.sh"]

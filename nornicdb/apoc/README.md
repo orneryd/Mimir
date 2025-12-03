@@ -12,7 +12,7 @@ NornicDB includes **850+ APOC functions** compatible with Neo4j's APOC library.
 
 ```bash
 # Environment variables (Docker/K8s friendly)
-NORNICDB_APOC_PLUGINS_DIR=/plugins       # Custom plugin directory
+NORNICDB_PLUGINS_DIR=/plugins       # Custom plugin directory
 NORNICDB_APOC_ALGO_ENABLED=false         # Disable expensive algorithms
 NORNICDB_APOC_CREATE_ENABLED=false       # Disable write operations
 ```
@@ -54,7 +54,7 @@ NORNICDB_APOC_CREATE_ENABLED=false       # Disable write operations
 
 ### Custom Plugins
 
-Drop `.so` files into `NORNICDB_APOC_PLUGINS_DIR` - they're auto-loaded on startup.
+Drop `.so` files into `NORNICDB_PLUGINS_DIR` - they're auto-loaded on startup.
 
 ```go
 // Your plugin must export:

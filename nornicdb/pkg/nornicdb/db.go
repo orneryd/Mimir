@@ -772,8 +772,8 @@ func Open(dataDir string, config *Config) (*DB, error) {
 	// Initialize Cypher executor
 	db.cypherExecutor = cypher.NewStorageExecutor(db.storage)
 
-	// Load plugins from configured directory (NORNICDB_APOC_PLUGINS_DIR)
-	pluginsDir := os.Getenv("NORNICDB_APOC_PLUGINS_DIR")
+	// Load plugins from configured directory (NORNICDB_PLUGINS_DIR)
+	pluginsDir := os.Getenv("NORNICDB_PLUGINS_DIR")
 	if pluginsDir != "" {
 		if err := LoadPluginsFromDir(pluginsDir); err != nil {
 			fmt.Printf("⚠️  Plugin loading warning: %v\n", err)

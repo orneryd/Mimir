@@ -7,7 +7,7 @@
 //
 // Environment Variables:
 //
-//	NORNICDB_APOC_PLUGINS_DIR       - Directory to auto-load .so plugins from
+//	NORNICDB_PLUGINS_DIR       - Directory to auto-load .so plugins from
 //	NORNICDB_APOC_COLL_ENABLED      - Enable collection functions (default: true)
 //	NORNICDB_APOC_TEXT_ENABLED      - Enable text functions (default: true)
 //	NORNICDB_APOC_MATH_ENABLED      - Enable math functions (default: true)
@@ -18,7 +18,7 @@
 //
 // Example Docker Usage:
 //
-//	docker run -e NORNICDB_APOC_PLUGINS_DIR=/plugins \
+//	docker run -e NORNICDB_PLUGINS_DIR=/plugins \
 //	           -e NORNICDB_APOC_ALGO_ENABLED=false \
 //	           -v ./my-plugins:/plugins \
 //	           nornicdb/nornicdb
@@ -58,7 +58,7 @@ type Config struct {
 
 	// PluginsDir is the directory to auto-load .so plugins from (optional)
 	// If set, all .so files in this directory are loaded on Initialize()
-	// Can be set via NORNICDB_APOC_PLUGINS_DIR environment variable
+	// Can be set via NORNICDB_PLUGINS_DIR environment variable
 	PluginsDir string `yaml:"plugins_dir"`
 }
 
@@ -105,7 +105,7 @@ func DefaultConfig() *Config {
 //
 // Environment Variables:
 //
-//	NORNICDB_APOC_PLUGINS_DIR           - Plugin directory path
+//	NORNICDB_PLUGINS_DIR           - Plugin directory path
 //	NORNICDB_APOC_COLL_ENABLED          - Enable apoc.coll.* (default: true)
 //	NORNICDB_APOC_TEXT_ENABLED          - Enable apoc.text.* (default: true)
 //	NORNICDB_APOC_MATH_ENABLED          - Enable apoc.math.* (default: true)
@@ -125,14 +125,14 @@ func DefaultConfig() *Config {
 //
 // Example:
 //
-//	os.Setenv("NORNICDB_APOC_PLUGINS_DIR", "/opt/nornicdb/plugins")
+//	os.Setenv("NORNICDB_PLUGINS_DIR", "/opt/nornicdb/plugins")
 //	os.Setenv("NORNICDB_APOC_ALGO_ENABLED", "false")
 //	cfg := apoc.LoadFromEnv()
 func LoadFromEnv() *Config {
 	cfg := DefaultConfig()
 
 	// Plugin directory
-	if dir := os.Getenv("NORNICDB_APOC_PLUGINS_DIR"); dir != "" {
+	if dir := os.Getenv("NORNICDB_PLUGINS_DIR"); dir != "" {
 		cfg.PluginsDir = dir
 	}
 
@@ -213,7 +213,7 @@ func LoadFromEnvOrFile(filePath string) *Config {
 	cfg := LoadConfigOrDefault(filePath)
 
 	// Override with environment variables
-	if dir := os.Getenv("NORNICDB_APOC_PLUGINS_DIR"); dir != "" {
+	if dir := os.Getenv("NORNICDB_PLUGINS_DIR"); dir != "" {
 		cfg.PluginsDir = dir
 	}
 

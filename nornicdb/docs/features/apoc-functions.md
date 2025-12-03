@@ -25,7 +25,7 @@ RETURN apoc.algo.pageRank(n) AS rank
 # Docker example - disable expensive algorithms, enable custom plugins
 docker run \
   -e NORNICDB_APOC_ALGO_ENABLED=false \
-  -e NORNICDB_APOC_PLUGINS_DIR=/plugins \
+  -e NORNICDB_PLUGINS_DIR=/plugins \
   -v ./my-plugins:/plugins \
   nornicdb/nornicdb
 ```
@@ -86,7 +86,7 @@ All APOC settings can be configured via environment variables (Docker/K8s friend
 
 ```bash
 # Plugin directory for custom .so plugins
-NORNICDB_APOC_PLUGINS_DIR=/opt/nornicdb/plugins
+NORNICDB_PLUGINS_DIR=/opt/nornicdb/plugins
 
 # Enable/disable function categories
 NORNICDB_APOC_COLL_ENABLED=true      # Collection functions
@@ -141,7 +141,7 @@ services:
     environment:
       - NORNICDB_APOC_ALGO_ENABLED=false
       - NORNICDB_APOC_CREATE_ENABLED=false
-      - NORNICDB_APOC_PLUGINS_DIR=/plugins
+      - NORNICDB_PLUGINS_DIR=/plugins
     volumes:
       - ./custom-plugins:/plugins
       - ./data:/var/lib/nornicdb
@@ -233,7 +233,7 @@ cp apoc-ml.so /opt/nornicdb/plugins/
 
 # Or mount in Docker
 docker run -v ./apoc-ml.so:/plugins/apoc-ml.so \
-           -e NORNICDB_APOC_PLUGINS_DIR=/plugins \
+           -e NORNICDB_PLUGINS_DIR=/plugins \
            nornicdb/nornicdb
 ```
 
@@ -246,7 +246,7 @@ RETURN apoc.ml.sigmoid(0.5) AS activation
 
 ### Auto-Detection
 
-When NornicDB starts with `NORNICDB_APOC_PLUGINS_DIR` set, it:
+When NornicDB starts with `NORNICDB_PLUGINS_DIR` set, it:
 
 1. Scans the directory for `*.so` files
 2. Validates each file has a `Plugin` export
@@ -951,7 +951,7 @@ RETURN apoc.custom.myFunc('test')
 ```
 
 **Possible causes**:
-1. Plugin not loaded (check `NORNICDB_APOC_PLUGINS_DIR`)
+1. Plugin not loaded (check `NORNICDB_PLUGINS_DIR`)
 2. Function category disabled (check `NORNICDB_APOC_<CATEGORY>_ENABLED`)
 3. Function specifically disabled in config
 
@@ -976,7 +976,7 @@ Build plugins on the same platform/architecture as your NornicDB deployment.
 │  ├── apoc.json.*    ├── apoc.util.*   ├── apoc.agg.*   │
 │  ├── apoc.node.*    ├── apoc.path.*   └── apoc.algo.*  │
 ├─────────────────────────────────────────────────────────┤
-│  Plugin Loader (auto-loads from NORNICDB_APOC_PLUGINS_DIR)│
+│  Plugin Loader (auto-loads from NORNICDB_PLUGINS_DIR)│
 │  └── Scans *.so → Validates interface → Registers funcs │
 ├─────────────────────────────────────────────────────────┤
 │  Configuration (env vars or YAML)                        │

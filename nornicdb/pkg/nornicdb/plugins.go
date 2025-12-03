@@ -36,7 +36,7 @@ var (
 )
 
 // LoadPluginsFromDir scans a directory for .so files and loads them.
-// Called automatically at database startup if NORNICDB_APOC_PLUGINS_DIR is set.
+// Called automatically at database startup if NORNICDB_PLUGINS_DIR is set.
 func LoadPluginsFromDir(dir string) error {
 	if dir == "" {
 		return nil

@@ -248,5 +248,5 @@ See [APOC Plugin Guide](../docs/user-guides/APOC_PLUGINS.md) for creating custom
 | `NORNICDB_EMBEDDING_MODEL` | `bge-m3` | Embedding model name |
 | `NORNICDB_MODELS_DIR` | `/app/models` | Models directory |
 | `NORNICDB_EMBEDDING_GPU_LAYERS` | `-1` (CUDA) / `0` (Metal) | GPU layers |
-| `NORNICDB_APOC_PLUGINS_DIR` | `/app/plugins` | APOC plugins directory |
+| `NORNICDB_PLUGINS_DIR` | `/app/plugins` | APOC plugins directory |
 | `NORNICDB_APOC_ENABLED` | `true` | Enable APOC functions |
