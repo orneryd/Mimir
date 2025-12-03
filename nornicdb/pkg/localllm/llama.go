@@ -168,6 +168,103 @@ int get_n_embd(struct llama_model* model) {
 // Free resources
 void free_ctx(struct llama_context* ctx) { if (ctx) llama_free(ctx); }
 void free_model(struct llama_model* model) { if (model) llama_model_free(model); }
+
+// ============================================================================
+// TEXT GENERATION (for Heimdall SLM)
+// ============================================================================
+
+// Create context for text generation (different params than embeddings)
+struct llama_context* create_gen_context(struct llama_model* model, int n_ctx, int n_batch, int n_threads) {
+    struct llama_context_params params = llama_context_default_params();
+
+    params.n_ctx = n_ctx;
+    params.n_batch = n_batch;
+    params.n_ubatch = n_batch;
+    params.n_threads = n_threads;
+    params.n_threads_batch = n_threads;
+
+    // Generation mode: we need logits, not embeddings
+    params.embeddings = 0;
+    params.logits_all = 0;  // Only need logits for last token during generation
+
+    // Flash attention for speed
+    #ifdef LLAMA_SUPPORTS_FLASH_ATTN
+    params.flash_attn = 1;
+    #endif
+
+    return llama_init_from_model(model, params);
+}
+
+// Decode a batch of tokens (for generation)
+int gen_decode(struct llama_context* ctx, int32_t* tokens, int n_tokens, int start_pos) {
+    llama_kv_cache_clear(ctx);
+
+    struct llama_batch batch = llama_batch_init(n_tokens, 0, 1);
+    for (int i = 0; i < n_tokens; i++) {
+        batch.token[i] = tokens[i];
+        batch.pos[i] = start_pos + i;
+        batch.n_seq_id[i] = 1;
+        batch.seq_id[i][0] = 0;
+        batch.logits[i] = (i == n_tokens - 1) ? 1 : 0;  // Only last token needs logits
+    }
+    batch.n_tokens = n_tokens;
+
+    int result = llama_decode(ctx, batch);
+    llama_batch_free(batch);
+    return result;
+}
+
+// Decode single token (for autoregressive generation)
+int gen_decode_token(struct llama_context* ctx, int32_t token, int pos) {
+    struct llama_batch batch = llama_batch_init(1, 0, 1);
+    batch.token[0] = token;
+    batch.pos[0] = pos;
+    batch.n_seq_id[0] = 1;
+    batch.seq_id[0][0] = 0;
+    batch.logits[0] = 1;
+    batch.n_tokens = 1;
+
+    int result = llama_decode(ctx, batch);
+    llama_batch_free(batch);
+    return result;
+}
+
+// Sample next token using sampler chain
+int32_t sample_token(struct llama_context* ctx, struct llama_model* model, float temperature, float top_p, int top_k) {
+    // Create sampler chain
+    struct llama_sampler_chain_params sparams = llama_sampler_chain_default_params();
+    struct llama_sampler* smpl = llama_sampler_chain_init(sparams);
+
+    // Add samplers to chain: top-k -> top-p -> temperature -> dist
+    if (top_k > 0) {
+        llama_sampler_chain_add(smpl, llama_sampler_init_top_k(top_k));
+    }
+    if (top_p < 1.0f) {
+        llama_sampler_chain_add(smpl, llama_sampler_init_top_p(top_p, 1));
+    }
+    if (temperature > 0.0f) {
+        llama_sampler_chain_add(smpl, llama_sampler_init_temp(temperature));
+    }
+    llama_sampler_chain_add(smpl, llama_sampler_init_dist(42));
+
+    // Sample from context (-1 means last token's logits)
+    int32_t token = llama_sampler_sample(smpl, ctx, -1);
+
+    llama_sampler_free(smpl);
+    return token;
+}
+
+// Detokenize single token to string
+int detokenize(struct llama_model* model, int32_t token, char* buf, int buf_size) {
+    const struct llama_vocab* vocab = llama_model_get_vocab(model);
+    return llama_token_to_piece(vocab, token, buf, buf_size, 0, 1);
+}
+
+// Check if token is EOS
+int is_eos(struct llama_model* model, int32_t token) {
+    const struct llama_vocab* vocab = llama_model_get_vocab(model);
+    return llama_vocab_is_eog(vocab, token);
+}
 */
 import "C"
 
@@ -427,6 +524,185 @@ func (m *Model) Close() error {
 	if m.model != nil {
 		C.free_model(m.model)
 		m.model = nil
+	}
+	return nil
+}
+
+// ============================================================================
+// TEXT GENERATION (for Heimdall SLM)
+// ============================================================================
+
+// GenerationModel wraps a GGUF model for text generation.
+type GenerationModel struct {
+	model     *C.struct_llama_model
+	ctx       *C.struct_llama_context
+	modelPath string
+	mu        sync.Mutex
+}
+
+// GenerationOptions configures generation model loading.
+type GenerationOptions struct {
+	ModelPath   string
+	ContextSize int  // Max context window (default: 2048)
+	BatchSize   int  // Processing batch size (default: 512)
+	Threads     int  // CPU threads (default: NumCPU/2)
+	GPULayers   int  // GPU offload (-1=auto, 0=CPU)
+}
+
+// DefaultGenerationOptions returns sensible defaults for text generation.
+func DefaultGenerationOptions(modelPath string) GenerationOptions {
+	threads := runtime.NumCPU() / 2
+	if threads < 4 {
+		threads = 4
+	}
+	return GenerationOptions{
+		ModelPath:   modelPath,
+		ContextSize: 2048, // Larger context for conversations
+		BatchSize:   512,
+		Threads:     threads,
+		GPULayers:   -1, // Auto GPU
+	}
+}
+
+// LoadGenerationModel loads a GGUF model for text generation.
+func LoadGenerationModel(opts GenerationOptions) (*GenerationModel, error) {
+	cPath := C.CString(opts.ModelPath)
+	defer C.free(unsafe.Pointer(cPath))
+
+	model := C.load_model(cPath, C.int(opts.GPULayers))
+	if model == nil {
+		return nil, fmt.Errorf("failed to load generation model: %s", opts.ModelPath)
+	}
+
+	ctx := C.create_gen_context(model, C.int(opts.ContextSize), C.int(opts.BatchSize), C.int(opts.Threads))
+	if ctx == nil {
+		C.free_model(model)
+		return nil, fmt.Errorf("failed to create generation context: %s", opts.ModelPath)
+	}
+
+	return &GenerationModel{
+		model:     model,
+		ctx:       ctx,
+		modelPath: opts.ModelPath,
+	}, nil
+}
+
+// GenerateParams configures text generation.
+type GenerateParams struct {
+	MaxTokens   int
+	Temperature float32
+	TopP        float32
+	TopK        int
+	StopTokens  []string
+}
+
+// DefaultGenerateParams returns sensible defaults for structured output.
+func DefaultGenerateParams() GenerateParams {
+	return GenerateParams{
+		MaxTokens:   512,
+		Temperature: 0.1, // Low for deterministic JSON
+		TopP:        0.9,
+		TopK:        40,
+		StopTokens:  []string{"<|im_end|>", "<|endoftext|>", "</s>"},
+	}
+}
+
+// Generate produces a complete response for the prompt.
+func (g *GenerationModel) Generate(ctx context.Context, prompt string, params GenerateParams) (string, error) {
+	var result string
+	err := g.GenerateStream(ctx, prompt, params, func(token string) error {
+		result += token
+		return nil
+	})
+	return result, err
+}
+
+// GenerateStream produces tokens via callback for streaming.
+func (g *GenerationModel) GenerateStream(ctx context.Context, prompt string, params GenerateParams, callback func(token string) error) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	// Tokenize prompt
+	cText := C.CString(prompt)
+	defer C.free(unsafe.Pointer(cText))
+
+	tokens := make([]C.int, params.MaxTokens+len(prompt))
+	n := C.tokenize(g.model, cText, C.int(len(prompt)), &tokens[0], C.int(len(tokens)))
+	if n < 0 {
+		return fmt.Errorf("tokenization failed")
+	}
+	if n == 0 {
+		return fmt.Errorf("prompt produced no tokens")
+	}
+
+	// Process prompt (prefill)
+	if C.gen_decode(g.ctx, (*C.int)(&tokens[0]), n, 0) != 0 {
+		return fmt.Errorf("prefill failed")
+	}
+
+	// Autoregressive generation
+	pos := int(n)
+	buf := make([]byte, 256) // Buffer for detokenization
+
+	for i := 0; i < params.MaxTokens; i++ {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		// Sample next token
+		token := C.sample_token(g.ctx, g.model, C.float(params.Temperature), C.float(params.TopP), C.int(params.TopK))
+
+		// Check for EOS
+		if C.is_eos(g.model, token) != 0 {
+			break
+		}
+
+		// Detokenize
+		nBytes := C.detokenize(g.model, token, (*C.char)(unsafe.Pointer(&buf[0])), C.int(len(buf)))
+		if nBytes > 0 {
+			text := string(buf[:nBytes])
+
+			// Check stop tokens
+			for _, stop := range params.StopTokens {
+				if text == stop {
+					return nil
+				}
+			}
+
+			if err := callback(text); err != nil {
+				return err
+			}
+		}
+
+		// Decode the new token for next iteration
+		if C.gen_decode_token(g.ctx, token, C.int(pos)) != 0 {
+			return fmt.Errorf("decode failed at position %d", pos)
+		}
+		pos++
+	}
+
+	return nil
+}
+
+// ModelPath returns the loaded model path.
+func (g *GenerationModel) ModelPath() string {
+	return g.modelPath
+}
+
+// Close releases all resources.
+func (g *GenerationModel) Close() error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	if g.ctx != nil {
+		C.free_ctx(g.ctx)
+		g.ctx = nil
+	}
+	if g.model != nil {
+		C.free_model(g.model)
+		g.model = nil
 	}
 	return nil
 }

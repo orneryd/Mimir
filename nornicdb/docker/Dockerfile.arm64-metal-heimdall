@@ -1,0 +1,153 @@
+# NornicDB ARM64 Metal + Heimdall (Cognitive Guardian)
+# Self-contained build with local embedding AND Heimdall SLM support
+#
+# This image includes:
+# - BGE-M3 embedding model for vector search
+# - Qwen2.5-1.5B-Instruct (Q4_K_M) for Heimdall (cognitive database guardian)
+#
+# Build:
+#   docker build -f docker/Dockerfile.arm64-metal-heimdall -t timothyswt/nornicdb-arm64-metal-bge-heimdall .
+#
+# Run:
+#   docker run -p 7474:7474 -p 7687:7687 -v nornicdb-data:/data timothyswt/nornicdb-arm64-metal-bge-heimdall
+#
+# This is a "batteries included" deployment - no additional model downloads required.
+# Heimdall provides: anomaly detection, runtime diagnosis, and memory curation via Bifrost chat.
+
+# =============================================================================
+# Stage 1: UI
+# =============================================================================
+FROM node:20-alpine AS ui
+WORKDIR /ui
+COPY ui/package*.json ./
+RUN npm ci 2>/dev/null || npm install --legacy-peer-deps
+COPY ui/ .
+RUN npm run build
+
+# =============================================================================
+# Stage 2: llama.cpp static library (ARM64)
+# =============================================================================
+FROM debian:bookworm-slim AS llama
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential cmake git ca-certificates && rm -rf /var/lib/apt/lists/*
+
+ARG LLAMA_VERSION=b4535
+WORKDIR /llama
+RUN git clone --depth 1 --branch ${LLAMA_VERSION} https://github.com/ggerganov/llama.cpp.git . && \
+    cmake -B build \
+      -DLLAMA_STATIC=ON -DBUILD_SHARED_LIBS=OFF \
+      -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_SERVER=OFF \
+      -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF \
+      -DCMAKE_C_FLAGS="-mcpu=generic" -DCMAKE_CXX_FLAGS="-mcpu=generic" && \
+    cmake --build build --config Release -j$(nproc)
+
+# Combine static libs into single archive
+RUN mkdir -p /out && \
+    find build -name "*.a" -exec cp {} /out/ \; && \
+    echo "Libraries found:" && ls -la /out/*.a && \
+    echo "CREATE /out/libllama_combined.a" > /tmp/ar.mri && \
+    for lib in /out/lib*.a; do echo "ADDLIB $lib" >> /tmp/ar.mri; done && \
+    echo "SAVE" >> /tmp/ar.mri && \
+    echo "END" >> /tmp/ar.mri && \
+    cat /tmp/ar.mri && \
+    ar -M < /tmp/ar.mri && \
+    cp include/llama.h ggml/include/*.h /out/ && \
+    echo "Combined library:" && ls -lh /out/libllama_combined.a
+
+# =============================================================================
+# Stage 3: Go build
+# =============================================================================
+FROM golang:1.23-bookworm AS builder
+WORKDIR /build
+
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential && rm -rf /var/lib/apt/lists/*
+
+# Copy llama artifacts
+COPY --from=llama /out/libllama_combined.a /build/lib/llama/libllama_linux_arm64.a
+COPY --from=llama /out/*.h /build/lib/llama/
+
+# Go dependencies
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Source + UI
+COPY . .
+COPY --from=ui /ui/dist ./ui/dist
+
+# Build with full features (localllm for both embedding and SLM generation)
+RUN echo "Building NornicDB with Heimdall support..." && \
+    CGO_ENABLED=1 go build -tags=localllm \
+      -ldflags="-s -w -X main.buildTime=$(date -u +%Y%m%d-%H%M%S)" \
+      -o nornicdb ./cmd/nornicdb
+
+# Build APOC plugin
+RUN echo "Building APOC plugin..." && \
+    mkdir -p apoc/built-plugins && \
+    cd apoc/plugin-src/apoc && go build -buildmode=plugin -o ../../../apoc/built-plugins/apoc.so apoc_plugin.go && \
+    echo "✓ Built plugin:" && ls -lh /build/apoc/built-plugins/*.so
+
+# =============================================================================
+# Stage 4: Runtime with embedded models
+# =============================================================================
+FROM debian:bookworm-slim
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates tzdata wget && rm -rf /var/lib/apt/lists/* && \
+    mkdir -p /data /app/models
+
+COPY --from=builder /build/nornicdb /app/
+COPY --from=builder /build/apoc/built-plugins /app/plugins/
+COPY docker/entrypoint.sh /app/
+RUN chmod +x /app/entrypoint.sh
+
+# Embed BOTH models: BGE-M3 (embeddings) and Qwen2.5-0.5B (Heimdall SLM)
+# Using BuildKit mount to avoid layer bloat during COPY
+RUN --mount=type=bind,source=models,target=/models,ro \
+    echo "=== Embedding models for batteries-included deployment ===" && \
+    # BGE-M3 embedding model (required)
+    if [ -f /models/bge-m3.gguf ]; then \
+      cp /models/bge-m3.gguf /app/models/ && \
+      echo "✓ Embedded bge-m3.gguf ($(du -h /app/models/bge-m3.gguf | cut -f1))"; \
+    else \
+      echo "ERROR: models/bge-m3.gguf not found" && exit 1; \
+    fi && \
+    # Qwen2.5-0.5B-Instruct for Heimdall (required for this build)
+    if [ -f /models/qwen2.5-0.5b-instruct.gguf ]; then \
+      cp /models/qwen2.5-0.5b-instruct.gguf /app/models/ && \
+      echo "✓ Embedded qwen2.5-0.5b-instruct.gguf ($(du -h /app/models/qwen2.5-0.5b-instruct.gguf | cut -f1))"; \
+    else \
+      echo "ERROR: models/qwen2.5-0.5b-instruct.gguf not found - required for Heimdall" && exit 1; \
+    fi && \
+    echo "=== Model embedding complete ===" && \
+    ls -lh /app/models/
+
+EXPOSE 7474 7687
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD wget --spider -q http://localhost:7474/health || exit 1
+
+# Environment configuration for Heimdall-enabled deployment
+ENV NORNICDB_DATA_DIR=/data \
+    NORNICDB_HTTP_PORT=7474 \
+    NORNICDB_BOLT_PORT=7687 \
+    # Embedding configuration
+    NORNICDB_EMBEDDING_PROVIDER=local \
+    NORNICDB_EMBEDDING_MODEL=bge-m3 \
+    NORNICDB_EMBEDDING_DIMENSIONS=1024 \
+    NORNICDB_MODELS_DIR=/app/models \
+    NORNICDB_EMBEDDING_GPU_LAYERS=0 \
+    # Heimdall configuration (cognitive guardian)
+    NORNICDB_HEIMDALL_ENABLED=true \
+    NORNICDB_HEIMDALL_MODEL=qwen2.5-0.5b-instruct \
+    NORNICDB_HEIMDALL_GPU_LAYERS=-1 \
+    NORNICDB_HEIMDALL_MAX_TOKENS=512 \
+    NORNICDB_HEIMDALL_TEMPERATURE=0.1 \
+    NORNICDB_HEIMDALL_ANOMALY_DETECTION=true \
+    NORNICDB_HEIMDALL_RUNTIME_DIAGNOSIS=true \
+    NORNICDB_HEIMDALL_MEMORY_CURATION=false \
+    # General settings
+    NORNICDB_NO_AUTH=true \
+    NORNICDB_PLUGINS_DIR=/app/plugins
+
+ENTRYPOINT ["/app/entrypoint.sh"]

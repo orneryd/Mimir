@@ -142,11 +142,14 @@ import (
 
 	"github.com/orneryd/nornicdb/pkg/audit"
 	"github.com/orneryd/nornicdb/pkg/auth"
+	nornicConfig "github.com/orneryd/nornicdb/pkg/config"
 	"github.com/orneryd/nornicdb/pkg/embed"
 	"github.com/orneryd/nornicdb/pkg/gpu"
 	"github.com/orneryd/nornicdb/pkg/gpu/metal"
+	"github.com/orneryd/nornicdb/pkg/heimdall"
 	"github.com/orneryd/nornicdb/pkg/mcp"
 	"github.com/orneryd/nornicdb/pkg/nornicdb"
+	heimdallplugin "github.com/orneryd/nornicdb/plugins/heimdall"
 )
 
 // Errors for HTTP operations.
@@ -379,6 +382,9 @@ type Server struct {
 	// MCP server for LLM tool interface
 	mcpServer *mcp.Server
 
+	// Heimdall - AI assistant for database management
+	heimdallHandler *heimdall.Handler
+
 	httpServer *http.Server
 	listener   net.Listener
 
@@ -459,6 +465,72 @@ func New(db *nornicdb.DB, authenticator *auth.Authenticator, config *Config) (*S
 		log.Println("ℹ️  MCP server disabled via configuration")
 	}
 
+	// ==========================================================================
+	// Heimdall - AI Assistant for Database Management
+	// ==========================================================================
+	var heimdallHandler *heimdall.Handler
+	globalConfig := nornicConfig.LoadFromEnv()
+	if globalConfig.Features.HeimdallEnabled {
+		log.Println("🛡️  Heimdall AI Assistant initializing...")
+		heimdallCfg := heimdall.ConfigFromFeatureFlags(&globalConfig.Features)
+		manager, err := heimdall.NewManager(heimdallCfg)
+		if err != nil {
+			log.Printf("⚠️  Heimdall initialization failed: %v", err)
+			log.Println("   → AI Assistant will not be available")
+			log.Println("   → Check NORNICDB_HEIMDALL_MODEL and NORNICDB_MODELS_DIR")
+		} else {
+			// Create database reader wrapper for Heimdall
+			dbReader := &heimdallDBReader{db: db}
+			metricsReader := &heimdallMetricsReader{}
+			heimdallHandler = heimdall.NewHandler(manager, heimdallCfg, dbReader, metricsReader)
+
+			// Initialize Heimdall plugin subsystem
+			subsystemMgr := heimdall.GetSubsystemManager()
+			subsystemCtx := heimdall.SubsystemContext{
+				Config:  heimdallCfg,
+				Bifrost: heimdallHandler.Bifrost(),
+			}
+			subsystemMgr.SetContext(subsystemCtx)
+
+			// Register built-in actions
+			heimdall.InitBuiltinActions()
+
+			// Register built-in watcher plugin
+			watcherPlugin := heimdallplugin.Plugin
+			if err := subsystemMgr.RegisterPlugin(watcherPlugin, "", true); err != nil {
+				log.Printf("   ⚠️  Failed to register watcher plugin: %v", err)
+			} else {
+				if err := watcherPlugin.Start(); err != nil {
+					log.Printf("   ⚠️  Failed to start watcher plugin: %v", err)
+				}
+			}
+
+			// Load external plugins if directory specified
+			pluginsDir := os.Getenv("NORNICDB_HEIMDALL_PLUGINS_DIR")
+			if pluginsDir != "" {
+				if err := heimdall.LoadHeimdallPluginsFromDir(pluginsDir, subsystemCtx); err != nil {
+					log.Printf("   ⚠️  Failed to load Heimdall plugins from %s: %v", pluginsDir, err)
+				}
+			}
+
+			// Log loaded plugins
+			plugins := heimdall.ListHeimdallPlugins()
+			actions := heimdall.ListHeimdallActions()
+			log.Printf("✅ Heimdall AI Assistant ready")
+			log.Printf("   → Model: %s", heimdallCfg.Model)
+			log.Printf("   → Plugins: %d loaded, %d actions available", len(plugins), len(actions))
+			log.Printf("   → Bifrost chat: /api/bifrost/chat/completions")
+			log.Printf("   → Status: /api/bifrost/status")
+
+			// Log available actions
+			for _, actionName := range actions {
+				log.Printf("   → Action: %s", actionName)
+			}
+		}
+	} else {
+		log.Println("ℹ️  Heimdall AI Assistant disabled (set NORNICDB_HEIMDALL_ENABLED=true to enable)")
+	}
+
 	// Configure embeddings if enabled
 	// Local provider doesn't need API URL, others do
 	embeddingsReady := config.EmbeddingEnabled && (config.EmbeddingProvider == "local" || config.EmbeddingAPIURL != "")
@@ -532,10 +604,11 @@ func New(db *nornicdb.DB, authenticator *auth.Authenticator, config *Config) (*S
 	}
 
 	s := &Server{
-		config:    config,
-		db:        db,
-		auth:      authenticator,
-		mcpServer: mcpServer,
+		config:          config,
+		db:              db,
+		auth:            authenticator,
+		mcpServer:       mcpServer,
+		heimdallHandler: heimdallHandler,
 	}
 
 	// Initialize slow query logger if file specified
@@ -804,6 +877,23 @@ func (s *Server) buildRouter() http.Handler {
 	// Routes: /mcp, /mcp/initialize, /mcp/tools/list, /mcp/tools/call, /mcp/health
 	if s.mcpServer != nil {
 		s.mcpServer.RegisterRoutes(mux)
+	}
+
+	// ==========================================================================
+	// Heimdall AI Assistant Endpoints (Bifrost chat interface)
+	// ==========================================================================
+	// Routes: /api/bifrost/status, /api/bifrost/chat/completions, /api/bifrost/events
+	if s.heimdallHandler != nil {
+		// Register each endpoint explicitly for proper routing
+		mux.HandleFunc("/api/bifrost/status", func(w http.ResponseWriter, r *http.Request) {
+			s.heimdallHandler.ServeHTTP(w, r)
+		})
+		mux.HandleFunc("/api/bifrost/chat/completions", func(w http.ResponseWriter, r *http.Request) {
+			s.heimdallHandler.ServeHTTP(w, r)
+		})
+		mux.HandleFunc("/api/bifrost/events", func(w http.ResponseWriter, r *http.Request) {
+			s.heimdallHandler.ServeHTTP(w, r)
+		})
 	}
 
 	// Wrap with middleware
@@ -2530,6 +2620,14 @@ func (w *responseWriter) WriteHeader(status int) {
 	w.ResponseWriter.WriteHeader(status)
 }
 
+// Flush implements http.Flusher interface for SSE streaming.
+// This is critical for Bifrost chat streaming to work properly.
+func (w *responseWriter) Flush() {
+	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
 // JSON helpers
 
 func (s *Server) readJSON(r *http.Request, v interface{}) error {
@@ -2625,4 +2723,54 @@ func (s *Server) logAudit(r *http.Request, userID, eventType string, success boo
 		Reason:      details,
 		RequestPath: r.URL.Path,
 	})
+}
+
+// ==========================================================================
+// Heimdall Database/Metrics Wrappers
+// ==========================================================================
+
+// heimdallDBReader wraps NornicDB for Heimdall's DatabaseReader interface.
+type heimdallDBReader struct {
+	db *nornicdb.DB
+}
+
+func (r *heimdallDBReader) Query(ctx context.Context, cypher string, params map[string]interface{}) ([]map[string]interface{}, error) {
+	result, err := r.db.ExecuteCypher(ctx, cypher, params)
+	if err != nil {
+		return nil, err
+	}
+	// Convert result to []map[string]interface{}
+	var rows []map[string]interface{}
+	for _, row := range result.Rows {
+		rowMap := make(map[string]interface{})
+		for i, col := range result.Columns {
+			if i < len(row) {
+				rowMap[col] = row[i]
+			}
+		}
+		rows = append(rows, rowMap)
+	}
+	return rows, nil
+}
+
+func (r *heimdallDBReader) Stats() heimdall.DatabaseStats {
+	stats := r.db.Stats()
+	return heimdall.DatabaseStats{
+		NodeCount:         stats.NodeCount,
+		RelationshipCount: stats.EdgeCount,
+		LabelCounts:       make(map[string]int64), // TODO: implement label counts
+	}
+}
+
+// heimdallMetricsReader provides runtime metrics for Heimdall.
+type heimdallMetricsReader struct{}
+
+func (r *heimdallMetricsReader) Runtime() heimdall.RuntimeMetrics {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	return heimdall.RuntimeMetrics{
+		GoroutineCount: runtime.NumGoroutine(),
+		MemoryAllocMB:  m.Alloc / 1024 / 1024,
+		NumGC:          m.NumGC,
+	}
 }

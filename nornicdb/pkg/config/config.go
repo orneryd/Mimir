@@ -298,7 +298,52 @@ type FeatureFlagsConfig struct {
 	// A/B testing for automatic topology integration
 	TopologyABTestEnabled    bool
 	TopologyABTestPercentage int // 0-100
+
+	// Heimdall - the cognitive guardian of NornicDB
+	// When enabled, NornicDB loads a local SLM for anomaly detection,
+	// runtime diagnosis, and memory curation.
+	// Environment: NORNICDB_HEIMDALL_ENABLED (default: false)
+	HeimdallEnabled bool
+
+	// Heimdall model name (without .gguf extension)
+	// Environment: NORNICDB_HEIMDALL_MODEL (default: qwen2.5-1.5b-instruct-q4_k_m)
+	HeimdallModel string
+
+	// GPU layers for Heimdall SLM (-1=auto, 0=CPU only)
+	// Falls back to CPU if GPU memory insufficient
+	// Environment: NORNICDB_HEIMDALL_GPU_LAYERS (default: -1)
+	HeimdallGPULayers int
+
+	// Max tokens for Heimdall generation
+	// Environment: NORNICDB_HEIMDALL_MAX_TOKENS (default: 512)
+	HeimdallMaxTokens int
+
+	// Temperature for Heimdall (lower = more deterministic)
+	// Environment: NORNICDB_HEIMDALL_TEMPERATURE (default: 0.1)
+	HeimdallTemperature float32
+
+	// Enable Heimdall anomaly detection on graph
+	// Environment: NORNICDB_HEIMDALL_ANOMALY_DETECTION (default: true when Heimdall enabled)
+	HeimdallAnomalyDetection bool
+
+	// Enable Heimdall runtime diagnosis
+	// Environment: NORNICDB_HEIMDALL_RUNTIME_DIAGNOSIS (default: true when Heimdall enabled)
+	HeimdallRuntimeDiagnosis bool
+
+	// Enable Heimdall memory curation (experimental)
+	// Environment: NORNICDB_HEIMDALL_MEMORY_CURATION (default: false)
+	HeimdallMemoryCuration bool
 }
+
+// Heimdall config getter methods for heimdall.FeatureFlagsSource interface
+func (f *FeatureFlagsConfig) GetHeimdallEnabled() bool          { return f.HeimdallEnabled }
+func (f *FeatureFlagsConfig) GetHeimdallModel() string          { return f.HeimdallModel }
+func (f *FeatureFlagsConfig) GetHeimdallGPULayers() int         { return f.HeimdallGPULayers }
+func (f *FeatureFlagsConfig) GetHeimdallMaxTokens() int         { return f.HeimdallMaxTokens }
+func (f *FeatureFlagsConfig) GetHeimdallTemperature() float32   { return f.HeimdallTemperature }
+func (f *FeatureFlagsConfig) GetHeimdallAnomalyDetection() bool { return f.HeimdallAnomalyDetection }
+func (f *FeatureFlagsConfig) GetHeimdallRuntimeDiagnosis() bool { return f.HeimdallRuntimeDiagnosis }
+func (f *FeatureFlagsConfig) GetHeimdallMemoryCuration() bool   { return f.HeimdallMemoryCuration }
 
 // LoadFromEnv loads configuration from environment variables.
 //
@@ -636,6 +681,18 @@ func LoadFromEnv() *Config {
 	config.Features.TopologyGraphRefreshInterval = getEnvInt("NORNICDB_TOPOLOGY_GRAPH_REFRESH_INTERVAL", 100)
 	config.Features.TopologyABTestEnabled = getEnvBool("NORNICDB_TOPOLOGY_AB_TEST_ENABLED", false)
 	config.Features.TopologyABTestPercentage = getEnvInt("NORNICDB_TOPOLOGY_AB_TEST_PERCENTAGE", 50)
+
+	// Heimdall - the cognitive guardian feature flags
+	// Opt-in cognitive database features - disabled by default
+	config.Features.HeimdallEnabled = getEnvBool("NORNICDB_HEIMDALL_ENABLED", false)
+	config.Features.HeimdallModel = getEnv("NORNICDB_HEIMDALL_MODEL", "qwen2.5-0.5b-instruct")
+	config.Features.HeimdallGPULayers = getEnvInt("NORNICDB_HEIMDALL_GPU_LAYERS", -1) // -1 = auto
+	config.Features.HeimdallMaxTokens = getEnvInt("NORNICDB_HEIMDALL_MAX_TOKENS", 512)
+	config.Features.HeimdallTemperature = float32(getEnvFloat("NORNICDB_HEIMDALL_TEMPERATURE", 0.1))
+	// Sub-features default to true when Heimdall is enabled
+	config.Features.HeimdallAnomalyDetection = getEnvBool("NORNICDB_HEIMDALL_ANOMALY_DETECTION", config.Features.HeimdallEnabled)
+	config.Features.HeimdallRuntimeDiagnosis = getEnvBool("NORNICDB_HEIMDALL_RUNTIME_DIAGNOSIS", config.Features.HeimdallEnabled)
+	config.Features.HeimdallMemoryCuration = getEnvBool("NORNICDB_HEIMDALL_MEMORY_CURATION", false) // Experimental
 
 	return config
 }

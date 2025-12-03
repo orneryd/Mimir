@@ -2,14 +2,26 @@
 
 ## Image Variants
 
-Each architecture has two variants:
-
 | Image | Description | Use When |
 |-------|-------------|----------|
-| `nornicdb-arm64-metal` | Base image (~50MB) | You have your own GGUF models |
-| `nornicdb-arm64-metal-bge` | With BGE-M3 (~1.6GB) | Ready to use immediately |
-| `nornicdb-amd64-cuda` | Base image (~3GB) | You have your own GGUF models |
-| `nornicdb-amd64-cuda-bge` | With BGE-M3 (~4.5GB) | Ready to use immediately |
+| `nornicdb-arm64-metal` | Base image (~50MB) | BYOM - bring your own models |
+| `nornicdb-arm64-metal-bge` | With BGE-M3 (~1.6GB) | Ready for embeddings immediately |
+| `nornicdb-arm64-metal-bge-heimdall` | With BGE-M3 + Heimdall (~2.0GB) | **Full cognitive features** - single-click deploy |
+| `nornicdb-amd64-cuda` | Base image (~3GB) | BYOM - bring your own models |
+| `nornicdb-amd64-cuda-bge` | With BGE-M3 (~4.5GB) | Ready for embeddings immediately |
+
+### 🛡️ Heimdall Build (NEW)
+
+The `nornicdb-arm64-metal-bge-heimdall` image is "batteries included":
+- **BGE-M3** for vector search/embeddings
+- **Qwen2.5-0.5B-Instruct** for Heimdall (cognitive guardian)
+- **Bifrost** chat interface enabled by default
+
+Heimdall provides:
+- Anomaly detection on graph structure
+- Runtime diagnosis (goroutine analysis, memory issues)
+- Memory curation (summarization, deduplication)
+- Natural language interaction via Bifrost
 
 ---
 
@@ -17,7 +29,8 @@ Each architecture has two variants:
 
 ### Prerequisites
 - Docker Desktop for Mac
-- `models/bge-m3.gguf` file (only for BGE variant)
+- `models/bge-m3.gguf` file (for BGE variants)
+- `models/qwen2.5-1.5b-instruct-q4_k_m.gguf` file (for Heimdall variant)
 
 ### Build & Deploy Base Image
 ```bash
@@ -49,6 +62,35 @@ make push-arm64-metal-bge
 # Or build + push in one command
 make deploy-arm64-metal-bge
 ```
+
+### Build & Deploy Heimdall Image (full cognitive features)
+```bash
+cd nornicdb
+
+# Ensure both model files exist
+ls -la models/bge-m3.gguf
+ls -la models/qwen2.5-1.5b-instruct-q4_k_m.gguf
+
+# Build (includes both models - batteries included!)
+make build-arm64-metal-bge-heimdall
+
+# Push to registry
+make push-arm64-metal-bge-heimdall
+
+# Or build + push in one command
+make deploy-arm64-metal-bge-heimdall
+```
+
+**Running the Heimdall image:**
+```bash
+# Simple run
+docker run -p 7474:7474 -p 7687:7687 timothyswt/nornicdb-arm64-metal-bge-heimdall
+
+# With persistent data
+docker run -p 7474:7474 -p 7687:7687 -v nornicdb-data:/data timothyswt/nornicdb-arm64-metal-bge-heimdall
+```
+
+Access the Bifrost chat interface at `http://localhost:7474/bifrost` to interact with Heimdall.
 
 ---
 

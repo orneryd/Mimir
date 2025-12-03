@@ -43,6 +43,7 @@ endif
 # Image names: nornicdb-{architecture}[-{feature}]:latest
 IMAGE_ARM64 := $(REGISTRY)/nornicdb-arm64-metal:$(VERSION)
 IMAGE_ARM64_BGE := $(REGISTRY)/nornicdb-arm64-metal-bge:$(VERSION)
+IMAGE_ARM64_BGE_HEIMDALL := $(REGISTRY)/nornicdb-arm64-metal-bge-heimdall:$(VERSION)
 IMAGE_ARM64_HEADLESS := $(REGISTRY)/nornicdb-arm64-metal-headless:$(VERSION)
 IMAGE_AMD64 := $(REGISTRY)/nornicdb-amd64-cuda:$(VERSION)
 IMAGE_AMD64_BGE := $(REGISTRY)/nornicdb-amd64-cuda-bge:$(VERSION)
@@ -54,14 +55,14 @@ LLAMA_CUDA := $(REGISTRY)/llama-cuda-libs:b4785
 # Dockerfiles
 DOCKER_DIR := docker
 
-.PHONY: build-arm64-metal build-arm64-metal-bge build-arm64-metal-headless
+.PHONY: build-arm64-metal build-arm64-metal-bge build-arm64-metal-bge-heimdall build-arm64-metal-headless
 .PHONY: build-amd64-cuda build-amd64-cuda-bge build-amd64-cuda-headless
 .PHONY: build-amd64-cpu build-amd64-cpu-headless
 .PHONY: build-all build-arm64-all build-amd64-all
-.PHONY: push-arm64-metal push-arm64-metal-bge push-arm64-metal-headless
+.PHONY: push-arm64-metal push-arm64-metal-bge push-arm64-metal-bge-heimdall push-arm64-metal-headless
 .PHONY: push-amd64-cuda push-amd64-cuda-bge push-amd64-cuda-headless
 .PHONY: push-amd64-cpu push-amd64-cpu-headless
-.PHONY: deploy-arm64-metal deploy-arm64-metal-bge deploy-arm64-metal-headless
+.PHONY: deploy-arm64-metal deploy-arm64-metal-bge deploy-arm64-metal-bge-heimdall deploy-arm64-metal-headless
 .PHONY: deploy-amd64-cuda deploy-amd64-cuda-bge deploy-amd64-cuda-headless
 .PHONY: deploy-amd64-cpu deploy-amd64-cpu-headless
 .PHONY: deploy-all deploy-arm64-all deploy-amd64-all
@@ -83,6 +84,16 @@ build-arm64-metal-bge:
 	@echo "║ Building: $(IMAGE_ARM64_BGE) [with BGE model]"
 	@echo "╚══════════════════════════════════════════════════════════════╝"
 	docker build $(DOCKER_BUILD_FLAGS) --platform linux/arm64 --build-arg EMBED_MODEL=true -t $(IMAGE_ARM64_BGE) -f $(DOCKER_DIR)/Dockerfile.arm64-metal .
+
+build-arm64-metal-bge-heimdall:
+	@echo "╔══════════════════════════════════════════════════════════════╗"
+	@echo "║ Building: $(IMAGE_ARM64_BGE_HEIMDALL) [BGE + Heimdall]"
+	@echo "║ 🛡️ Full cognitive features - batteries included!"
+	@echo "╚══════════════════════════════════════════════════════════════╝"
+	@echo "Checking for required models..."
+	@test -f models/bge-m3.gguf || (echo "ERROR: models/bge-m3.gguf not found" && exit 1)
+	@test -f models/qwen2.5-1.5b-instruct-q4_k_m.gguf || (echo "ERROR: models/qwen2.5-1.5b-instruct-q4_k_m.gguf not found" && exit 1)
+	docker build $(DOCKER_BUILD_FLAGS) --platform linux/arm64 -t $(IMAGE_ARM64_BGE_HEIMDALL) -f $(DOCKER_DIR)/Dockerfile.arm64-metal-heimdall .
 
 build-arm64-metal-headless:
 	@echo "╔══════════════════════════════════════════════════════════════╗"
@@ -149,6 +160,10 @@ push-arm64-metal-bge:
 	@echo "→ Pushing $(IMAGE_ARM64_BGE)"
 	docker push $(IMAGE_ARM64_BGE)
 
+push-arm64-metal-bge-heimdall:
+	@echo "→ Pushing $(IMAGE_ARM64_BGE_HEIMDALL)"
+	docker push $(IMAGE_ARM64_BGE_HEIMDALL)
+
 push-arm64-metal-headless:
 	@echo "→ Pushing $(IMAGE_ARM64_HEADLESS)"
 	docker push $(IMAGE_ARM64_HEADLESS)
@@ -182,6 +197,10 @@ deploy-arm64-metal: build-arm64-metal push-arm64-metal
 
 deploy-arm64-metal-bge: build-arm64-metal-bge push-arm64-metal-bge
 	@echo "✓ Deployed $(IMAGE_ARM64_BGE)"
+
+deploy-arm64-metal-bge-heimdall: build-arm64-metal-bge-heimdall push-arm64-metal-bge-heimdall
+	@echo "✓ Deployed $(IMAGE_ARM64_BGE_HEIMDALL)"
+	@echo "🛡️ Heimdall cognitive features enabled - access Bifrost at /bifrost"
 
 deploy-arm64-metal-headless: build-arm64-metal-headless push-arm64-metal-headless
 	@echo "✓ Deployed $(IMAGE_ARM64_HEADLESS)"

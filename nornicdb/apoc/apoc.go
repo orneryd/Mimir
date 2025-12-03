@@ -13,6 +13,7 @@ import (
 	"github.com/orneryd/nornicdb/apoc/atomic"
 	"github.com/orneryd/nornicdb/apoc/bitwise"
 	"github.com/orneryd/nornicdb/apoc/coll"
+	"github.com/orneryd/nornicdb/apoc/community"
 	"github.com/orneryd/nornicdb/apoc/convert"
 	"github.com/orneryd/nornicdb/apoc/create"
 	apoccypher "github.com/orneryd/nornicdb/apoc/cypher"
@@ -533,6 +534,29 @@ func registerAllFunctions() error {
 	register("apoc.algo.dijkstra", "algo", algo.Dijkstra, "Dijkstra shortest path", []string{"apoc.algo.dijkstra(start, end) => path"})
 	register("apoc.algo.allPairs", "algo", algo.AllPairs, "All pairs shortest paths", []string{"apoc.algo.allPairs(nodes) => paths"})
 	register("apoc.algo.cover", "algo", algo.Cover, "Node cover", []string{"apoc.algo.cover(nodes) => cover"})
+
+	// ========================================
+	// Community Detection Functions (apoc.community.*)
+	// ========================================
+	register("apoc.community.louvain", "community", community.Louvain, "Louvain community detection", []string{"apoc.community.louvain(nodes, rels, config) => communities"})
+	register("apoc.community.labelPropagation", "community", community.LabelPropagation, "Label propagation", []string{"apoc.community.labelPropagation(nodes, rels) => communities"})
+	register("apoc.community.modularity", "community", community.Modularity, "Calculate modularity", []string{"apoc.community.modularity(nodes, rels, communities) => score"})
+	register("apoc.community.triangleCount", "community", community.TriangleCount, "Count triangles per node", []string{"apoc.community.triangleCount(nodes, rels) => counts"})
+	register("apoc.community.totalTriangles", "community", community.TotalTriangles, "Total triangle count", []string{"apoc.community.totalTriangles(nodes, rels) => count"})
+	register("apoc.community.clusteringCoefficient", "community", community.ClusteringCoefficient, "Clustering coefficient per node", []string{"apoc.community.clusteringCoefficient(nodes, rels) => coefficients"})
+	register("apoc.community.averageClusteringCoefficient", "community", community.AverageClusteringCoefficient, "Average clustering coefficient", []string{"apoc.community.averageClusteringCoefficient(nodes, rels) => coefficient"})
+	register("apoc.community.connectedComponents", "community", community.ConnectedComponents, "Connected components", []string{"apoc.community.connectedComponents(nodes, rels) => components"})
+	register("apoc.community.numComponents", "community", community.NumComponents, "Number of components", []string{"apoc.community.numComponents(nodes, rels) => count"})
+	register("apoc.community.stronglyConnectedComponents", "community", community.StronglyConnectedComponents, "Strongly connected components", []string{"apoc.community.stronglyConnectedComponents(nodes, rels) => components"})
+	register("apoc.community.weaklyConnectedComponents", "community", community.WeaklyConnectedComponents, "Weakly connected components", []string{"apoc.community.weaklyConnectedComponents(nodes, rels) => components"})
+	register("apoc.community.kCore", "community", community.KCore, "K-core decomposition", []string{"apoc.community.kCore(nodes, rels, k) => core"})
+	register("apoc.community.coreNumber", "community", community.CoreNumber, "Core number for each node", []string{"apoc.community.coreNumber(nodes, rels) => coreNumbers"})
+	register("apoc.community.conductance", "community", community.Conductance, "Conductance of community", []string{"apoc.community.conductance(nodes, rels, community) => score"})
+	register("apoc.community.density", "community", community.Density, "Graph density", []string{"apoc.community.density(nodes, rels) => density"})
+	register("apoc.community.fastGreedy", "community", community.FastGreedy, "Fast greedy modularity optimization", []string{"apoc.community.fastGreedy(nodes, rels) => communities"})
+	register("apoc.community.spinGlass", "community", community.SpinGlass, "Spin-glass community detection", []string{"apoc.community.spinGlass(nodes, rels, config) => communities"})
+	register("apoc.community.walkTrap", "community", community.WalkTrap, "WalkTrap community detection", []string{"apoc.community.walkTrap(nodes, rels, steps) => communities"})
+	register("apoc.community.infoMap", "community", community.InfoMap, "InfoMap community detection", []string{"apoc.community.infoMap(nodes, rels, trials) => communities"})
 
 	// ========================================
 	// Atomic Functions (apoc.atomic.*)

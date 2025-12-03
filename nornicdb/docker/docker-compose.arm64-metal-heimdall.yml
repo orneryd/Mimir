@@ -1,0 +1,45 @@
+# NornicDB ARM64 Metal + Heimdall (Cognitive Guardian)
+# 
+# Batteries-included deployment with both embedding and SLM models.
+# No additional model downloads required.
+#
+# Build:
+#   docker-compose -f docker/docker-compose.arm64-metal-heimdall.yml build
+#
+# Run:
+#   docker-compose -f docker/docker-compose.arm64-metal-heimdall.yml up
+#
+# Prerequisites:
+#   Place these models in the ./models directory:
+#   - bge-m3.gguf (embedding model)
+#   - qwen2.5-1.5b-instruct-q4_k_m.gguf (Heimdall SLM)
+
+services:
+  nornicdb:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.arm64-metal-heimdall
+    image: timothyswt/nornicdb-arm64-metal-bge-heimdall
+    ports:
+      - "7474:7474"  # HTTP API + Bifrost UI
+      - "7687:7687"  # Bolt protocol
+    volumes:
+      - nornicdb-data:/data
+    environment:
+      # Auth (disable for development)
+      NORNICDB_NO_AUTH: "true"
+      # Heimdall is enabled by default in this image
+      # Override these to customize:
+      # NORNICDB_HEIMDALL_ENABLED: "true"
+      # NORNICDB_HEIMDALL_MAX_TOKENS: "512"
+      # NORNICDB_HEIMDALL_TEMPERATURE: "0.1"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:7474/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  nornicdb-data:

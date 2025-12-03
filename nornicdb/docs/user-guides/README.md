@@ -8,7 +8,8 @@
 - **[Vector Search](vector-search.md)** - Semantic search with embeddings
 - **[Hybrid Search (RRF)](hybrid-search.md)** - Combine vector + BM25 search
 - **[Transactions](transactions.md)** - ACID guarantees and transaction management
-- **[Clustering](clustering.md)** - High availability and replication ⭐ **NEW**
+- **[Clustering](clustering.md)** - High availability and replication
+- **[Heimdall AI Assistant](heimdall-ai-assistant.md)** - Built-in AI for natural language database interaction ⭐ **NEW**
 - **[Complete Examples](complete-examples.md)** - Full application examples
 
 ### Query & Data Management
@@ -19,6 +20,7 @@
 ### Operations
 - **[Clustering](clustering.md)** - Hot Standby, Raft, Multi-Region replication
 - **[Plugin System](plugin-system.md)** - APOC functions and custom plugins
+- **[Heimdall Plugins](heimdall-plugins.md)** - Extend the AI assistant with custom actions
 
 ## 🎯 Quick Start Paths
 
@@ -47,6 +49,12 @@
 
 **Set up high availability**
 → [Clustering Guide](clustering.md)
+
+**Use natural language to query my database**
+→ [Heimdall AI Assistant](heimdall-ai-assistant.md)
+
+**Extend Heimdall with custom actions**
+→ [Heimdall Plugins](heimdall-plugins.md)
 
 ## 📖 Learning Path
 

@@ -182,7 +182,7 @@ func Update(node *Node, property string, value interface{}) *Node {
 //
 //	apoc.atomic.increment(node, 'counter') => updated node
 func Increment(node *Node, property string) *Node {
-	return Add(node, property, 1)
+	return Add(node, property, int64(1))
 }
 
 // Decrement atomically decrements a numeric property by 1.
@@ -191,7 +191,7 @@ func Increment(node *Node, property string) *Node {
 //
 //	apoc.atomic.decrement(node, 'counter') => updated node
 func Decrement(node *Node, property string) *Node {
-	return Subtract(node, property, 1)
+	return Subtract(node, property, int64(1))
 }
 
 // CompareAndSwap atomically compares and swaps a property value.
