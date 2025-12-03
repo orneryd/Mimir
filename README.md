@@ -7,6 +7,7 @@
 [![Docker](https://img.shields.io/badge/docker-ready-blue?logo=docker)](https://www.docker.com/)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18-green?logo=node.js)](https://nodejs.org/)
 [![Neo4j](https://img.shields.io/badge/neo4j-5.15-008CC1?logo=neo4j)](https://neo4j.com/)
+[![NornicDB](https://img.shields.io/badge/NornicDB-1.0.0-008CC1?logo=NornicDB)](nornicdb/README.md)
 [![MCP](https://img.shields.io/badge/MCP-compatible-orange)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
