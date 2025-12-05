@@ -10,7 +10,7 @@ import (
 // TestApocPathSpanningTreeBasic tests basic spanning tree functionality
 func TestApocPathSpanningTreeBasic(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	e := NewStorageExecutor(store)
+	e := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create a simple graph: A -> B -> C
@@ -41,7 +41,7 @@ func TestApocPathSpanningTreeBasic(t *testing.T) {
 // TestApocPathSpanningTreeWithCycle tests spanning tree with cycles
 func TestApocPathSpanningTreeWithCycle(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	e := NewStorageExecutor(store)
+	e := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create a graph with a cycle: A -> B -> C -> A
@@ -72,7 +72,7 @@ func TestApocPathSpanningTreeWithCycle(t *testing.T) {
 // TestApocPathSpanningTreeMaxLevel tests maxLevel configuration
 func TestApocPathSpanningTreeMaxLevel(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	e := NewStorageExecutor(store)
+	e := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create a chain: A -> B -> C -> D
@@ -101,7 +101,7 @@ func TestApocPathSpanningTreeMaxLevel(t *testing.T) {
 // TestApocPathSpanningTreeRelationshipFilter tests relationship type filtering
 func TestApocPathSpanningTreeRelationshipFilter(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	e := NewStorageExecutor(store)
+	e := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create a graph with different relationship types
@@ -131,7 +131,7 @@ func TestApocPathSpanningTreeRelationshipFilter(t *testing.T) {
 // TestApocPathSpanningTreeDFS tests depth-first search spanning tree
 func TestApocPathSpanningTreeDFS(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	e := NewStorageExecutor(store)
+	e := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create a binary tree
@@ -163,7 +163,7 @@ func TestApocPathSpanningTreeDFS(t *testing.T) {
 // TestApocPathSpanningTreeLabelFilter tests label filtering
 func TestApocPathSpanningTreeLabelFilter(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	e := NewStorageExecutor(store)
+	e := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create a graph with different labels
@@ -193,7 +193,7 @@ func TestApocPathSpanningTreeLabelFilter(t *testing.T) {
 // TestApocPathSpanningTreeLimit tests limit configuration
 func TestApocPathSpanningTreeLimit(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	e := NewStorageExecutor(store)
+	e := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create a star graph: A connected to B, C, D, E
@@ -224,7 +224,7 @@ func TestApocPathSpanningTreeLimit(t *testing.T) {
 // TestApocPathSpanningTreeDisconnectedGraph tests with disconnected components
 func TestApocPathSpanningTreeDisconnectedGraph(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	e := NewStorageExecutor(store)
+	e := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create two disconnected components: A-B and C-D
@@ -253,7 +253,7 @@ func TestApocPathSpanningTreeDisconnectedGraph(t *testing.T) {
 // TestApocPathSpanningTreeDirection tests directional traversal
 func TestApocPathSpanningTreeDirection(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	e := NewStorageExecutor(store)
+	e := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create a directed graph: A -> B -> C

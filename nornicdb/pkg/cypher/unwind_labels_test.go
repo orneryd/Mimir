@@ -16,7 +16,7 @@ import (
 // Setup helper - creates nodes with multiple labels
 // ====================================================================================
 
-func setupMultiLabelNodes(t *testing.T, store storage.Engine, exec *StorageExecutor) {
+func setupMultiLabelNodes(t *testing.T, store storage.Engine, exec *ASTExecutor) {
 	ctx := context.Background()
 
 	queries := []string{
@@ -38,7 +38,7 @@ func setupMultiLabelNodes(t *testing.T, store storage.Engine, exec *StorageExecu
 
 func TestLabelsFunction(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	setupMultiLabelNodes(t, store, exec)
@@ -85,7 +85,7 @@ func TestLabelsFunction(t *testing.T) {
 
 func TestUnwindWithFunctionResults(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	setupMultiLabelNodes(t, store, exec)
@@ -139,7 +139,7 @@ func TestUnwindWithFunctionResults(t *testing.T) {
 
 func TestListComprehensionWithLabels(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	setupMultiLabelNodes(t, store, exec)
@@ -220,7 +220,7 @@ func TestListComprehensionWithLabels(t *testing.T) {
 
 func TestMatchUnwindCombined(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	setupMultiLabelNodes(t, store, exec)
@@ -258,7 +258,7 @@ func TestMatchUnwindCombined(t *testing.T) {
 
 func TestMimirByTypeQuery(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	setupMultiLabelNodes(t, store, exec)
@@ -304,7 +304,7 @@ func TestMimirByTypeQuery(t *testing.T) {
 
 func TestUnwindEdgeCases(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	t.Run("UNWIND empty list", func(t *testing.T) {
@@ -373,7 +373,7 @@ func TestUnwindEdgeCases(t *testing.T) {
 
 func TestSimplifiedByTypeQuery(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	setupMultiLabelNodes(t, store, exec)

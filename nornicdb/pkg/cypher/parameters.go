@@ -135,7 +135,7 @@ func getParamsFromContext(ctx context.Context) map[string]interface{} {
 //
 // Values are properly escaped to prevent injection attacks.
 // String values have single quotes escaped by doubling them.
-func (e *StorageExecutor) substituteParams(cypher string, params map[string]interface{}) string {
+func (e *ASTExecutor) substituteParams(cypher string, params map[string]interface{}) string {
 	if params == nil || len(params) == 0 {
 		return cypher
 	}
@@ -188,7 +188,7 @@ func (e *StorageExecutor) substituteParams(cypher string, params map[string]inte
 //	e.valueToLiteral(42)                // "42"
 //	e.valueToLiteral([]int{1, 2, 3})    // "[1, 2, 3]"
 //	e.valueToLiteral(map[string]interface{}{"name": "Bob"}) // "{name: 'Bob'}"
-func (e *StorageExecutor) valueToLiteral(v interface{}) string {
+func (e *ASTExecutor) valueToLiteral(v interface{}) string {
 	if v == nil {
 		return "null"
 	}

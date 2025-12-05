@@ -13,7 +13,7 @@ import (
 // These queries must work for the VSCode plugin to show correct stats.
 func TestMimirStatsQueries(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Setup: Create File nodes with various properties
@@ -129,7 +129,7 @@ func TestMimirStatsQueries(t *testing.T) {
 // TestMimirStatsWithEmbeddings tests stats queries when nodes have embeddings
 func TestMimirStatsWithEmbeddings(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create a file with an embedding (simulating what NornicDB's embed worker does)

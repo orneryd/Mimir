@@ -9,7 +9,7 @@ import (
 
 func TestOrderByLimitSkip(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create test data
@@ -160,7 +160,7 @@ func TestOrderByLimitSkip(t *testing.T) {
 
 func TestOrderByStringValues(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create test data with names
@@ -209,7 +209,7 @@ func TestOrderByStringValues(t *testing.T) {
 
 func TestLimitSkipEdgeCases(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create 5 nodes

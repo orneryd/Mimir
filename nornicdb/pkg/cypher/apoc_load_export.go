@@ -22,7 +22,7 @@ import (
 
 // callApocLoadJson loads JSON data from a URL or file path.
 // Syntax: CALL apoc.load.json(urlOrFile) YIELD value
-func (e *StorageExecutor) callApocLoadJson(ctx context.Context, cypher string) (*ExecuteResult, error) {
+func (e *ASTExecutor) callApocLoadJson(ctx context.Context, cypher string) (*ExecuteResult, error) {
 	// Parse the URL/file argument
 	urlOrFile := e.extractApocLoadArg(cypher, "JSON")
 	if urlOrFile == "" {
@@ -65,7 +65,7 @@ func (e *StorageExecutor) callApocLoadJson(ctx context.Context, cypher string) (
 	}, nil
 }
 
-func (e *StorageExecutor) loadJsonFromURL(url string) (interface{}, error) {
+func (e *ASTExecutor) loadJsonFromURL(url string) (interface{}, error) {
 	resp, err := http.Get(url)
 	if err != nil {
 		return nil, err
@@ -84,7 +84,7 @@ func (e *StorageExecutor) loadJsonFromURL(url string) (interface{}, error) {
 	return data, nil
 }
 
-func (e *StorageExecutor) loadJsonFromFile(path string) (interface{}, error) {
+func (e *ASTExecutor) loadJsonFromFile(path string) (interface{}, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -105,7 +105,7 @@ func (e *StorageExecutor) loadJsonFromFile(path string) (interface{}, error) {
 
 // callApocLoadCsv loads CSV data from a URL or file path.
 // Syntax: CALL apoc.load.csv(urlOrFile, {sep: ',', header: true}) YIELD lineNo, list, map
-func (e *StorageExecutor) callApocLoadCsv(ctx context.Context, cypher string) (*ExecuteResult, error) {
+func (e *ASTExecutor) callApocLoadCsv(ctx context.Context, cypher string) (*ExecuteResult, error) {
 	urlOrFile := e.extractApocLoadArg(cypher, "CSV")
 	if urlOrFile == "" {
 		return nil, fmt.Errorf("apoc.load.csv requires a URL or file path")
@@ -219,7 +219,7 @@ func (e *StorageExecutor) callApocLoadCsv(ctx context.Context, cypher string) (*
 
 // callApocExportJson exports graph data to JSON.
 // Syntax: CALL apoc.export.json.all(file, config) YIELD file, nodes, relationships
-func (e *StorageExecutor) callApocExportJsonAll(ctx context.Context, cypher string) (*ExecuteResult, error) {
+func (e *ASTExecutor) callApocExportJsonAll(ctx context.Context, cypher string) (*ExecuteResult, error) {
 	filePath := e.extractApocExportArg(cypher, "JSON")
 
 	nodes := e.storage.GetAllNodes()
@@ -259,7 +259,7 @@ func (e *StorageExecutor) callApocExportJsonAll(ctx context.Context, cypher stri
 
 // callApocExportJsonQuery exports query results to JSON.
 // Syntax: CALL apoc.export.json.query(query, file, config)
-func (e *StorageExecutor) callApocExportJsonQuery(ctx context.Context, cypher string) (*ExecuteResult, error) {
+func (e *ASTExecutor) callApocExportJsonQuery(ctx context.Context, cypher string) (*ExecuteResult, error) {
 	// Extract the query to execute
 	query := e.extractApocExportQuery(cypher)
 	filePath := e.extractApocExportArg(cypher, "JSON")
@@ -308,7 +308,7 @@ func (e *StorageExecutor) callApocExportJsonQuery(ctx context.Context, cypher st
 
 // callApocExportCsvAll exports all data to CSV.
 // Syntax: CALL apoc.export.csv.all(file, config) YIELD file, nodes, relationships
-func (e *StorageExecutor) callApocExportCsvAll(ctx context.Context, cypher string) (*ExecuteResult, error) {
+func (e *ASTExecutor) callApocExportCsvAll(ctx context.Context, cypher string) (*ExecuteResult, error) {
 	filePath := e.extractApocExportArg(cypher, "CSV")
 
 	nodes := e.storage.GetAllNodes()
@@ -365,7 +365,7 @@ func (e *StorageExecutor) callApocExportCsvAll(ctx context.Context, cypher strin
 
 // callApocExportCsvQuery exports query results to CSV.
 // Syntax: CALL apoc.export.csv.query(query, file, config)
-func (e *StorageExecutor) callApocExportCsvQuery(ctx context.Context, cypher string) (*ExecuteResult, error) {
+func (e *ASTExecutor) callApocExportCsvQuery(ctx context.Context, cypher string) (*ExecuteResult, error) {
 	query := e.extractApocExportQuery(cypher)
 	filePath := e.extractApocExportArg(cypher, "CSV")
 
@@ -425,7 +425,7 @@ func (e *StorageExecutor) callApocExportCsvQuery(ctx context.Context, cypher str
 // Helper functions
 // =============================================================================
 
-func (e *StorageExecutor) extractApocLoadArg(cypher, loadType string) string {
+func (e *ASTExecutor) extractApocLoadArg(cypher, loadType string) string {
 	upper := strings.ToUpper(cypher)
 	marker := "APOC.LOAD." + loadType
 	idx := strings.Index(upper, marker)
@@ -462,7 +462,7 @@ func (e *StorageExecutor) extractApocLoadArg(cypher, loadType string) string {
 	return ""
 }
 
-func (e *StorageExecutor) extractApocExportArg(cypher, exportType string) string {
+func (e *ASTExecutor) extractApocExportArg(cypher, exportType string) string {
 	// Similar to load but for export procedures
 	upper := strings.ToUpper(cypher)
 	markers := []string{"APOC.EXPORT." + exportType + ".ALL", "APOC.EXPORT." + exportType + ".QUERY"}
@@ -499,7 +499,7 @@ func (e *StorageExecutor) extractApocExportArg(cypher, exportType string) string
 	return ""
 }
 
-func (e *StorageExecutor) extractApocExportQuery(cypher string) string {
+func (e *ASTExecutor) extractApocExportQuery(cypher string) string {
 	upper := strings.ToUpper(cypher)
 	idx := strings.Index(upper, ".QUERY")
 	if idx < 0 {
@@ -526,7 +526,7 @@ func (e *StorageExecutor) extractApocExportQuery(cypher string) string {
 	return ""
 }
 
-func (e *StorageExecutor) nodesToExportFormat(nodes []*storage.Node) []map[string]interface{} {
+func (e *ASTExecutor) nodesToExportFormat(nodes []*storage.Node) []map[string]interface{} {
 	result := make([]map[string]interface{}, len(nodes))
 	for i, node := range nodes {
 		result[i] = map[string]interface{}{
@@ -538,7 +538,7 @@ func (e *StorageExecutor) nodesToExportFormat(nodes []*storage.Node) []map[strin
 	return result
 }
 
-func (e *StorageExecutor) edgesToExportFormat(edges []*storage.Edge) []map[string]interface{} {
+func (e *ASTExecutor) edgesToExportFormat(edges []*storage.Edge) []map[string]interface{} {
 	result := make([]map[string]interface{}, len(edges))
 	for i, edge := range edges {
 		result[i] = map[string]interface{}{
@@ -552,7 +552,7 @@ func (e *StorageExecutor) edgesToExportFormat(edges []*storage.Edge) []map[strin
 	return result
 }
 
-func (e *StorageExecutor) countProperties(nodes []*storage.Node, edges []*storage.Edge) int {
+func (e *ASTExecutor) countProperties(nodes []*storage.Node, edges []*storage.Edge) int {
 	count := 0
 	for _, node := range nodes {
 		count += len(node.Properties)
@@ -569,7 +569,7 @@ func (e *StorageExecutor) countProperties(nodes []*storage.Node, edges []*storag
 
 // callApocLoadJsonArray loads a JSON array from a specific path.
 // Syntax: CALL apoc.load.jsonArray(urlOrFile, path) YIELD value
-func (e *StorageExecutor) callApocLoadJsonArray(ctx context.Context, cypher string) (*ExecuteResult, error) {
+func (e *ASTExecutor) callApocLoadJsonArray(ctx context.Context, cypher string) (*ExecuteResult, error) {
 	urlOrFile := e.extractApocLoadArg(cypher, "JSONARRAY")
 	if urlOrFile == "" {
 		return nil, fmt.Errorf("apoc.load.jsonArray requires a URL or file path")
@@ -610,7 +610,7 @@ func (e *StorageExecutor) callApocLoadJsonArray(ctx context.Context, cypher stri
 // =============================================================================
 
 // callApocLoadCsvParams loads CSV with configurable parameters.
-func (e *StorageExecutor) callApocLoadCsvParams(ctx context.Context, cypher string) (*ExecuteResult, error) {
+func (e *ASTExecutor) callApocLoadCsvParams(ctx context.Context, cypher string) (*ExecuteResult, error) {
 	// Delegates to callApocLoadCsv with param parsing
 	return e.callApocLoadCsv(ctx, cypher)
 }
@@ -621,7 +621,7 @@ func (e *StorageExecutor) callApocLoadCsvParams(ctx context.Context, cypher stri
 
 // callApocImportJson imports JSON graph data directly.
 // Syntax: CALL apoc.import.json(urlOrFile) YIELD nodes, relationships
-func (e *StorageExecutor) callApocImportJson(ctx context.Context, cypher string) (*ExecuteResult, error) {
+func (e *ASTExecutor) callApocImportJson(ctx context.Context, cypher string) (*ExecuteResult, error) {
 	urlOrFile := e.extractApocLoadArg(cypher, "JSON")
 	if urlOrFile == "" {
 		// Try IMPORT marker

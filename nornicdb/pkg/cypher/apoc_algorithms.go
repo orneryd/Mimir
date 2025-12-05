@@ -42,7 +42,7 @@ func (pq *priorityQueue) Pop() interface{} {
 }
 
 // getNodeEdges returns all edges for a node.
-func (e *StorageExecutor) getNodeEdges(nodeID storage.NodeID) []*storage.Edge {
+func (e *ASTExecutor) getNodeEdges(nodeID storage.NodeID) []*storage.Edge {
 	var result []*storage.Edge
 	outgoing, _ := e.storage.GetOutgoingEdges(nodeID)
 	incoming, _ := e.storage.GetIncomingEdges(nodeID)
@@ -52,7 +52,7 @@ func (e *StorageExecutor) getNodeEdges(nodeID storage.NodeID) []*storage.Edge {
 }
 
 // callApocAlgoDijkstra implements Dijkstra's shortest path.
-func (e *StorageExecutor) callApocAlgoDijkstra(ctx context.Context, cypher string) (*ExecuteResult, error) {
+func (e *ASTExecutor) callApocAlgoDijkstra(ctx context.Context, cypher string) (*ExecuteResult, error) {
 	startID, endID, relType, weightProp, err := e.parsePathAlgoParams(cypher, "APOC.ALGO.DIJKSTRA")
 	if err != nil {
 		return nil, err
@@ -64,7 +64,7 @@ func (e *StorageExecutor) callApocAlgoDijkstra(ctx context.Context, cypher strin
 	return &ExecuteResult{Columns: []string{"path", "weight"}, Rows: [][]interface{}{{path, weight}}}, nil
 }
 
-func (e *StorageExecutor) dijkstra(startID, endID storage.NodeID, relType, weightProp string) ([]storage.NodeID, float64) {
+func (e *ASTExecutor) dijkstra(startID, endID storage.NodeID, relType, weightProp string) ([]storage.NodeID, float64) {
 	dist := make(map[storage.NodeID]float64)
 	dist[startID] = 0
 	pq := &priorityQueue{}
@@ -111,7 +111,7 @@ func (e *StorageExecutor) dijkstra(startID, endID storage.NodeID, relType, weigh
 }
 
 // callApocAlgoAStar implements A* pathfinding.
-func (e *StorageExecutor) callApocAlgoAStar(ctx context.Context, cypher string) (*ExecuteResult, error) {
+func (e *ASTExecutor) callApocAlgoAStar(ctx context.Context, cypher string) (*ExecuteResult, error) {
 	startID, endID, relType, weightProp, err := e.parsePathAlgoParams(cypher, "APOC.ALGO.ASTAR")
 	if err != nil {
 		return nil, err
@@ -123,7 +123,7 @@ func (e *StorageExecutor) callApocAlgoAStar(ctx context.Context, cypher string) 
 	return &ExecuteResult{Columns: []string{"path", "weight"}, Rows: [][]interface{}{{path, weight}}}, nil
 }
 
-func (e *StorageExecutor) astar(startID, endID storage.NodeID, relType, weightProp, latProp, lonProp string) ([]storage.NodeID, float64) {
+func (e *ASTExecutor) astar(startID, endID storage.NodeID, relType, weightProp, latProp, lonProp string) ([]storage.NodeID, float64) {
 	endNode, err := e.storage.GetNode(endID)
 	if err != nil {
 		return nil, 0
@@ -203,7 +203,7 @@ func (e *StorageExecutor) astar(startID, endID storage.NodeID, relType, weightPr
 }
 
 // callApocAlgoAllSimplePaths finds all simple paths.
-func (e *StorageExecutor) callApocAlgoAllSimplePaths(ctx context.Context, cypher string) (*ExecuteResult, error) {
+func (e *ASTExecutor) callApocAlgoAllSimplePaths(ctx context.Context, cypher string) (*ExecuteResult, error) {
 	startID, endID, relType, _, err := e.parsePathAlgoParams(cypher, "APOC.ALGO.ALLSIMPLEPATHS")
 	if err != nil {
 		return nil, err
@@ -216,7 +216,7 @@ func (e *StorageExecutor) callApocAlgoAllSimplePaths(ctx context.Context, cypher
 	return &ExecuteResult{Columns: []string{"path"}, Rows: rows}, nil
 }
 
-func (e *StorageExecutor) findAllSimplePaths(startID, endID storage.NodeID, relType string, maxDepth int) [][]storage.NodeID {
+func (e *ASTExecutor) findAllSimplePaths(startID, endID storage.NodeID, relType string, maxDepth int) [][]storage.NodeID {
 	var result [][]storage.NodeID
 	visited := make(map[storage.NodeID]bool)
 	var dfs func(current storage.NodeID, path []storage.NodeID, depth int)
@@ -249,7 +249,7 @@ func (e *StorageExecutor) findAllSimplePaths(startID, endID storage.NodeID, relT
 }
 
 // callApocAlgoPageRank computes PageRank.
-func (e *StorageExecutor) callApocAlgoPageRank(ctx context.Context, cypher string) (*ExecuteResult, error) {
+func (e *ASTExecutor) callApocAlgoPageRank(ctx context.Context, cypher string) (*ExecuteResult, error) {
 	label := e.extractLabelFromAlgoCall(cypher, "PAGERANK")
 	scores := e.computePageRank(label, 0.85, 20)
 	rows := make([][]interface{}, 0, len(scores))
@@ -263,7 +263,7 @@ func (e *StorageExecutor) callApocAlgoPageRank(ctx context.Context, cypher strin
 	return &ExecuteResult{Columns: []string{"node", "score"}, Rows: rows}, nil
 }
 
-func (e *StorageExecutor) computePageRank(label string, damping float64, iterations int) map[storage.NodeID]float64 {
+func (e *ASTExecutor) computePageRank(label string, damping float64, iterations int) map[storage.NodeID]float64 {
 	var nodes []*storage.Node
 	if label != "" {
 		nodes, _ = e.storage.GetNodesByLabel(label)
@@ -305,7 +305,7 @@ func (e *StorageExecutor) computePageRank(label string, damping float64, iterati
 }
 
 // callApocAlgoBetweenness computes betweenness centrality.
-func (e *StorageExecutor) callApocAlgoBetweenness(ctx context.Context, cypher string) (*ExecuteResult, error) {
+func (e *ASTExecutor) callApocAlgoBetweenness(ctx context.Context, cypher string) (*ExecuteResult, error) {
 	label := e.extractLabelFromAlgoCall(cypher, "BETWEENNESS")
 	scores := e.computeBetweenness(label)
 	rows := make([][]interface{}, 0, len(scores))
@@ -319,7 +319,7 @@ func (e *StorageExecutor) callApocAlgoBetweenness(ctx context.Context, cypher st
 	return &ExecuteResult{Columns: []string{"node", "score"}, Rows: rows}, nil
 }
 
-func (e *StorageExecutor) computeBetweenness(label string) map[storage.NodeID]float64 {
+func (e *ASTExecutor) computeBetweenness(label string) map[storage.NodeID]float64 {
 	var nodes []*storage.Node
 	if label != "" {
 		nodes, _ = e.storage.GetNodesByLabel(label)
@@ -386,7 +386,7 @@ func (e *StorageExecutor) computeBetweenness(label string) map[storage.NodeID]fl
 }
 
 // callApocAlgoCloseness computes closeness centrality.
-func (e *StorageExecutor) callApocAlgoCloseness(ctx context.Context, cypher string) (*ExecuteResult, error) {
+func (e *ASTExecutor) callApocAlgoCloseness(ctx context.Context, cypher string) (*ExecuteResult, error) {
 	label := e.extractLabelFromAlgoCall(cypher, "CLOSENESS")
 	scores := e.computeCloseness(label)
 	rows := make([][]interface{}, 0, len(scores))
@@ -400,7 +400,7 @@ func (e *StorageExecutor) callApocAlgoCloseness(ctx context.Context, cypher stri
 	return &ExecuteResult{Columns: []string{"node", "score"}, Rows: rows}, nil
 }
 
-func (e *StorageExecutor) computeCloseness(label string) map[storage.NodeID]float64 {
+func (e *ASTExecutor) computeCloseness(label string) map[storage.NodeID]float64 {
 	var nodes []*storage.Node
 	if label != "" {
 		nodes, _ = e.storage.GetNodesByLabel(label)
@@ -445,7 +445,7 @@ func (e *StorageExecutor) computeCloseness(label string) map[storage.NodeID]floa
 }
 
 // callApocNeighborsTohop gets neighbors up to N hops.
-func (e *StorageExecutor) callApocNeighborsTohop(ctx context.Context, cypher string) (*ExecuteResult, error) {
+func (e *ASTExecutor) callApocNeighborsTohop(ctx context.Context, cypher string) (*ExecuteResult, error) {
 	startID, relType, maxHops, err := e.parseNeighborParams(cypher, "TOHOP")
 	if err != nil {
 		return nil, err
@@ -462,7 +462,7 @@ func (e *StorageExecutor) callApocNeighborsTohop(ctx context.Context, cypher str
 	return &ExecuteResult{Columns: []string{"node"}, Rows: rows}, nil
 }
 
-func (e *StorageExecutor) getNeighborsTohop(startID storage.NodeID, relType string, maxHops int) []storage.NodeID {
+func (e *ASTExecutor) getNeighborsTohop(startID storage.NodeID, relType string, maxHops int) []storage.NodeID {
 	visited := make(map[storage.NodeID]bool)
 	visited[startID] = true
 	current := []storage.NodeID{startID}
@@ -492,7 +492,7 @@ func (e *StorageExecutor) getNeighborsTohop(startID storage.NodeID, relType stri
 }
 
 // callApocNeighborsByhop gets neighbors grouped by hop.
-func (e *StorageExecutor) callApocNeighborsByhop(ctx context.Context, cypher string) (*ExecuteResult, error) {
+func (e *ASTExecutor) callApocNeighborsByhop(ctx context.Context, cypher string) (*ExecuteResult, error) {
 	startID, relType, maxHops, err := e.parseNeighborParams(cypher, "BYHOP")
 	if err != nil {
 		return nil, err
@@ -515,7 +515,7 @@ func (e *StorageExecutor) callApocNeighborsByhop(ctx context.Context, cypher str
 	return &ExecuteResult{Columns: []string{"nodes", "depth"}, Rows: rows}, nil
 }
 
-func (e *StorageExecutor) getNeighborsByhop(startID storage.NodeID, relType string, maxHops int) map[int][]storage.NodeID {
+func (e *ASTExecutor) getNeighborsByhop(startID storage.NodeID, relType string, maxHops int) map[int][]storage.NodeID {
 	visited := make(map[storage.NodeID]bool)
 	visited[startID] = true
 	result := make(map[int][]storage.NodeID)
@@ -549,7 +549,7 @@ func (e *StorageExecutor) getNeighborsByhop(startID storage.NodeID, relType stri
 }
 
 // Helper functions
-func (e *StorageExecutor) parsePathAlgoParams(cypher, algoName string) (storage.NodeID, storage.NodeID, string, string, error) {
+func (e *ASTExecutor) parsePathAlgoParams(cypher, algoName string) (storage.NodeID, storage.NodeID, string, string, error) {
 	upper := strings.ToUpper(cypher)
 	idx := strings.Index(upper, algoName)
 	if idx < 0 {
@@ -579,7 +579,7 @@ func (e *StorageExecutor) parsePathAlgoParams(cypher, algoName string) (storage.
 	return startID, endID, relType, weightProp, nil
 }
 
-func (e *StorageExecutor) parseNeighborParams(cypher, variant string) (storage.NodeID, string, int, error) {
+func (e *ASTExecutor) parseNeighborParams(cypher, variant string) (storage.NodeID, string, int, error) {
 	upper := strings.ToUpper(cypher)
 	idx := strings.Index(upper, variant)
 	if idx < 0 {
@@ -608,7 +608,7 @@ func (e *StorageExecutor) parseNeighborParams(cypher, variant string) (storage.N
 	return startID, relType, maxHops, nil
 }
 
-func (e *StorageExecutor) extractLabelFromAlgoCall(cypher, algoName string) string {
+func (e *ASTExecutor) extractLabelFromAlgoCall(cypher, algoName string) string {
 	upper := strings.ToUpper(cypher)
 	idx := strings.Index(upper, algoName)
 	if idx < 0 {

@@ -11,7 +11,7 @@ import (
 
 func TestTypedExecute_MemoryNode(t *testing.T) {
 	engine := storage.NewMemoryEngine()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Create a memory node
@@ -47,7 +47,7 @@ func TestTypedExecute_MemoryNode(t *testing.T) {
 
 func TestTypedExecute_NodeCount(t *testing.T) {
 	engine := storage.NewMemoryEngine()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Create some nodes
@@ -72,7 +72,7 @@ func TestTypedExecute_NodeCount(t *testing.T) {
 
 func TestTypedExecute_WithParameters(t *testing.T) {
 	engine := storage.NewMemoryEngine()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Create node

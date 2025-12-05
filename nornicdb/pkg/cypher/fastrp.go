@@ -81,7 +81,7 @@ var (
 // ============================================================================
 
 // callGdsVersion implements CALL gds.version()
-func (e *StorageExecutor) callGdsVersion() (*ExecuteResult, error) {
+func (e *ASTExecutor) callGdsVersion() (*ExecuteResult, error) {
 	return &ExecuteResult{
 		Columns: []string{"version"},
 		Rows: [][]any{
@@ -96,7 +96,7 @@ func (e *StorageExecutor) callGdsVersion() (*ExecuteResult, error) {
 
 // callGdsGraphProject implements CALL gds.graph.project(...)
 // Supports multiple syntax variants from Neo4j GDS
-func (e *StorageExecutor) callGdsGraphProject(cypher string) (*ExecuteResult, error) {
+func (e *ASTExecutor) callGdsGraphProject(cypher string) (*ExecuteResult, error) {
 	upper := strings.ToUpper(cypher)
 
 	// Extract graph name from the call
@@ -164,7 +164,7 @@ func (e *StorageExecutor) callGdsGraphProject(cypher string) (*ExecuteResult, er
 
 // buildGraphProjection creates an in-memory graph projection from storage
 // Uses streaming to avoid loading all nodes/edges into memory at once
-func (e *StorageExecutor) buildGraphProjection(name string, nodeLabels, relTypes []string) (*GraphProjection, error) {
+func (e *ASTExecutor) buildGraphProjection(name string, nodeLabels, relTypes []string) (*GraphProjection, error) {
 	projection := &GraphProjection{
 		Name:              name,
 		NodeLabels:        nodeLabels,
@@ -296,7 +296,7 @@ func (e *StorageExecutor) buildGraphProjection(name string, nodeLabels, relTypes
 }
 
 // callGdsGraphList implements CALL gds.graph.list()
-func (e *StorageExecutor) callGdsGraphList() (*ExecuteResult, error) {
+func (e *ASTExecutor) callGdsGraphList() (*ExecuteResult, error) {
 	projectionsMu.RLock()
 	defer projectionsMu.RUnlock()
 
@@ -317,7 +317,7 @@ func (e *StorageExecutor) callGdsGraphList() (*ExecuteResult, error) {
 }
 
 // callGdsGraphDrop implements CALL gds.graph.drop(graphName)
-func (e *StorageExecutor) callGdsGraphDrop(cypher string) (*ExecuteResult, error) {
+func (e *ASTExecutor) callGdsGraphDrop(cypher string) (*ExecuteResult, error) {
 	graphName := extractStringArg(cypher, "gds.graph.drop")
 	if graphName == "" {
 		return nil, fmt.Errorf("graph name required for gds.graph.drop")
@@ -358,7 +358,7 @@ type FastRPConfig struct {
 }
 
 // callGdsFastRPStream implements CALL gds.fastRP.stream(graphName, config)
-func (e *StorageExecutor) callGdsFastRPStream(cypher string) (*ExecuteResult, error) {
+func (e *ASTExecutor) callGdsFastRPStream(cypher string) (*ExecuteResult, error) {
 	// Parse graph name
 	graphName := extractStringArg(cypher, "gds.fastrp.stream")
 	if graphName == "" {
@@ -393,7 +393,7 @@ func (e *StorageExecutor) callGdsFastRPStream(cypher string) (*ExecuteResult, er
 }
 
 // callGdsFastRPStats implements CALL gds.fastRP.stats(graphName, config)
-func (e *StorageExecutor) callGdsFastRPStats(cypher string) (*ExecuteResult, error) {
+func (e *ASTExecutor) callGdsFastRPStats(cypher string) (*ExecuteResult, error) {
 	// Parse graph name
 	graphName := extractStringArg(cypher, "gds.fastrp.stats")
 	if graphName == "" {

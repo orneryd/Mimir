@@ -39,7 +39,7 @@ func createCommunityTestGraph(t *testing.T, engine storage.Engine) {
 
 func TestApocAlgoLouvain(t *testing.T) {
 	engine := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	createCommunityTestGraph(t, engine)
@@ -72,7 +72,7 @@ func TestApocAlgoLouvain(t *testing.T) {
 
 func TestApocAlgoLabelPropagation(t *testing.T) {
 	engine := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	createCommunityTestGraph(t, engine)
@@ -98,7 +98,7 @@ func TestApocAlgoLabelPropagation(t *testing.T) {
 
 func TestApocAlgoWCC(t *testing.T) {
 	engine := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Create disconnected components
@@ -133,7 +133,7 @@ func TestApocAlgoWCC(t *testing.T) {
 
 func TestApocAlgoWCC_SingleComponent(t *testing.T) {
 	engine := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	createCommunityTestGraph(t, engine)

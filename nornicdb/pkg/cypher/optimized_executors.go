@@ -22,7 +22,7 @@ import (
 
 // ExecuteOptimized attempts to execute a query using an optimized path.
 // Returns (result, true) if optimization was applied, (nil, false) otherwise.
-func (e *StorageExecutor) ExecuteOptimized(ctx context.Context, query string, patternInfo PatternInfo) (*ExecuteResult, bool) {
+func (e *ASTExecutor) ExecuteOptimized(ctx context.Context, query string, patternInfo PatternInfo) (*ExecuteResult, bool) {
 	switch patternInfo.Pattern {
 	case PatternMutualRelationship:
 		result, err := e.executeMutualRelationshipOptimized(ctx, query, patternInfo)
@@ -64,7 +64,7 @@ func (e *StorageExecutor) ExecuteOptimized(ctx context.Context, query string, pa
 // Algorithm: Single pass - build edge set, then find reverse pairs
 // =============================================================================
 
-func (e *StorageExecutor) executeMutualRelationshipOptimized(ctx context.Context, query string, info PatternInfo) (*ExecuteResult, error) {
+func (e *ASTExecutor) executeMutualRelationshipOptimized(ctx context.Context, query string, info PatternInfo) (*ExecuteResult, error) {
 	result := &ExecuteResult{
 		Columns: []string{info.StartVar + ".name", info.EndVar + ".name"},
 		Rows:    [][]interface{}{},
@@ -131,7 +131,7 @@ func (e *StorageExecutor) executeMutualRelationshipOptimized(ctx context.Context
 // Algorithm: Single pass through all edges, build count map
 // =============================================================================
 
-func (e *StorageExecutor) executeIncomingCountOptimized(ctx context.Context, query string, info PatternInfo) (*ExecuteResult, error) {
+func (e *ASTExecutor) executeIncomingCountOptimized(ctx context.Context, query string, info PatternInfo) (*ExecuteResult, error) {
 	result := &ExecuteResult{
 		Columns: []string{info.StartVar + ".name", "count"},
 		Rows:    [][]interface{}{},
@@ -195,7 +195,7 @@ func (e *StorageExecutor) executeIncomingCountOptimized(ctx context.Context, que
 // Algorithm: Single pass through all edges, build count map
 // =============================================================================
 
-func (e *StorageExecutor) executeOutgoingCountOptimized(ctx context.Context, query string, info PatternInfo) (*ExecuteResult, error) {
+func (e *ASTExecutor) executeOutgoingCountOptimized(ctx context.Context, query string, info PatternInfo) (*ExecuteResult, error) {
 	result := &ExecuteResult{
 		Columns: []string{info.StartVar + ".name", "count"},
 		Rows:    [][]interface{}{},
@@ -267,7 +267,7 @@ type edgeAggStats struct {
 	hasValue bool
 }
 
-func (e *StorageExecutor) executeEdgePropertyAggOptimized(ctx context.Context, query string, info PatternInfo) (*ExecuteResult, error) {
+func (e *ASTExecutor) executeEdgePropertyAggOptimized(ctx context.Context, query string, info PatternInfo) (*ExecuteResult, error) {
 	// This optimization handles queries like:
 	// MATCH (c)-[r:REVIEWED]->(p) RETURN p.name, avg(r.rating), count(r)
 	// GROUP BY p (the end node)
@@ -392,7 +392,7 @@ func (e *StorageExecutor) executeEdgePropertyAggOptimized(ctx context.Context, q
 // =============================================================================
 
 // getNodeCached retrieves a node, using cache to avoid repeated lookups
-func (e *StorageExecutor) getNodeCached(id storage.NodeID, cache map[storage.NodeID]*storage.Node) *storage.Node {
+func (e *ASTExecutor) getNodeCached(id storage.NodeID, cache map[storage.NodeID]*storage.Node) *storage.Node {
 	if node, exists := cache[id]; exists {
 		return node
 	}
@@ -405,7 +405,7 @@ func (e *StorageExecutor) getNodeCached(id storage.NodeID, cache map[storage.Nod
 }
 
 // getPropertyString extracts a string property from a node
-func (e *StorageExecutor) getPropertyString(node *storage.Node, prop string) string {
+func (e *ASTExecutor) getPropertyString(node *storage.Node, prop string) string {
 	if node == nil || node.Properties == nil {
 		return ""
 	}
@@ -417,7 +417,7 @@ func (e *StorageExecutor) getPropertyString(node *storage.Node, prop string) str
 
 // BatchGetNodes retrieves multiple nodes in a single operation
 // Used for large result set optimization
-func (e *StorageExecutor) BatchGetNodes(ids []storage.NodeID) map[storage.NodeID]*storage.Node {
+func (e *ASTExecutor) BatchGetNodes(ids []storage.NodeID) map[storage.NodeID]*storage.Node {
 	result := make(map[storage.NodeID]*storage.Node, len(ids))
 	for _, id := range ids {
 		if node, err := e.storage.GetNode(id); err == nil && node != nil {

@@ -14,7 +14,7 @@ import (
 func TestExecuteImplicitAsync_CreateNode(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	asyncEngine := storage.NewAsyncEngine(engine, nil)
-	executor := NewStorageExecutor(asyncEngine)
+	executor := NewASTExecutor(asyncEngine)
 	ctx := context.Background()
 
 	// Create a node
@@ -53,7 +53,7 @@ func TestExecuteImplicitAsync_CreateNode(t *testing.T) {
 func TestExecuteImplicitAsync_CreateRelationship(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	asyncEngine := storage.NewAsyncEngine(engine, nil)
-	executor := NewStorageExecutor(asyncEngine)
+	executor := NewASTExecutor(asyncEngine)
 	ctx := context.Background()
 
 	// Create two nodes
@@ -95,7 +95,7 @@ func TestExecuteImplicitAsync_CreateRelationship(t *testing.T) {
 func TestExecuteImplicitAsync_AggregationEmptyDB(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	asyncEngine := storage.NewAsyncEngine(engine, nil)
-	executor := NewStorageExecutor(asyncEngine)
+	executor := NewASTExecutor(asyncEngine)
 	ctx := context.Background()
 
 	// Count nodes in empty database
@@ -122,7 +122,7 @@ func TestExecuteImplicitAsync_AggregationEmptyDB(t *testing.T) {
 func TestExecuteImplicitAsync_RelationshipCountEmptyDB(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	asyncEngine := storage.NewAsyncEngine(engine, nil)
-	executor := NewStorageExecutor(asyncEngine)
+	executor := NewASTExecutor(asyncEngine)
 	ctx := context.Background()
 
 	// Count relationships in empty database
@@ -149,7 +149,7 @@ func TestExecuteImplicitAsync_RelationshipCountEmptyDB(t *testing.T) {
 func TestExecuteImplicitAsync_BulkCreateAndCount(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	asyncEngine := storage.NewAsyncEngine(engine, nil)
-	executor := NewStorageExecutor(asyncEngine)
+	executor := NewASTExecutor(asyncEngine)
 	ctx := context.Background()
 
 	// Create 10 Person nodes
@@ -200,7 +200,7 @@ func TestExecuteImplicitAsync_BulkCreateAndCount(t *testing.T) {
 func TestExecuteImplicitAsync_DeleteNode(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	asyncEngine := storage.NewAsyncEngine(engine, nil)
-	executor := NewStorageExecutor(asyncEngine)
+	executor := NewASTExecutor(asyncEngine)
 	ctx := context.Background()
 
 	// Create and then delete a node
@@ -232,7 +232,7 @@ func TestExecuteImplicitAsync_DeleteNode(t *testing.T) {
 func TestExecuteImplicitAsync_CreateDeleteRelationship(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	asyncEngine := storage.NewAsyncEngine(engine, nil)
-	executor := NewStorageExecutor(asyncEngine)
+	executor := NewASTExecutor(asyncEngine)
 	ctx := context.Background()
 
 	// Create two permanent nodes
@@ -284,7 +284,7 @@ func TestExecuteImplicitAsync_CreateDeleteRelationship(t *testing.T) {
 func TestExecuteImplicitAsync_MatchCreateDeleteSingleQuery(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	asyncEngine := storage.NewAsyncEngine(engine, nil)
-	executor := NewStorageExecutor(asyncEngine)
+	executor := NewASTExecutor(asyncEngine)
 	ctx := context.Background()
 
 	// Create nodes
@@ -318,7 +318,7 @@ func TestExecuteImplicitAsync_MatchCreateDeleteSingleQuery(t *testing.T) {
 func TestBenchmarkMatchCreateDelete(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	asyncEngine := storage.NewAsyncEngine(engine, nil)
-	executor := NewStorageExecutor(asyncEngine)
+	executor := NewASTExecutor(asyncEngine)
 	ctx := context.Background()
 
 	// Create nodes to match (like the benchmark setup)
@@ -375,7 +375,7 @@ func TestBenchmarkMatchCreateDelete(t *testing.T) {
 func TestBenchmarkMatchCreateDelete_WithFlush(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	asyncEngine := storage.NewAsyncEngine(engine, nil)
-	executor := NewStorageExecutor(asyncEngine)
+	executor := NewASTExecutor(asyncEngine)
 	ctx := context.Background()
 
 	// Create nodes
@@ -429,7 +429,7 @@ func TestBenchmarkMatchCreateDelete_WithBadger(t *testing.T) {
 	defer badgerEngine.Close()
 
 	asyncEngine := storage.NewAsyncEngine(badgerEngine, nil)
-	executor := NewStorageExecutor(asyncEngine)
+	executor := NewASTExecutor(asyncEngine)
 	ctx := context.Background()
 
 	// Create nodes
@@ -477,7 +477,7 @@ func TestBenchmarkMatchCreateDelete_WithBadgerAndFlush(t *testing.T) {
 	defer badgerEngine.Close()
 
 	asyncEngine := storage.NewAsyncEngine(badgerEngine, nil)
-	executor := NewStorageExecutor(asyncEngine)
+	executor := NewASTExecutor(asyncEngine)
 	ctx := context.Background()
 
 	// Create nodes
@@ -524,7 +524,7 @@ func TestBenchmarkMatchCreateDelete_WithBadgerAndFlush(t *testing.T) {
 func TestBenchmarkMatchCreateDelete_LargeDataset_Direct(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	asyncEngine := storage.NewAsyncEngine(engine, nil)
-	executor := NewStorageExecutor(asyncEngine)
+	executor := NewASTExecutor(asyncEngine)
 	ctx := context.Background()
 
 	// Create 100 actors (like real benchmark)
@@ -577,7 +577,7 @@ func TestBenchmarkMatchCreateDelete_LargeDataset_Direct(t *testing.T) {
 func TestBenchmarkMatchCreateDelete_LargeDataset_WithFlush(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	asyncEngine := storage.NewAsyncEngine(engine, nil)
-	executor := NewStorageExecutor(asyncEngine)
+	executor := NewASTExecutor(asyncEngine)
 	ctx := context.Background()
 
 	// Create 100 actors + 150 movies
@@ -621,7 +621,7 @@ func TestBenchmarkMatchCreateDelete_Badger_LargeDataset(t *testing.T) {
 	defer badgerEngine.Close()
 
 	asyncEngine := storage.NewAsyncEngine(badgerEngine, nil)
-	executor := NewStorageExecutor(asyncEngine)
+	executor := NewASTExecutor(asyncEngine)
 	ctx := context.Background()
 
 	// Create 100 actors + 150 movies

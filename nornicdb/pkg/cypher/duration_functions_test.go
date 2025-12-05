@@ -125,7 +125,7 @@ func TestDurationString(t *testing.T) {
 func TestDurationFunction(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	defer engine.Close()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	t.Run("duration parses ISO string", func(t *testing.T) {
@@ -160,7 +160,7 @@ func TestDurationFunction(t *testing.T) {
 func TestDurationBetween(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	defer engine.Close()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	t.Run("duration between dates", func(t *testing.T) {
@@ -195,7 +195,7 @@ func TestDurationBetween(t *testing.T) {
 func TestDurationInDays(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	defer engine.Close()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	result, err := executor.Execute(ctx, "RETURN duration.inDays(duration('P10D')) AS d", nil)
@@ -214,7 +214,7 @@ func TestDurationInDays(t *testing.T) {
 func TestDurationInSeconds(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	defer engine.Close()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	result, err := executor.Execute(ctx, "RETURN duration.inSeconds(duration('PT1H')) AS s", nil)
@@ -324,7 +324,7 @@ func TestParseDateTime(t *testing.T) {
 func TestDateArithmeticQueries(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	defer engine.Close()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	t.Run("date + duration via query", func(t *testing.T) {

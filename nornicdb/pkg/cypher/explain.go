@@ -91,7 +91,7 @@ func parseExecutionMode(query string) (ExecutionMode, string) {
 }
 
 // executeExplain returns the execution plan without executing the query
-func (e *StorageExecutor) executeExplain(ctx context.Context, query string) (*ExecuteResult, error) {
+func (e *ASTExecutor) executeExplain(ctx context.Context, query string) (*ExecuteResult, error) {
 	plan, err := e.buildExecutionPlan(query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build execution plan: %w", err)
@@ -102,7 +102,7 @@ func (e *StorageExecutor) executeExplain(ctx context.Context, query string) (*Ex
 }
 
 // executeProfile executes the query and returns the plan with statistics
-func (e *StorageExecutor) executeProfile(ctx context.Context, query string) (*ExecuteResult, error) {
+func (e *ASTExecutor) executeProfile(ctx context.Context, query string) (*ExecuteResult, error) {
 	// Build the plan first
 	plan, err := e.buildExecutionPlan(query)
 	if err != nil {
@@ -134,7 +134,7 @@ func (e *StorageExecutor) executeProfile(ctx context.Context, query string) (*Ex
 }
 
 // buildExecutionPlan creates an execution plan for a query
-func (e *StorageExecutor) buildExecutionPlan(query string) (*ExecutionPlan, error) {
+func (e *ASTExecutor) buildExecutionPlan(query string) (*ExecutionPlan, error) {
 	plan := &ExecutionPlan{
 		Query: query,
 		Mode:  ModeNormal,
@@ -151,7 +151,7 @@ func (e *StorageExecutor) buildExecutionPlan(query string) (*ExecutionPlan, erro
 }
 
 // analyzeQuery analyzes a Cypher query and builds the operator tree
-func (e *StorageExecutor) analyzeQuery(query string) (*PlanOperator, error) {
+func (e *ASTExecutor) analyzeQuery(query string) (*PlanOperator, error) {
 	upper := strings.ToUpper(query)
 
 	// Build operator tree based on query structure
@@ -247,7 +247,7 @@ func (e *StorageExecutor) analyzeQuery(query string) (*PlanOperator, error) {
 }
 
 // analyzeMatchClause analyzes a MATCH clause and returns appropriate operators
-func (e *StorageExecutor) analyzeMatchClause(query string) *PlanOperator {
+func (e *ASTExecutor) analyzeMatchClause(query string) *PlanOperator {
 	upper := strings.ToUpper(query)
 
 	// Check for shortestPath
@@ -288,7 +288,7 @@ func (e *StorageExecutor) analyzeMatchClause(query string) *PlanOperator {
 }
 
 // analyzeNodeScan determines the type of node scan needed
-func (e *StorageExecutor) analyzeNodeScan(query string) *PlanOperator {
+func (e *ASTExecutor) analyzeNodeScan(query string) *PlanOperator {
 	// Check for label in pattern (n:Label)
 	if matches := labelExtractPattern.FindStringSubmatch(query); matches != nil {
 		label := matches[1]
@@ -328,7 +328,7 @@ func (e *StorageExecutor) analyzeNodeScan(query string) *PlanOperator {
 }
 
 // analyzeWhereClause analyzes WHERE conditions
-func (e *StorageExecutor) analyzeWhereClause(query string) *PlanOperator {
+func (e *ASTExecutor) analyzeWhereClause(query string) *PlanOperator {
 	upper := strings.ToUpper(query)
 
 	// Extract WHERE clause
@@ -360,7 +360,7 @@ func (e *StorageExecutor) analyzeWhereClause(query string) *PlanOperator {
 }
 
 // analyzeReturnClause analyzes the RETURN clause
-func (e *StorageExecutor) analyzeReturnClause(query string) *PlanOperator {
+func (e *ASTExecutor) analyzeReturnClause(query string) *PlanOperator {
 	upper := strings.ToUpper(query)
 
 	returnIdx := strings.Index(upper, "RETURN")
@@ -412,7 +412,7 @@ func (e *StorageExecutor) analyzeReturnClause(query string) *PlanOperator {
 }
 
 // analyzeLimitSkip analyzes LIMIT and SKIP clauses
-func (e *StorageExecutor) analyzeLimitSkip(query string) *PlanOperator {
+func (e *ASTExecutor) analyzeLimitSkip(query string) *PlanOperator {
 	upper := strings.ToUpper(query)
 
 	op := &PlanOperator{
@@ -447,7 +447,7 @@ func (e *StorageExecutor) analyzeLimitSkip(query string) *PlanOperator {
 }
 
 // analyzeCallClause analyzes CALL procedure invocations
-func (e *StorageExecutor) analyzeCallClause(query string) *PlanOperator {
+func (e *ASTExecutor) analyzeCallClause(query string) *PlanOperator {
 	// Extract procedure name
 	matches := callProcedurePattern.FindStringSubmatch(query)
 
@@ -467,7 +467,7 @@ func (e *StorageExecutor) analyzeCallClause(query string) *PlanOperator {
 }
 
 // updatePlanWithStats updates plan operators with actual execution statistics
-func (e *StorageExecutor) updatePlanWithStats(op *PlanOperator, result *ExecuteResult) {
+func (e *ASTExecutor) updatePlanWithStats(op *PlanOperator, result *ExecuteResult) {
 	if op == nil {
 		return
 	}
@@ -482,7 +482,7 @@ func (e *StorageExecutor) updatePlanWithStats(op *PlanOperator, result *ExecuteR
 }
 
 // estimateDBHits estimates database hits based on the plan
-func (e *StorageExecutor) estimateDBHits(op *PlanOperator) int64 {
+func (e *ASTExecutor) estimateDBHits(op *PlanOperator) int64 {
 	if op == nil {
 		return 0
 	}
@@ -517,7 +517,7 @@ func (e *StorageExecutor) estimateDBHits(op *PlanOperator) int64 {
 }
 
 // planToResult converts an execution plan to an ExecuteResult
-func (e *StorageExecutor) planToResult(plan *ExecutionPlan) *ExecuteResult {
+func (e *ASTExecutor) planToResult(plan *ExecutionPlan) *ExecuteResult {
 	result := &ExecuteResult{
 		Columns: []string{"Plan"},
 		Rows:    [][]interface{}{},
@@ -539,7 +539,7 @@ func (e *StorageExecutor) planToResult(plan *ExecutionPlan) *ExecuteResult {
 }
 
 // formatPlan formats the execution plan as a string (tree visualization)
-func (e *StorageExecutor) formatPlan(plan *ExecutionPlan) string {
+func (e *ASTExecutor) formatPlan(plan *ExecutionPlan) string {
 	var sb strings.Builder
 
 	sb.WriteString(fmt.Sprintf("+-%s-+\n", strings.Repeat("-", 60)))
@@ -561,7 +561,7 @@ func (e *StorageExecutor) formatPlan(plan *ExecutionPlan) string {
 }
 
 // formatOperator formats a single operator in the plan tree
-func (e *StorageExecutor) formatOperator(sb *strings.Builder, op *PlanOperator, depth int, showStats bool) {
+func (e *ASTExecutor) formatOperator(sb *strings.Builder, op *PlanOperator, depth int, showStats bool) {
 	if op == nil {
 		return
 	}

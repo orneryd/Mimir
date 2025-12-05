@@ -12,7 +12,7 @@ import (
 // TestAPOCFunctionsIntegration tests APOC functions work end-to-end
 func TestAPOCFunctionsIntegration(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create test data

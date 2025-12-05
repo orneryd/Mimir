@@ -11,7 +11,7 @@ import (
 func TestReverseFunction(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	defer engine.Close()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	tests := []struct {
@@ -61,7 +61,7 @@ func TestReverseFunction(t *testing.T) {
 func TestLpadFunction(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	defer engine.Close()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	tests := []struct {
@@ -116,7 +116,7 @@ func TestLpadFunction(t *testing.T) {
 func TestRpadFunction(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	defer engine.Close()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	tests := []struct {

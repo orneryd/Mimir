@@ -9,7 +9,7 @@ import (
 
 func TestCaseExpressionSearched(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create test data
@@ -153,7 +153,7 @@ func TestCaseExpressionSearched(t *testing.T) {
 
 func TestCaseExpressionSimple(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create test data with status
@@ -249,7 +249,7 @@ func TestCaseExpressionSimple(t *testing.T) {
 
 func TestCaseExpressionNullHandling(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create data with NULL values
@@ -307,7 +307,7 @@ func TestCaseExpressionNullHandling(t *testing.T) {
 
 func TestCaseExpressionComplexConditions(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	exec.Execute(ctx, "CREATE (p:Product {name: 'Widget', price: 100, stock: 5})", nil)
@@ -368,7 +368,7 @@ func TestCaseExpressionComplexConditions(t *testing.T) {
 
 func TestCaseExpressionEdgeCases(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	exec.Execute(ctx, "CREATE (n:Test {value: 0})", nil)

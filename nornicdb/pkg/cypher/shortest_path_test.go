@@ -9,7 +9,7 @@ import (
 
 func TestShortestPathCypher(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create test graph: A -> B -> C
@@ -126,7 +126,7 @@ func TestShortestPathCypher(t *testing.T) {
 
 func TestShortestPathBidirectional(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create bidirectional graph
@@ -160,7 +160,7 @@ func TestShortestPathBidirectional(t *testing.T) {
 
 func TestShortestPathNoPath(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create disconnected nodes
@@ -186,7 +186,7 @@ func TestShortestPathNoPath(t *testing.T) {
 
 func TestShortestPathWithMaxHops(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create chain: A -> B -> C -> D -> E
@@ -241,7 +241,7 @@ func TestShortestPathWithMaxHops(t *testing.T) {
 
 func TestShortestPathDirectional(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create directed path: A -> B <- C

@@ -65,7 +65,7 @@ func TestParseExecutionMode(t *testing.T) {
 
 func TestExplainBasicQuery(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create some test data
@@ -138,7 +138,7 @@ func TestExplainBasicQuery(t *testing.T) {
 
 func TestProfileBasicQuery(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create some test data
@@ -203,7 +203,7 @@ func TestProfileBasicQuery(t *testing.T) {
 
 func TestExplainComplexQueries(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create test graph
@@ -250,7 +250,7 @@ func TestExplainComplexQueries(t *testing.T) {
 
 func TestExplainPlanStructure(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	t.Run("Plan has correct operator types", func(t *testing.T) {
@@ -284,7 +284,7 @@ func TestExplainPlanStructure(t *testing.T) {
 
 func TestProfileDBHits(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create some data
@@ -303,7 +303,7 @@ func TestProfileDBHits(t *testing.T) {
 
 func TestExplainNoExecution(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	t.Run("EXPLAIN does not execute CREATE", func(t *testing.T) {
@@ -355,7 +355,7 @@ func collectOperatorTypes(op *PlanOperator) []string {
 
 func TestExplainVsProfileOutput(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create data
@@ -383,7 +383,7 @@ func TestExplainVsProfileOutput(t *testing.T) {
 
 func TestAnalyzeNodeScan(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	tests := []struct {
 		name         string

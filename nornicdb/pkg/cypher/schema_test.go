@@ -10,7 +10,7 @@ import (
 
 func TestCreateUniqueConstraint(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create unique constraint
@@ -46,7 +46,7 @@ func TestCreateUniqueConstraint(t *testing.T) {
 
 func TestCreateIndex(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create property index
@@ -64,7 +64,7 @@ func TestCreateIndex(t *testing.T) {
 
 func TestCreateFulltextIndex(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create fulltext index
@@ -88,7 +88,7 @@ func TestCreateFulltextIndex(t *testing.T) {
 
 func TestCreateVectorIndex(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create vector index
@@ -110,7 +110,7 @@ func TestCreateVectorIndex(t *testing.T) {
 func TestMimirInitialization(t *testing.T) {
 	// Test the actual Mimir initialization queries
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Unique constraint on node IDs
@@ -163,7 +163,7 @@ func TestMimirInitialization(t *testing.T) {
 
 func TestConstraintWithoutName(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create constraint without explicit name
@@ -181,7 +181,7 @@ func TestConstraintWithoutName(t *testing.T) {
 
 func TestIndexWithoutName(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create index without explicit name
@@ -199,7 +199,7 @@ func TestIndexWithoutName(t *testing.T) {
 
 func TestIdempotentSchemaCreation(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create constraint twice - should not error with IF NOT EXISTS
@@ -224,7 +224,7 @@ func TestIdempotentSchemaCreation(t *testing.T) {
 
 func TestSchemaErrorCases(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	t.Run("InvalidConstraintSyntax", func(t *testing.T) {
@@ -262,7 +262,7 @@ func TestSchemaErrorCases(t *testing.T) {
 
 func TestVectorIndexWithDifferentOptions(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	tests := []struct {
@@ -310,7 +310,7 @@ func TestVectorIndexWithDifferentOptions(t *testing.T) {
 
 func TestFulltextIndexMultipleProperties(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Index with multiple properties
@@ -339,7 +339,7 @@ func TestFulltextIndexMultipleProperties(t *testing.T) {
 
 func TestConstraintEnforcementMultipleProperties(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create constraints on different properties
@@ -382,7 +382,7 @@ func TestConstraintEnforcementMultipleProperties(t *testing.T) {
 func TestSchemaCommandExecution(t *testing.T) {
 	store := storage.NewMemoryEngine()
 	defer store.Close()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// These should all execute without error as no-ops

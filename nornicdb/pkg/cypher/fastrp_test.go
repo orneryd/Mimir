@@ -143,7 +143,7 @@ func TestGdsVersion(t *testing.T) {
 	engine := setupFastRPTestStorage(t)
 	defer engine.Close()
 
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	result, err := exec.Execute(ctx, "CALL gds.version() YIELD version RETURN version", nil)
@@ -176,7 +176,7 @@ func TestGdsGraphProject(t *testing.T) {
 
 	createSocialNetwork(t, engine)
 
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Create a graph projection
@@ -226,7 +226,7 @@ func TestGdsGraphList(t *testing.T) {
 
 	createSocialNetwork(t, engine)
 
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Create two projections
@@ -274,7 +274,7 @@ func TestGdsGraphDrop(t *testing.T) {
 
 	createSocialNetwork(t, engine)
 
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Create a projection
@@ -306,7 +306,7 @@ func TestGdsGraphDropNonExistent(t *testing.T) {
 	engine := setupFastRPTestStorage(t)
 	defer engine.Close()
 
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Try to drop non-existent graph
@@ -332,7 +332,7 @@ func TestGdsFastRPStream(t *testing.T) {
 
 	createSocialNetwork(t, engine)
 
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Create projection first
@@ -398,7 +398,7 @@ func TestGdsFastRPStreamDifferentDimensions(t *testing.T) {
 
 	createSocialNetwork(t, engine)
 
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Create projection
@@ -459,7 +459,7 @@ func TestGdsFastRPWithWeights(t *testing.T) {
 
 	createSocialNetwork(t, engine)
 
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Create projection
@@ -510,7 +510,7 @@ func TestGdsFastRPStats(t *testing.T) {
 
 	createSocialNetwork(t, engine)
 
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Create projection
@@ -554,7 +554,7 @@ func TestGdsFastRPNoGraph(t *testing.T) {
 	engine := setupFastRPTestStorage(t)
 	defer engine.Close()
 
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Try FastRP without creating a graph projection first
@@ -587,7 +587,7 @@ func TestFastRPEmbeddingDeterminism(t *testing.T) {
 
 	createSocialNetwork(t, engine)
 
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Create projection
@@ -658,7 +658,7 @@ func TestFastRPDifferentSeedsProduceDifferentEmbeddings(t *testing.T) {
 
 	createSocialNetwork(t, engine)
 
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Create projection
@@ -732,7 +732,7 @@ func TestFastRPConnectedNodesSimilarity(t *testing.T) {
 
 	createSocialNetwork(t, engine)
 
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Create projection
@@ -793,7 +793,7 @@ func TestFastRPEmptyGraph(t *testing.T) {
 	defer engine.Close()
 
 	// Don't create any nodes - empty graph
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Create projection of empty graph
@@ -843,7 +843,7 @@ func TestFastRPIsolatedNodes(t *testing.T) {
 		}
 	}
 
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Create projection
@@ -902,7 +902,7 @@ func TestFastRPMediumGraph(t *testing.T) {
 	// Create a medium-sized graph: 500 nodes, avg degree 5
 	createLargeGraph(t, engine, 500, 5)
 
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Create projection
@@ -970,7 +970,7 @@ func TestFastRPLargeGraph(t *testing.T) {
 	// Create a larger graph: 2000 nodes, avg degree 8
 	createLargeGraph(t, engine, 2000, 8)
 
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Create projection
@@ -1037,7 +1037,7 @@ func TestGdsIntegrationWithLinkPrediction(t *testing.T) {
 
 	createSocialNetwork(t, engine)
 
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// First, check that link prediction still works
@@ -1090,7 +1090,7 @@ func TestMultipleGraphProjections(t *testing.T) {
 
 	createSocialNetwork(t, engine)
 
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Create multiple projections

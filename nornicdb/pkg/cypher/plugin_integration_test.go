@@ -12,7 +12,7 @@ import (
 func TestPluginFunctionLookupIntegration(t *testing.T) {
 	// Create executor
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Save original lookup and restore after test

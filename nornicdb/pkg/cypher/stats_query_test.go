@@ -15,7 +15,7 @@ import (
 // setupFileIndexTestData creates test data simulating indexed files with chunks
 func setupFileIndexTestData(t *testing.T, store *storage.MemoryEngine) {
 	ctx := context.Background()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	// Create File nodes
 	_, err := exec.Execute(ctx, `CREATE (f:File {id: 'file1', path: '/test/file1.ts', extension: '.ts', embedding: [0.1, 0.2]})`, nil)
@@ -67,7 +67,7 @@ func setupFileIndexTestData(t *testing.T, store *storage.MemoryEngine) {
 // TestMatchOptionalMatchBasic tests basic MATCH ... OPTIONAL MATCH pattern
 func TestMatchOptionalMatchBasic(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	setupFileIndexTestData(t, store)
@@ -97,7 +97,7 @@ func TestMatchOptionalMatchBasic(t *testing.T) {
 // TestMatchOptionalMatchWithCase tests OPTIONAL MATCH with CASE WHEN
 func TestMatchOptionalMatchWithCase(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	setupFileIndexTestData(t, store)
@@ -125,7 +125,7 @@ func TestMatchOptionalMatchWithCase(t *testing.T) {
 // TestMatchOptionalMatchWithMultipleWith tests multiple WITH clauses
 func TestMatchOptionalMatchWithMultipleWith(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	setupFileIndexTestData(t, store)
@@ -166,7 +166,7 @@ func TestMatchOptionalMatchWithMultipleWith(t *testing.T) {
 // TestVSCodeStatsQuery tests the exact query used by VSCode extension
 func TestVSCodeStatsQuery(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	setupFileIndexTestData(t, store)
@@ -215,7 +215,7 @@ func TestVSCodeStatsQuery(t *testing.T) {
 // TestCountDistinct tests COUNT(DISTINCT) aggregation
 func TestCountDistinct(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes with duplicate values
@@ -259,7 +259,7 @@ func TestCountDistinct(t *testing.T) {
 // TestCollectDistinct tests COLLECT(DISTINCT) aggregation
 func TestCollectDistinct(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	_, err := exec.Execute(ctx, `CREATE (n:Item {ext: '.ts'})`, nil)
@@ -286,7 +286,7 @@ func TestCollectDistinct(t *testing.T) {
 // TestCaseWhenInStatsQuery tests CASE WHEN expression evaluation for stats queries
 func TestCaseWhenInStatsQuery(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	_, err := exec.Execute(ctx, `CREATE (n:Item {value: 10, name: 'A'})`, nil)
@@ -327,7 +327,7 @@ func TestCaseWhenInStatsQuery(t *testing.T) {
 // TestSumWithArithmetic tests SUM() + SUM() arithmetic
 func TestSumWithArithmetic(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	_, err := exec.Execute(ctx, `CREATE (n:Item {a: 1, b: 2})`, nil)
@@ -352,7 +352,7 @@ func TestSumWithArithmetic(t *testing.T) {
 // TestOptionalMatchWithNoMatches tests OPTIONAL MATCH when no relationships exist
 func TestOptionalMatchWithNoMatches(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create file with no chunks

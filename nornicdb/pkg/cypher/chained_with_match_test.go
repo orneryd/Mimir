@@ -14,7 +14,7 @@ import (
 // This is the pattern used in the import script
 func TestChainedWithMatchMerge(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create a Category node first
@@ -114,7 +114,7 @@ func TestChainedWithMatchMerge(t *testing.T) {
 // TestChainedWithMatchPermutations tests all permutations of chained WITH...MATCH patterns
 func TestChainedWithMatchPermutations(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Setup: Create lookup nodes
@@ -326,7 +326,7 @@ func TestChainedWithMatchPermutations(t *testing.T) {
 // TestOptionalMatchInChain tests OPTIONAL MATCH behavior (the fix for the import script)
 func TestOptionalMatchInChain(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	_, err := exec.Execute(ctx, `CREATE (a:TypeA {name: 'A1'})`, nil)
@@ -367,7 +367,7 @@ func TestOptionalMatchInChain(t *testing.T) {
 // TestImportScriptQueryPattern tests the exact query structure from import-translation-audit.mjs
 func TestImportScriptQueryPattern(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Pre-create all the lookup nodes (mimics the import script)
@@ -566,7 +566,7 @@ func TestImportScriptQueryPattern(t *testing.T) {
 // TestMergeRelationshipDirectly tests creating relationships without chained MATCH
 func TestMergeRelationshipDirectly(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	_, err := exec.Execute(ctx, `CREATE (f:FeatureCategory {name: 'TestCat'})`, nil)

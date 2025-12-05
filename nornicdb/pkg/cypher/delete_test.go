@@ -11,7 +11,7 @@ import (
 
 func TestDetachDeleteAll(t *testing.T) {
 	engine := storage.NewMemoryEngine()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Create some nodes
@@ -44,7 +44,7 @@ func TestDetachDeleteAll(t *testing.T) {
 
 func TestDetachDeleteWithRelationships(t *testing.T) {
 	engine := storage.NewMemoryEngine()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Create nodes with relationships
@@ -77,7 +77,7 @@ func TestDetachDeleteWithRelationships(t *testing.T) {
 
 func TestDeleteWithFilter(t *testing.T) {
 	engine := storage.NewMemoryEngine()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Create nodes
@@ -102,7 +102,7 @@ func TestDeleteWithFilter(t *testing.T) {
 
 func TestDeleteWithWhereClause(t *testing.T) {
 	engine := storage.NewMemoryEngine()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Create nodes
@@ -127,7 +127,7 @@ func TestDeleteWithWhereClause(t *testing.T) {
 
 func TestDeleteWithParameters(t *testing.T) {
 	engine := storage.NewMemoryEngine()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Create nodes
@@ -154,7 +154,7 @@ func TestDeleteWithParameters(t *testing.T) {
 
 func TestDeleteContentWithCypherKeywords(t *testing.T) {
 	engine := storage.NewMemoryEngine()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Create node with content containing Cypher-like text (regression test)

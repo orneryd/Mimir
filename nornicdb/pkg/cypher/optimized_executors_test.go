@@ -15,9 +15,9 @@ import (
 // =============================================================================
 
 // setupSocialNetwork creates a test social network for optimization tests
-func setupSocialNetwork(t *testing.T) *StorageExecutor {
+func setupSocialNetwork(t *testing.T) *ASTExecutor {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create 5 users
@@ -60,9 +60,9 @@ func setupSocialNetwork(t *testing.T) *StorageExecutor {
 }
 
 // setupReviewedProducts creates products with reviews for edge property aggregation tests
-func setupReviewedProducts(t *testing.T) *StorageExecutor {
+func setupReviewedProducts(t *testing.T) *ASTExecutor {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create 3 products
@@ -565,7 +565,7 @@ func TestIntegration_EdgeAggViaExecute(t *testing.T) {
 
 func TestOptimized_EmptyDatabase(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Mutual relationship on empty DB
@@ -620,7 +620,7 @@ func TestOptimized_ZeroLimit(t *testing.T) {
 
 func TestGetNodeCached(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create a node
@@ -651,7 +651,7 @@ func TestGetNodeCached(t *testing.T) {
 
 func TestGetPropertyString(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	node := &storage.Node{
 		ID: "test",
@@ -671,7 +671,7 @@ func TestGetPropertyString(t *testing.T) {
 
 func TestBatchGetNodes(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create multiple nodes
@@ -700,9 +700,9 @@ func TestBatchGetNodes(t *testing.T) {
 // Parallel Traversal Tests
 // =============================================================================
 
-func setupLargeNetwork(t *testing.T, nodeCount int) *StorageExecutor {
+func setupLargeNetwork(t *testing.T, nodeCount int) *ASTExecutor {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes

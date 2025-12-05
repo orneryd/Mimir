@@ -13,7 +13,7 @@ import (
 // Bug discovered: MATCH (a)-[:REL]->(b:Label {name: 'value'}) returns 0 when value contains special chars
 func TestRelationshipPropertyFilter(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create test data: TranslationEntry nodes with HAS_ISSUE relationships to IssueType nodes
@@ -154,7 +154,7 @@ func TestRelationshipPropertyFilter(t *testing.T) {
 // TestCategoryRelationshipTraversal tests IN_CATEGORY style relationship patterns
 func TestCategoryRelationshipTraversal(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create categories
@@ -232,7 +232,7 @@ func TestCategoryRelationshipTraversal(t *testing.T) {
 // TestSpecialCharacterPropertyValues tests various special characters in property values
 func TestSpecialCharacterPropertyValues(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	specialValues := []struct {
@@ -306,7 +306,7 @@ func TestSpecialCharacterPropertyValues(t *testing.T) {
 // TestMultipleRelationshipPatterns tests complex patterns with multiple relationship types
 func TestMultipleRelationshipPatterns(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create: Team -> Entry -> IssueType

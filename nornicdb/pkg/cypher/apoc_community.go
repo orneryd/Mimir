@@ -20,7 +20,7 @@ import (
 // 1. Local optimization: Each node is moved to the community that yields the best modularity gain
 // 2. Network aggregation: Communities are aggregated into super-nodes
 // These phases repeat until no further improvement is possible.
-func (e *StorageExecutor) callApocAlgoLouvain(ctx context.Context, cypher string) (*ExecuteResult, error) {
+func (e *ASTExecutor) callApocAlgoLouvain(ctx context.Context, cypher string) (*ExecuteResult, error) {
 	// Parse optional label filter
 	label := e.extractLabelFromAlgoCall(cypher, "LOUVAIN")
 
@@ -62,7 +62,7 @@ func (e *StorageExecutor) callApocAlgoLouvain(ctx context.Context, cypher string
 }
 
 // computeLouvain implements the Louvain community detection algorithm.
-func (e *StorageExecutor) computeLouvain(label, weightProp string) map[storage.NodeID]int {
+func (e *ASTExecutor) computeLouvain(label, weightProp string) map[storage.NodeID]int {
 	// Get all nodes
 	var nodes []*storage.Node
 	if label != "" {
@@ -222,7 +222,7 @@ func (e *StorageExecutor) computeLouvain(label, weightProp string) map[storage.N
 //
 // Label propagation is a simpler community detection algorithm where each node
 // adopts the label that most of its neighbors have.
-func (e *StorageExecutor) callApocAlgoLabelPropagation(ctx context.Context, cypher string) (*ExecuteResult, error) {
+func (e *ASTExecutor) callApocAlgoLabelPropagation(ctx context.Context, cypher string) (*ExecuteResult, error) {
 	label := e.extractLabelFromAlgoCall(cypher, "LABELPROPAGATION")
 
 	communities := e.computeLabelPropagation(label)
@@ -242,7 +242,7 @@ func (e *StorageExecutor) callApocAlgoLabelPropagation(ctx context.Context, cyph
 	}, nil
 }
 
-func (e *StorageExecutor) computeLabelPropagation(label string) map[storage.NodeID]int {
+func (e *ASTExecutor) computeLabelPropagation(label string) map[storage.NodeID]int {
 	var nodes []*storage.Node
 	if label != "" {
 		nodes, _ = e.storage.GetNodesByLabel(label)
@@ -329,7 +329,7 @@ func (e *StorageExecutor) computeLabelPropagation(label string) map[storage.Node
 
 // callApocAlgoWCC implements Weakly Connected Components detection.
 // Syntax: CALL apoc.algo.wcc(['Label']) YIELD node, componentId
-func (e *StorageExecutor) callApocAlgoWCC(ctx context.Context, cypher string) (*ExecuteResult, error) {
+func (e *ASTExecutor) callApocAlgoWCC(ctx context.Context, cypher string) (*ExecuteResult, error) {
 	label := e.extractLabelFromAlgoCall(cypher, "WCC")
 
 	components := e.computeWCC(label)
@@ -349,7 +349,7 @@ func (e *StorageExecutor) callApocAlgoWCC(ctx context.Context, cypher string) (*
 	}, nil
 }
 
-func (e *StorageExecutor) computeWCC(label string) map[storage.NodeID]int {
+func (e *ASTExecutor) computeWCC(label string) map[storage.NodeID]int {
 	var nodes []*storage.Node
 	if label != "" {
 		nodes, _ = e.storage.GetNodesByLabel(label)

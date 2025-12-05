@@ -10,7 +10,7 @@ import (
 // BenchmarkCreateConstraint benchmarks CREATE CONSTRAINT parsing
 func BenchmarkCreateConstraint(b *testing.B) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 	cypher := "CREATE CONSTRAINT node_id_unique IF NOT EXISTS FOR (n:Node) REQUIRE n.id IS UNIQUE"
 
@@ -23,7 +23,7 @@ func BenchmarkCreateConstraint(b *testing.B) {
 // BenchmarkCreateIndex benchmarks CREATE INDEX parsing
 func BenchmarkCreateIndex(b *testing.B) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 	cypher := "CREATE INDEX user_email IF NOT EXISTS FOR (n:User) ON (n.email)"
 
@@ -36,7 +36,7 @@ func BenchmarkCreateIndex(b *testing.B) {
 // BenchmarkCreateVectorIndex benchmarks CREATE VECTOR INDEX parsing
 func BenchmarkCreateVectorIndex(b *testing.B) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 	cypher := `CREATE VECTOR INDEX embedding_idx IF NOT EXISTS FOR (n:Document) ON (n.embedding) 
 		OPTIONS {indexConfig: {` + "`vector.dimensions`" + `: 1024, ` + "`vector.similarity_function`" + `: 'cosine'}}`

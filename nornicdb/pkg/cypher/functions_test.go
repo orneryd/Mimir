@@ -16,12 +16,12 @@ import (
 // Test Helper Functions
 // ========================================
 
-func setupTestExecutor(t *testing.T) *StorageExecutor {
+func setupTestExecutor(t *testing.T) *ASTExecutor {
 	store := storage.NewMemoryEngine()
-	return NewStorageExecutor(store)
+	return NewASTExecutor(store)
 }
 
-func createTestNode(t *testing.T, e *StorageExecutor, id string, labels []string, props map[string]interface{}) *storage.Node {
+func createTestNode(t *testing.T, e *ASTExecutor, id string, labels []string, props map[string]interface{}) *storage.Node {
 	node := &storage.Node{
 		ID:         storage.NodeID(id),
 		Labels:     labels,

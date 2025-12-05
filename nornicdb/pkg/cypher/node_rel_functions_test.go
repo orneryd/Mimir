@@ -10,7 +10,7 @@ import (
 
 func TestNodeRelationshipFunctions(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create test data: nodes and relationships

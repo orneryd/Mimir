@@ -9,7 +9,7 @@ import (
 
 func TestFormatFunction(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	tests := []struct {
 		name     string
@@ -64,7 +64,7 @@ func TestFormatFunction(t *testing.T) {
 
 func TestFormatFunctionEdgeCases(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	t.Run("format with no args", func(t *testing.T) {
 		result := exec.evaluateExpressionWithContext(`format('No placeholders')`, nil, nil)

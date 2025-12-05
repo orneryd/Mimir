@@ -18,7 +18,7 @@ import (
 
 func TestAggregation_OrderByVariations(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Setup: Create items with values for testing
@@ -129,7 +129,7 @@ func TestAggregation_OrderByVariations(t *testing.T) {
 
 func TestAggregation_WhereVariations(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Setup test data
@@ -222,7 +222,7 @@ func TestAggregation_WhereVariations(t *testing.T) {
 
 func TestAggregation_MultipleAggregates(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Setup
@@ -280,7 +280,7 @@ func TestAggregation_MultipleAggregates(t *testing.T) {
 
 func TestAggregation_MultipleGroupByColumns(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Setup
@@ -356,7 +356,7 @@ func TestAggregation_MultipleGroupByColumns(t *testing.T) {
 
 func TestAggregation_NullHandlingAdvanced(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Setup with deliberate nulls
@@ -420,7 +420,7 @@ func TestAggregation_NullHandlingAdvanced(t *testing.T) {
 
 func TestAggregation_EdgeCases(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	t.Run("Empty result set", func(t *testing.T) {
@@ -469,7 +469,7 @@ func TestAggregation_EdgeCases(t *testing.T) {
 
 func TestAggregation_CollectVariations(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Setup
@@ -530,7 +530,7 @@ func TestAggregation_CollectVariations(t *testing.T) {
 
 func TestAggregation_CombinedClauses(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Setup

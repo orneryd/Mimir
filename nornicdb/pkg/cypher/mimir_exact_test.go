@@ -17,7 +17,7 @@ import (
 // with data that matches production: mostly .md files with File:Node labels
 func TestMimirExactQueries(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Setup: Create File:Node nodes similar to production
@@ -156,7 +156,7 @@ func TestMimirExactQueries(t *testing.T) {
 // TestMimirExactQueriesWithEmbeddings tests with files that have embeddings
 func TestMimirExactQueriesWithEmbeddings(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create files
@@ -255,7 +255,7 @@ func TestMimirE2EWithAsyncStorageAndEmbeddings(t *testing.T) {
 	async := storage.NewAsyncEngine(badger, config)
 	defer async.Close()
 
-	exec := NewStorageExecutor(async)
+	exec := NewASTExecutor(async)
 	ctx := context.Background()
 
 	// ==========================================================================

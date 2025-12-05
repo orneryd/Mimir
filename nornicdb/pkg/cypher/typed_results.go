@@ -27,7 +27,7 @@ type TypedExecuteResult[T any] struct {
 //	for _, node := range result.Rows {
 //	    fmt.Println(node.Title, node.Content)
 //	}
-func TypedExecute[T any](ctx context.Context, exec *StorageExecutor, cypher string, params map[string]interface{}) (*TypedExecuteResult[T], error) {
+func TypedExecute[T any](ctx context.Context, exec *ASTExecutor, cypher string, params map[string]interface{}) (*TypedExecuteResult[T], error) {
 	// Execute the raw query
 	rawResult, err := exec.Execute(ctx, cypher, params)
 	if err != nil {

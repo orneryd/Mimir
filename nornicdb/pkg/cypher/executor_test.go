@@ -11,18 +11,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewStorageExecutor(t *testing.T) {
+func TestNewASTExecutor(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	assert.NotNil(t, exec)
-	assert.NotNil(t, exec.parser)
 	assert.NotNil(t, exec.storage)
 }
 
 func TestExecuteEmptyQuery(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	_, err := exec.Execute(context.Background(), "", nil)
 	assert.Error(t, err)
@@ -31,52 +30,45 @@ func TestExecuteEmptyQuery(t *testing.T) {
 
 func TestExecuteInvalidSyntax(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	tests := []struct {
-		name    string
-		query   string
-		errText string
+		name  string
+		query string
 	}{
 		{
-			name:    "unmatched parenthesis",
-			query:   "MATCH (n RETURN n",
-			errText: "parentheses",
+			name:  "unmatched parenthesis",
+			query: "MATCH (n RETURN n",
 		},
 		{
-			name:    "unmatched bracket",
-			query:   "MATCH (a)-[r->(b) RETURN a",
-			errText: "brackets",
+			name:  "unmatched bracket",
+			query: "MATCH (a)-[r->(b) RETURN a",
 		},
 		{
-			name:    "unmatched brace",
-			query:   "CREATE (n:Person {name: 'Alice')",
-			errText: "braces",
+			name:  "unmatched brace",
+			query: "CREATE (n:Person {name: 'Alice')",
 		},
 		{
-			name:    "unmatched single quote",
-			query:   "MATCH (n) WHERE n.name = 'Alice RETURN n",
-			errText: "quote",
+			name:  "unmatched single quote",
+			query: "MATCH (n) WHERE n.name = 'Alice RETURN n",
 		},
 		{
-			name:    "unmatched double quote",
-			query:   `MATCH (n) WHERE n.name = "Alice RETURN n`,
-			errText: "quote",
+			name:  "unmatched double quote",
+			query: `MATCH (n) WHERE n.name = "Alice RETURN n`,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := exec.Execute(context.Background(), tt.query, nil)
-			assert.Error(t, err)
-			assert.Contains(t, err.Error(), tt.errText)
+			assert.Error(t, err, "query should fail: %s", tt.query)
 		})
 	}
 }
 
 func TestExecuteUnsupportedQuery(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	// DROP INDEX is now a no-op (NornicDB manages indexes internally)
 	result, err := exec.Execute(context.Background(), "DROP INDEX idx", nil)
@@ -93,7 +85,7 @@ func TestExecuteUnsupportedQuery(t *testing.T) {
 
 func TestExecuteMatchEmptyGraph(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	result, err := exec.Execute(context.Background(), "MATCH (n) RETURN n", nil)
 	require.NoError(t, err)
@@ -103,7 +95,7 @@ func TestExecuteMatchEmptyGraph(t *testing.T) {
 
 func TestExecuteMatchWithLabel(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create some nodes
@@ -128,7 +120,7 @@ func TestExecuteMatchWithLabel(t *testing.T) {
 
 func TestExecuteMatchAllNodes(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes
@@ -148,7 +140,7 @@ func TestExecuteMatchAllNodes(t *testing.T) {
 
 func TestExecuteMatchWithWhere(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes
@@ -183,7 +175,7 @@ func TestExecuteMatchWithWhere(t *testing.T) {
 
 func TestExecuteMatchWithCount(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes
@@ -205,7 +197,7 @@ func TestExecuteMatchWithCount(t *testing.T) {
 
 func TestExecuteMatchWithLimit(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes
@@ -225,7 +217,7 @@ func TestExecuteMatchWithLimit(t *testing.T) {
 
 func TestExecuteMatchWithSkip(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes
@@ -245,7 +237,7 @@ func TestExecuteMatchWithSkip(t *testing.T) {
 
 func TestExecuteCreateNode(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	result, err := exec.Execute(ctx, "CREATE (n:Person {name: 'Alice', age: 30})", nil)
@@ -261,7 +253,7 @@ func TestExecuteCreateNode(t *testing.T) {
 
 func TestExecuteCreateWithReturn(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	result, err := exec.Execute(ctx, "CREATE (n:Person {name: 'Bob'}) RETURN n", nil)
@@ -273,7 +265,7 @@ func TestExecuteCreateWithReturn(t *testing.T) {
 
 func TestExecuteCreateMultipleNodes(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	result, err := exec.Execute(ctx, "CREATE (a:Person), (b:Company)", nil)
@@ -286,7 +278,7 @@ func TestExecuteCreateMultipleNodes(t *testing.T) {
 
 func TestExecuteCreateRelationship(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	result, err := exec.Execute(ctx, "CREATE (a:Person)-[:KNOWS]->(b:Person)", nil)
@@ -300,7 +292,7 @@ func TestExecuteCreateRelationship(t *testing.T) {
 
 func TestExecuteMerge(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// First merge creates
@@ -316,7 +308,7 @@ func TestExecuteMerge(t *testing.T) {
 
 func TestExecuteDelete(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create a node first
@@ -339,7 +331,7 @@ func TestExecuteDelete(t *testing.T) {
 
 func TestExecuteDetachDelete(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes with relationship
@@ -359,7 +351,7 @@ func TestExecuteDetachDelete(t *testing.T) {
 
 func TestExecuteCallProcedure(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Add some test data
@@ -383,7 +375,7 @@ func TestExecuteCallProcedure(t *testing.T) {
 
 func TestExecuteCallWithYieldWhere(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Add test data with multiple labels
@@ -453,109 +445,9 @@ func TestExecuteCallWithYieldWhere(t *testing.T) {
 	})
 }
 
-func TestParseYieldClause(t *testing.T) {
-	tests := []struct {
-		name     string
-		cypher   string
-		expected *yieldClause
-	}{
-		{
-			name:     "no yield",
-			cypher:   "CALL db.labels()",
-			expected: nil,
-		},
-		{
-			name:   "yield star",
-			cypher: "CALL db.labels() YIELD *",
-			expected: &yieldClause{
-				yieldAll: true,
-				items:    []yieldItem{},
-			},
-		},
-		{
-			name:   "yield single column",
-			cypher: "CALL db.labels() YIELD label",
-			expected: &yieldClause{
-				items: []yieldItem{{name: "label", alias: ""}},
-			},
-		},
-		{
-			name:   "yield multiple columns",
-			cypher: "CALL db.index.vector.queryNodes('idx', 10, [1,2,3]) YIELD node, score",
-			expected: &yieldClause{
-				items: []yieldItem{
-					{name: "node", alias: ""},
-					{name: "score", alias: ""},
-				},
-			},
-		},
-		{
-			name:   "yield with alias",
-			cypher: "CALL db.labels() YIELD label AS labelName",
-			expected: &yieldClause{
-				items: []yieldItem{{name: "label", alias: "labelName"}},
-			},
-		},
-		{
-			name:   "yield with WHERE",
-			cypher: "CALL db.index.vector.queryNodes('idx', 10, [1,2,3]) YIELD node, score WHERE score > 0.5",
-			expected: &yieldClause{
-				items: []yieldItem{
-					{name: "node", alias: ""},
-					{name: "score", alias: ""},
-				},
-				where: "score > 0.5",
-			},
-		},
-		{
-			name:   "yield star with WHERE",
-			cypher: "CALL db.index.fulltext.queryNodes('idx', 'search') YIELD * WHERE score > 0.8",
-			expected: &yieldClause{
-				yieldAll: true,
-				items:    []yieldItem{},
-				where:    "score > 0.8",
-			},
-		},
-		{
-			name:   "yield with WHERE and RETURN",
-			cypher: "CALL db.labels() YIELD label WHERE label = 'Memory' RETURN label",
-			expected: &yieldClause{
-				items:      []yieldItem{{name: "label", alias: ""}},
-				where:      "label = 'Memory'",
-				hasReturn:  true,
-				returnExpr: "label",
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := parseYieldClause(tt.cypher)
-			if tt.expected == nil {
-				assert.Nil(t, result)
-				return
-			}
-			require.NotNil(t, result)
-			assert.Equal(t, tt.expected.yieldAll, result.yieldAll, "yieldAll mismatch")
-			assert.Equal(t, len(tt.expected.items), len(result.items), "items count mismatch")
-			for i, item := range tt.expected.items {
-				if i < len(result.items) {
-					assert.Equal(t, item.name, result.items[i].name, "item name mismatch at %d", i)
-					assert.Equal(t, item.alias, result.items[i].alias, "item alias mismatch at %d", i)
-				}
-			}
-			assert.Equal(t, tt.expected.where, result.where, "where mismatch")
-			assert.Equal(t, tt.expected.hasReturn, result.hasReturn, "hasReturn mismatch")
-			if tt.expected.hasReturn {
-				assert.Equal(t, tt.expected.returnExpr, result.returnExpr, "returnExpr mismatch")
-			}
-		})
-	}
-}
-
 func TestExecuteWithParameters(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create a node
@@ -577,7 +469,7 @@ func TestExecuteWithParameters(t *testing.T) {
 
 func TestExecuteReturnPropertyAccess(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create a node
@@ -598,7 +490,7 @@ func TestExecuteReturnPropertyAccess(t *testing.T) {
 
 func TestExecuteMatchRelationship(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes and relationship
@@ -619,7 +511,7 @@ func TestExecuteMatchRelationship(t *testing.T) {
 
 func TestExecuteWhereOperators(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes
@@ -668,7 +560,7 @@ func TestExecuteWhereOperators(t *testing.T) {
 
 func TestExecuteContainsOperator(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes
@@ -691,7 +583,7 @@ func TestExecuteContainsOperator(t *testing.T) {
 
 func TestExecuteStartsWithOperator(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes
@@ -709,7 +601,7 @@ func TestExecuteStartsWithOperator(t *testing.T) {
 
 func TestExecuteEndsWithOperator(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes
@@ -727,7 +619,7 @@ func TestExecuteEndsWithOperator(t *testing.T) {
 
 func TestExecuteDistinct(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes with same labels
@@ -749,7 +641,7 @@ func TestExecuteDistinct(t *testing.T) {
 
 func TestExecuteOrderBy(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes
@@ -780,7 +672,7 @@ func TestExecuteOrderBy(t *testing.T) {
 
 func TestExecuteQueryStats(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create should report stats
@@ -793,7 +685,7 @@ func TestExecuteQueryStats(t *testing.T) {
 
 func TestExecuteNornicDbProcedures(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Test nornicdb.version()
@@ -816,7 +708,7 @@ func TestExecuteNornicDbProcedures(t *testing.T) {
 
 func TestExecuteSet(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create a node first
@@ -839,7 +731,7 @@ func TestExecuteSet(t *testing.T) {
 
 func TestExecuteSetWithReturn(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create a node
@@ -859,7 +751,7 @@ func TestExecuteSetWithReturn(t *testing.T) {
 
 func TestExecuteSetNoMatch(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// SET with no matching nodes
@@ -869,7 +761,7 @@ func TestExecuteSetNoMatch(t *testing.T) {
 
 func TestExecuteSetInvalidQuery(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// SET without proper assignment
@@ -879,7 +771,7 @@ func TestExecuteSetInvalidQuery(t *testing.T) {
 
 func TestExecuteAggregationSum(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes with numeric values
@@ -900,7 +792,7 @@ func TestExecuteAggregationSum(t *testing.T) {
 
 func TestExecuteAggregationAvg(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes
@@ -921,7 +813,7 @@ func TestExecuteAggregationAvg(t *testing.T) {
 
 func TestExecuteAggregationMinMax(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	values := []float64{15, 42, 8, 99, 23}
@@ -947,7 +839,7 @@ func TestExecuteAggregationMinMax(t *testing.T) {
 
 func TestExecuteAggregationCollect(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	names := []string{"Alice", "Bob", "Charlie"}
@@ -969,7 +861,7 @@ func TestExecuteAggregationCollect(t *testing.T) {
 
 func TestExecuteAggregationEmpty(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Aggregation on empty set
@@ -980,7 +872,7 @@ func TestExecuteAggregationEmpty(t *testing.T) {
 
 func TestExecuteInOperator(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes
@@ -1000,7 +892,7 @@ func TestExecuteInOperator(t *testing.T) {
 
 func TestExecuteIsNullOperator(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes - one with email, one without
@@ -1030,7 +922,7 @@ func TestExecuteIsNullOperator(t *testing.T) {
 
 func TestExecuteRegexOperator(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes
@@ -1051,7 +943,7 @@ func TestExecuteRegexOperator(t *testing.T) {
 
 func TestExecuteCreateRelationshipBothDirections(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Test forward direction
@@ -1069,7 +961,7 @@ func TestExecuteCreateRelationshipBothDirections(t *testing.T) {
 
 func TestExecuteCreateRelationshipWithReturn(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	result, err := exec.Execute(ctx, "CREATE (a:City {name: 'NYC'})-[:CONNECTED_TO]->(b:City {name: 'LA'}) RETURN a, b", nil)
@@ -1082,7 +974,7 @@ func TestExecuteCreateRelationshipWithReturn(t *testing.T) {
 // This is a Neo4j-compatible feature for creating edges with properties like {roles: ['Neo']}
 func TestExecuteCreateRelationshipWithArrayProperties(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Test direct CREATE with relationship properties (array value)
@@ -1104,7 +996,7 @@ func TestExecuteCreateRelationshipWithArrayProperties(t *testing.T) {
 // TestExecuteCreateRelationshipWithStringProperty tests CREATE with a string property on relationship
 func TestExecuteCreateRelationshipWithStringProperty(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	result, err := exec.Execute(ctx, "CREATE (a:Person {name: 'Director'})-[:DIRECTED {since: '1999'}]->(m:Movie {title: 'Film'})", nil)
@@ -1124,7 +1016,7 @@ func TestExecuteCreateRelationshipWithStringProperty(t *testing.T) {
 // TestExecuteMatchCreateRelationshipWithProperties tests MATCH...CREATE with relationship properties
 func TestExecuteMatchCreateRelationshipWithProperties(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// First create the nodes
@@ -1154,7 +1046,7 @@ func TestExecuteMatchCreateRelationshipWithProperties(t *testing.T) {
 // TestExecuteMatchCreateRelationshipWithMultipleProperties tests multiple properties on relationships
 func TestExecuteMatchCreateRelationshipWithMultipleProperties(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes first
@@ -1187,7 +1079,7 @@ func TestExecuteMatchCreateRelationshipWithMultipleProperties(t *testing.T) {
 // and relationships to matched nodes (Northwind pattern: MATCH (s), (c) CREATE (p) CREATE (p)-[:REL]->(c))
 func TestExecuteMatchCreateNodeAndRelationships(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create initial nodes (like Supplier and Category in Northwind)
@@ -1246,7 +1138,7 @@ func TestExecuteMatchCreateNodeAndRelationships(t *testing.T) {
 // This is the pattern: MATCH (cu:Customer) CREATE (o:Order) CREATE (cu)-[:PURCHASED]->(o)
 func TestExecuteMatchCreateNodeThenRelationship(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create a customer first
@@ -1303,7 +1195,7 @@ func TestExecuteMatchCreateNodeThenRelationship(t *testing.T) {
 // TestExecuteMatchCreateMultipleNodes tests creating multiple nodes in a single MATCH...CREATE
 func TestExecuteMatchCreateMultipleNodes(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create category
@@ -1332,7 +1224,7 @@ func TestExecuteMatchCreateMultipleNodes(t *testing.T) {
 // TestExecuteMatchCreateWithRelationshipProperties tests the full Northwind pattern with rel properties
 func TestExecuteMatchCreateWithRelationshipProperties(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create customer and order pattern (like Northwind)
@@ -1376,7 +1268,7 @@ func TestExecuteMatchCreateWithRelationshipProperties(t *testing.T) {
 // MATCH (s2), (c2) CREATE (p2) CREATE (p2)-[:REL]->(c2)
 func TestExecuteMultipleMatchCreateBlocks(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create Categories (like Northwind)
@@ -1398,17 +1290,17 @@ func TestExecuteMultipleMatchCreateBlocks(t *testing.T) {
 	assert.Len(t, nodes, 4, "Should have 4 initial nodes (2 categories + 2 suppliers)")
 
 	// This is the EXACT pattern from Northwind benchmark that was failing:
-	// Multiple MATCH...CREATE blocks in a single query
+	// Multiple MATCH...CREATE blocks separated by semicolons (standard Cypher)
 	result, err := exec.Execute(ctx, `
 		MATCH (s1:Supplier {supplierID: 1}), (c1:Category {categoryID: 1})
 		CREATE (p1:Product {productID: 1, productName: 'Chai', unitPrice: 18.0})
 		CREATE (p1)-[:PART_OF]->(c1)
-		CREATE (s1)-[:SUPPLIES]->(p1)
+		CREATE (s1)-[:SUPPLIES]->(p1);
 		
 		MATCH (s1:Supplier {supplierID: 1}), (c1:Category {categoryID: 1})
 		CREATE (p2:Product {productID: 2, productName: 'Chang', unitPrice: 19.0})
 		CREATE (p2)-[:PART_OF]->(c1)
-		CREATE (s1)-[:SUPPLIES]->(p2)
+		CREATE (s1)-[:SUPPLIES]->(p2);
 		
 		MATCH (s2:Supplier {supplierID: 2}), (c2:Category {categoryID: 2})
 		CREATE (p3:Product {productID: 3, productName: 'Aniseed Syrup', unitPrice: 10.0})
@@ -1458,7 +1350,7 @@ func TestExecuteMultipleMatchCreateBlocks(t *testing.T) {
 func TestExecuteMultipleMatchCreateBlocksWithDifferentCategories(t *testing.T) {
 	t.Skip("MATCH property filtering ({prop: value}) is not fully implemented - see QUICK_WINS_ROADMAP.md")
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create multiple categories with different IDs
@@ -1523,7 +1415,7 @@ func TestExecuteMultipleMatchCreateBlocksWithDifferentCategories(t *testing.T) {
 // in a single CREATE statement (like the FastRP social network pattern)
 func TestExecuteMixedNodesAndRelationshipsCreate(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// This is the exact pattern from the FastRP benchmark
@@ -1564,7 +1456,7 @@ func TestExecuteMixedNodesAndRelationshipsCreate(t *testing.T) {
 
 func TestExecuteAllProcedures(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create some test data
@@ -1604,7 +1496,7 @@ func TestExecuteAllProcedures(t *testing.T) {
 
 func TestExecuteUnknownProcedure(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	_, err := exec.Execute(ctx, "CALL unknown.procedure()", nil)
@@ -1614,7 +1506,7 @@ func TestExecuteUnknownProcedure(t *testing.T) {
 
 func TestExecuteAndOrOperators(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create test data
@@ -1650,7 +1542,7 @@ func TestExecuteAndOrOperators(t *testing.T) {
 
 func TestExecuteOrderByDesc(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes with different ages
@@ -1673,7 +1565,7 @@ func TestExecuteOrderByDesc(t *testing.T) {
 
 func TestExecuteSkipAndLimit(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create 10 nodes
@@ -1694,7 +1586,7 @@ func TestExecuteSkipAndLimit(t *testing.T) {
 
 func TestExecuteMatchNoReturn(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// MATCH without RETURN should return matched indicator
@@ -1705,7 +1597,7 @@ func TestExecuteMatchNoReturn(t *testing.T) {
 
 func TestSubstituteParams(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create a node
@@ -1731,7 +1623,7 @@ func TestSubstituteParams(t *testing.T) {
 
 func TestExecuteDeleteNoMatch(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// DELETE with no MATCH clause should error
@@ -1741,7 +1633,7 @@ func TestExecuteDeleteNoMatch(t *testing.T) {
 
 func TestResolveReturnItemVariants(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create a node
@@ -1775,7 +1667,7 @@ func TestResolveReturnItemVariants(t *testing.T) {
 
 func TestParsePropertiesVariants(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create with number property
@@ -1790,7 +1682,7 @@ func TestParsePropertiesVariants(t *testing.T) {
 
 func TestExecuteCountProperty(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes, some with email, some without
@@ -1809,7 +1701,7 @@ func TestExecuteCountProperty(t *testing.T) {
 
 func TestToFloat64Variants(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create node with various numeric types
@@ -1836,28 +1728,25 @@ func TestToFloat64Variants(t *testing.T) {
 
 func TestValidateSyntaxUnbalancedClosingBrackets(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
-	// Extra closing paren
+	// Extra closing paren - ANTLR detects this as syntax error
 	_, err := exec.Execute(ctx, "MATCH (n)) RETURN n", nil)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unbalanced brackets")
+	assert.Error(t, err, "should fail on extra closing paren")
 
-	// Extra closing bracket
+	// Extra closing bracket - ANTLR detects this as syntax error
 	_, err = exec.Execute(ctx, "MATCH (n)-[r]]->(m) RETURN n", nil)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unbalanced brackets")
+	assert.Error(t, err, "should fail on extra closing bracket")
 
-	// Extra closing brace
+	// Extra closing brace - ANTLR detects this as syntax error
 	_, err = exec.Execute(ctx, "CREATE (n:Person {name: 'test'}} )", nil)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unbalanced brackets")
+	assert.Error(t, err, "should fail on extra closing brace")
 }
 
 func TestValidateSyntaxEscapedQuotesInStrings(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Escaped quotes should be handled (string continues past escaped quote)
@@ -1868,7 +1757,7 @@ func TestValidateSyntaxEscapedQuotesInStrings(t *testing.T) {
 
 func TestSubstituteParamsAllTypes(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create a test node
@@ -1927,7 +1816,7 @@ func TestSubstituteParamsAllTypes(t *testing.T) {
 
 func TestParseValueVariants(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes to test against
@@ -1964,7 +1853,7 @@ func TestParseValueVariants(t *testing.T) {
 
 func TestCompareEqualNilCases(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Test equality with nil on both sides
@@ -1983,7 +1872,7 @@ func TestCompareEqualNilCases(t *testing.T) {
 
 func TestCompareGreaterLessStrings(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes with string values for comparison
@@ -2017,7 +1906,7 @@ func TestCompareGreaterLessStrings(t *testing.T) {
 
 func TestCompareRegexInvalidPattern(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -2035,7 +1924,7 @@ func TestCompareRegexInvalidPattern(t *testing.T) {
 
 func TestCompareRegexNonStringExpected(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -2053,7 +1942,7 @@ func TestCompareRegexNonStringExpected(t *testing.T) {
 
 func TestEvaluateStringOpMissingProperty(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -2081,7 +1970,7 @@ func TestEvaluateStringOpMissingProperty(t *testing.T) {
 
 func TestEvaluateInOpMissingProperty(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -2099,7 +1988,7 @@ func TestEvaluateInOpMissingProperty(t *testing.T) {
 
 func TestEvaluateInOpNotAList(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -2117,7 +2006,7 @@ func TestEvaluateInOpNotAList(t *testing.T) {
 
 func TestEvaluateWhereNoValidOperator(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -2135,7 +2024,7 @@ func TestEvaluateWhereNoValidOperator(t *testing.T) {
 
 func TestEvaluateWhereNonPropertyComparison(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -2153,7 +2042,7 @@ func TestEvaluateWhereNonPropertyComparison(t *testing.T) {
 
 func TestEvaluateWherePropertyNotExists(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -2171,7 +2060,7 @@ func TestEvaluateWherePropertyNotExists(t *testing.T) {
 
 func TestOrderNodesStringSorting(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes with string values
@@ -2199,7 +2088,7 @@ func TestOrderNodesStringSorting(t *testing.T) {
 
 func TestOrderNodesWithoutVariablePrefix(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes
@@ -2220,7 +2109,7 @@ func TestOrderNodesWithoutVariablePrefix(t *testing.T) {
 
 func TestSplitNodePatternsWithRemainder(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create pattern with extra text after closing paren - edge case
@@ -2231,7 +2120,7 @@ func TestSplitNodePatternsWithRemainder(t *testing.T) {
 
 func TestParseNodePatternNoLabels(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create node without labels
@@ -2242,7 +2131,7 @@ func TestParseNodePatternNoLabels(t *testing.T) {
 
 func TestParseNodePatternMultipleLabels(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create node with multiple labels
@@ -2259,7 +2148,7 @@ func TestParseNodePatternMultipleLabels(t *testing.T) {
 
 func TestParsePropertiesFalseBoolean(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create node with false boolean
@@ -2273,7 +2162,7 @@ func TestParsePropertiesFalseBoolean(t *testing.T) {
 
 func TestParseReturnItemsWithAlias(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -2290,7 +2179,7 @@ func TestParseReturnItemsWithAlias(t *testing.T) {
 
 func TestParseReturnItemsOrderByLimit(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	for i := 0; i < 5; i++ {
@@ -2310,19 +2199,19 @@ func TestParseReturnItemsOrderByLimit(t *testing.T) {
 
 func TestExecuteCreateInvalidRelPattern(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Pattern that routes to relationship handler but fails regex
 	// Contains "-[" to trigger relationship path, but not in valid format
+	// ANTLR detects this as syntax error
 	_, err := exec.Execute(ctx, "CREATE -[r:REL]- invalid", nil)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid relationship pattern")
+	assert.Error(t, err, "should fail on invalid CREATE pattern")
 }
 
 func TestExecuteDeleteRequiresMATCH(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// DELETE without MATCH
@@ -2333,18 +2222,19 @@ func TestExecuteDeleteRequiresMATCH(t *testing.T) {
 
 func TestExecuteSetRequiresMATCH(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
-	// SET without MATCH - should fail validation first (SET is not a valid start keyword)
+	// SET without MATCH - executor checks for this and provides helpful error
 	_, err := exec.Execute(ctx, "SET n.prop = 'value'", nil)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "syntax error") // SET is not a valid starting clause
+	// The executor provides a helpful error explaining SET needs MATCH
+	assert.Contains(t, err.Error(), "SET requires")
 }
 
 func TestExecuteSetInvalidPropertyAccess(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -2374,7 +2264,7 @@ func TestExecuteSetInvalidPropertyAccess(t *testing.T) {
 
 func TestExecuteAggregationCountStar(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	for i := 0; i < 7; i++ {
@@ -2393,7 +2283,7 @@ func TestExecuteAggregationCountStar(t *testing.T) {
 
 func TestExecuteAggregationCollectNodes(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	for i := 0; i < 3; i++ {
@@ -2419,7 +2309,7 @@ func TestExecuteAggregationCollectNodes(t *testing.T) {
 
 func TestExecuteAggregationNonAggregateInQuery(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	for i := 0; i < 3; i++ {
@@ -2451,7 +2341,7 @@ func TestExecuteAggregationNonAggregateInQuery(t *testing.T) {
 
 func TestExecuteAggregationEmptyResultSet(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Aggregation on empty set - non-aggregate column should be nil
@@ -2462,7 +2352,7 @@ func TestExecuteAggregationEmptyResultSet(t *testing.T) {
 
 func TestExecuteAggregationSumNoMatch(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// SUM with no matching property pattern
@@ -2480,7 +2370,7 @@ func TestExecuteAggregationSumNoMatch(t *testing.T) {
 
 func TestExecuteAggregationAvgNoMatch(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -2497,7 +2387,7 @@ func TestExecuteAggregationAvgNoMatch(t *testing.T) {
 
 func TestExecuteAggregationMinNoMatch(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -2514,7 +2404,7 @@ func TestExecuteAggregationMinNoMatch(t *testing.T) {
 
 func TestExecuteAggregationMaxNoMatch(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -2531,7 +2421,7 @@ func TestExecuteAggregationMaxNoMatch(t *testing.T) {
 
 func TestResolveReturnItemCountFunction(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -2550,7 +2440,7 @@ func TestResolveReturnItemCountFunction(t *testing.T) {
 
 func TestResolveReturnItemNonExistentProperty(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -2567,7 +2457,7 @@ func TestResolveReturnItemNonExistentProperty(t *testing.T) {
 
 func TestResolveReturnItemDifferentVariable(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -2585,7 +2475,7 @@ func TestResolveReturnItemDifferentVariable(t *testing.T) {
 
 func TestDbSchemaVisualizationWithRelationships(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes and edges
@@ -2609,7 +2499,7 @@ func TestDbSchemaVisualizationWithRelationships(t *testing.T) {
 
 func TestDbSchemaNodePropertiesMultipleLabels(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node1 := &storage.Node{
@@ -2633,7 +2523,7 @@ func TestDbSchemaNodePropertiesMultipleLabels(t *testing.T) {
 
 func TestDbSchemaRelPropertiesWithProperties(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node1 := &storage.Node{ID: "srp1", Labels: []string{"A"}, Properties: map[string]interface{}{}}
@@ -2657,7 +2547,7 @@ func TestDbSchemaRelPropertiesWithProperties(t *testing.T) {
 
 func TestDbPropertyKeysWithEdgeProperties(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node1 := &storage.Node{ID: "dpk1", Labels: []string{"X"}, Properties: map[string]interface{}{"nodeProp": "value"}}
@@ -2687,7 +2577,7 @@ func TestDbPropertyKeysWithEdgeProperties(t *testing.T) {
 
 func TestCountLabelsAndRelTypes(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create diverse data
@@ -2713,7 +2603,7 @@ func TestCountLabelsAndRelTypes(t *testing.T) {
 
 func TestDetachDeleteWithIncomingEdges(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create a graph where node2 has both incoming and outgoing edges
@@ -2740,7 +2630,7 @@ func TestDetachDeleteWithIncomingEdges(t *testing.T) {
 
 func TestExecuteCreateRelationshipWithProperties(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create relationship with properties in the relationship
@@ -2752,7 +2642,7 @@ func TestExecuteCreateRelationshipWithProperties(t *testing.T) {
 
 func TestExecuteCreateMultipleEmptyPatterns(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create with extra whitespace between patterns
@@ -2763,7 +2653,7 @@ func TestExecuteCreateMultipleEmptyPatterns(t *testing.T) {
 
 func TestExecuteReturnStarWithMultipleNodes(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -2781,7 +2671,7 @@ func TestExecuteReturnStarWithMultipleNodes(t *testing.T) {
 
 func TestToFloat64WithInt(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create node with plain int (not int64)
@@ -2799,7 +2689,7 @@ func TestToFloat64WithInt(t *testing.T) {
 
 func TestToFloat64WithInvalidString(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// String that can't be converted to float
@@ -2818,7 +2708,7 @@ func TestToFloat64WithInvalidString(t *testing.T) {
 
 func TestExecuteDistinctWithDuplicates(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes with duplicate property values
@@ -2845,7 +2735,7 @@ func TestExecuteDistinctWithDuplicates(t *testing.T) {
 
 func TestCallDbRelationshipTypesEmpty(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// No edges - should return empty
@@ -2856,7 +2746,7 @@ func TestCallDbRelationshipTypesEmpty(t *testing.T) {
 
 func TestCallDbLabelsEmpty(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// No nodes - should return empty
@@ -2867,7 +2757,7 @@ func TestCallDbLabelsEmpty(t *testing.T) {
 
 func TestExecuteCreateWithReturnTargetVariable(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create relationship and return the target node variable
@@ -2880,7 +2770,7 @@ func TestExecuteCreateWithReturnTargetVariable(t *testing.T) {
 
 func TestExecuteCreateRelationshipWithRelReturn(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// CREATE with RETURN that doesn't match source or target
@@ -2891,7 +2781,7 @@ func TestExecuteCreateRelationshipWithRelReturn(t *testing.T) {
 
 func TestParseValueFloatParsing(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -2909,7 +2799,7 @@ func TestParseValueFloatParsing(t *testing.T) {
 
 func TestParseValuePlainString(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -2927,7 +2817,7 @@ func TestParseValuePlainString(t *testing.T) {
 
 func TestEvaluateStringOpNonVariablePrefix(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -2945,7 +2835,7 @@ func TestEvaluateStringOpNonVariablePrefix(t *testing.T) {
 
 func TestEvaluateInOpNonVariablePrefix(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -2963,7 +2853,7 @@ func TestEvaluateInOpNonVariablePrefix(t *testing.T) {
 
 func TestEvaluateIsNullNonVariablePrefix(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -2981,7 +2871,7 @@ func TestEvaluateIsNullNonVariablePrefix(t *testing.T) {
 
 func TestSplitNodePatternsComplexNesting(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Complex nesting with properties containing commas (unlikely but tests depth tracking)
@@ -2992,7 +2882,7 @@ func TestSplitNodePatternsComplexNesting(t *testing.T) {
 
 func TestExecuteMatchCountVariable(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	for i := 0; i < 3; i++ {
@@ -3012,7 +2902,7 @@ func TestExecuteMatchCountVariable(t *testing.T) {
 
 func TestExecuteDeleteWithWhere(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes
@@ -3033,7 +2923,7 @@ func TestExecuteDeleteWithWhere(t *testing.T) {
 
 func TestExecuteSetUpdateNodeError(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -3051,7 +2941,7 @@ func TestExecuteSetUpdateNodeError(t *testing.T) {
 
 func TestExecuteCreateNodeWithEmptyPattern(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create with just variable, no labels
@@ -3062,25 +2952,17 @@ func TestExecuteCreateNodeWithEmptyPattern(t *testing.T) {
 
 func TestParseReturnItemsEmptyAfterSplit(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
-	node := &storage.Node{
-		ID:         "empty-ret",
-		Labels:     []string{"EmptyRet"},
-		Properties: map[string]interface{}{},
-	}
-	require.NoError(t, store.CreateNode(node))
-
-	// RETURN with trailing comma that might create empty parts
-	result, err := exec.Execute(ctx, "MATCH (n:EmptyRet) RETURN n,", nil)
-	require.NoError(t, err)
-	assert.NotNil(t, result)
+	// RETURN with trailing comma is invalid Cypher - ANTLR correctly rejects it
+	_, err := exec.Execute(ctx, "MATCH (n:EmptyRet) RETURN n,", nil)
+	assert.Error(t, err, "trailing comma in RETURN should fail")
 }
 
 func TestExecuteMergeAsCreate(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// MERGE currently works like CREATE
@@ -3092,7 +2974,7 @@ func TestExecuteMergeAsCreate(t *testing.T) {
 
 func TestCallDbLabelsWithEmptyLabels(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Node with empty labels array
@@ -3111,7 +2993,7 @@ func TestCallDbLabelsWithEmptyLabels(t *testing.T) {
 
 func TestExecuteCreateRelationshipNoType(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Relationship without explicit type (uses default RELATED_TO)
@@ -3131,7 +3013,7 @@ func TestExecuteCreateRelationshipNoType(t *testing.T) {
 // TestExecuteCreateWithDeleteBasic tests the basic CREATE...WITH...DELETE pattern
 func TestExecuteCreateWithDeleteBasic(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create a node, pass it through WITH, then delete it
@@ -3148,7 +3030,7 @@ func TestExecuteCreateWithDeleteBasic(t *testing.T) {
 // TestExecuteCreateWithDeleteAndReturn tests CREATE...WITH...DELETE...RETURN
 func TestExecuteCreateWithDeleteAndReturn(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// This is the benchmark pattern: create, delete, return count
@@ -3169,7 +3051,7 @@ func TestExecuteCreateWithDeleteAndReturn(t *testing.T) {
 // TestExecuteCreateWithDeleteTimestamp tests CREATE with timestamp() function
 func TestExecuteCreateWithDeleteTimestamp(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// The benchmark uses timestamp() in the CREATE
@@ -3187,7 +3069,7 @@ func TestExecuteCreateWithDeleteTimestamp(t *testing.T) {
 // Note: This creates nodes AND a relationship in one CREATE, then deletes the relationship
 func TestExecuteCreateWithDeleteRelationship(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create two nodes with a relationship, pass relationship through WITH, delete it
@@ -3207,7 +3089,7 @@ func TestExecuteCreateWithDeleteRelationship(t *testing.T) {
 // TestExecuteCreateWithDeleteMultipleNodes tests creating and deleting multiple nodes
 func TestExecuteCreateWithDeleteMultipleNodes(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create a single node pattern first to verify basic functionality
@@ -3222,7 +3104,7 @@ func TestExecuteCreateWithDeleteMultipleNodes(t *testing.T) {
 
 func TestExecuteDeleteDetachKeywordPosition(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node1 := &storage.Node{ID: "dk1", Labels: []string{"DK"}, Properties: map[string]interface{}{}}
@@ -3241,7 +3123,7 @@ func TestExecuteDeleteDetachKeywordPosition(t *testing.T) {
 
 func TestCollectRegexWithProperty(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -3261,7 +3143,7 @@ func TestCollectRegexWithProperty(t *testing.T) {
 
 func TestParsePropertiesWithSpace(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Properties with spaces around colon and values
@@ -3272,18 +3154,18 @@ func TestParsePropertiesWithSpace(t *testing.T) {
 
 func TestParsePropertiesNoValue(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
-	// Properties key without proper value (invalid but should not crash)
-	result, err := exec.Execute(ctx, "CREATE (n:Test {name})", nil)
-	require.NoError(t, err)
-	assert.Equal(t, 1, result.Stats.NodesCreated)
+	// Properties key without proper value is invalid Cypher syntax
+	// ANTLR correctly rejects this
+	_, err := exec.Execute(ctx, "CREATE (n:Test {name})", nil)
+	assert.Error(t, err, "property without value should fail")
 }
 
 func TestUnsupportedQueryType(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// GRANT is truly unsupported
@@ -3294,7 +3176,7 @@ func TestUnsupportedQueryType(t *testing.T) {
 
 func TestExecuteMatchOrderByWithSkipLimit(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	for i := 0; i < 10; i++ {
@@ -3314,7 +3196,7 @@ func TestExecuteMatchOrderByWithSkipLimit(t *testing.T) {
 
 func TestParseValueIntegerParsing(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -3334,7 +3216,7 @@ func TestParseValueIntegerParsing(t *testing.T) {
 
 func TestCompareEqualBothNil(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Node with nil property
@@ -3354,7 +3236,7 @@ func TestCompareEqualBothNil(t *testing.T) {
 
 func TestToFloat64AllTypes(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Test with float32 (we need to create nodes that have various types)
@@ -3381,7 +3263,7 @@ func TestToFloat64AllTypes(t *testing.T) {
 
 func TestEvaluateStringOpDefaultCase(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -3407,7 +3289,7 @@ func TestEvaluateStringOpDefaultCase(t *testing.T) {
 
 func TestExecuteMatchWithRelationshipQuery(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create relationship
@@ -3428,7 +3310,7 @@ func TestExecuteMatchWithRelationshipQuery(t *testing.T) {
 
 func TestExecuteCreateWithInlineProps(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create with inline properties and return the property
@@ -3439,7 +3321,7 @@ func TestExecuteCreateWithInlineProps(t *testing.T) {
 
 func TestExecuteReturnAliasedCount(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	for i := 0; i < 4; i++ {
@@ -3459,7 +3341,7 @@ func TestExecuteReturnAliasedCount(t *testing.T) {
 
 func TestExecuteSetNewProperty(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -3478,7 +3360,7 @@ func TestExecuteSetNewProperty(t *testing.T) {
 
 func TestExecuteMatchWithNilParams(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -3496,25 +3378,17 @@ func TestExecuteMatchWithNilParams(t *testing.T) {
 
 func TestParseReturnItemsEmptyString(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
-	node := &storage.Node{
-		ID:         "empty-items",
-		Labels:     []string{"EmptyItems"},
-		Properties: map[string]interface{}{},
-	}
-	require.NoError(t, store.CreateNode(node))
-
-	// Return with extra spaces/commas
-	result, err := exec.Execute(ctx, "MATCH (n:EmptyItems) RETURN n , ", nil)
-	require.NoError(t, err)
-	assert.NotEmpty(t, result.Rows)
+	// Return with trailing comma is invalid Cypher - ANTLR correctly rejects it
+	_, err := exec.Execute(ctx, "MATCH (n:EmptyItems) RETURN n , ", nil)
+	assert.Error(t, err, "trailing comma in RETURN should fail")
 }
 
 func TestExecuteMatchWhereEqualsNumber(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -3531,7 +3405,7 @@ func TestExecuteMatchWhereEqualsNumber(t *testing.T) {
 
 func TestExecuteReturnCountN(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	for i := 0; i < 5; i++ {
@@ -3551,7 +3425,7 @@ func TestExecuteReturnCountN(t *testing.T) {
 
 func TestExecuteAggregationWithNonNumeric(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes with string values (not numeric)
@@ -3572,7 +3446,7 @@ func TestCallDbLabelsWithError(t *testing.T) {
 	// This is tricky - MemoryEngine doesn't error on AllNodes
 	// Just verify normal behavior
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -3589,7 +3463,7 @@ func TestCallDbLabelsWithError(t *testing.T) {
 
 func TestResolveReturnItemWithCount(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -3608,7 +3482,7 @@ func TestResolveReturnItemWithCount(t *testing.T) {
 // Tests for toFloat64 type coverage
 func TestToFloat64TypeCoverage(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Test float32 through comparison
@@ -3672,7 +3546,7 @@ func TestParseMerge(t *testing.T) {
 // Test all WHERE operators exercise evaluateWhere fully
 func TestEvaluateWhereFullCoverage(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -3701,7 +3575,7 @@ func TestEvaluateWhereFullCoverage(t *testing.T) {
 // Test edge cases in splitNodePatterns
 func TestSplitNodePatternsEdgeCases(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Empty pattern after splitting
@@ -3713,7 +3587,7 @@ func TestSplitNodePatternsEdgeCases(t *testing.T) {
 // Test evaluateStringOp edge cases
 func TestEvaluateStringOpEdgeCases(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -3747,7 +3621,7 @@ func TestEvaluateStringOpEdgeCases(t *testing.T) {
 // Test evaluateInOp edge cases
 func TestEvaluateInOpMatch(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	node := &storage.Node{
@@ -3779,7 +3653,7 @@ func TestParserDefaultCase(t *testing.T) {
 
 func TestSubstituteParamsBasic(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	tests := []struct {
@@ -3862,7 +3736,7 @@ func TestSubstituteParamsBasic(t *testing.T) {
 
 func TestSubstituteParamsStringEscaping(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	tests := []struct {
 		name     string
@@ -3901,7 +3775,7 @@ func TestSubstituteParamsStringEscaping(t *testing.T) {
 
 func TestValueToLiteralArrays(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	tests := []struct {
 		name     string
@@ -3950,7 +3824,7 @@ func TestValueToLiteralArrays(t *testing.T) {
 
 func TestValueToLiteralMaps(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	// Map with single key (deterministic)
 	result := exec.valueToLiteral(map[string]interface{}{"name": "Alice"})
@@ -3963,7 +3837,7 @@ func TestValueToLiteralMaps(t *testing.T) {
 
 func TestValueToLiteralIntegerTypes(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	tests := []struct {
 		name     string
@@ -3992,7 +3866,7 @@ func TestValueToLiteralIntegerTypes(t *testing.T) {
 
 func TestValueToLiteralFloats(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	// float32
 	result := exec.valueToLiteral(float32(3.14))
@@ -4009,7 +3883,7 @@ func TestValueToLiteralFloats(t *testing.T) {
 
 func TestParseReturnClauseBasic(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	node := &storage.Node{
 		ID:         "ret-1",
@@ -4091,7 +3965,7 @@ func TestParseReturnClauseBasic(t *testing.T) {
 
 func TestSplitReturnExpressions(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	tests := []struct {
 		name     string
@@ -4135,7 +4009,7 @@ func TestSplitReturnExpressions(t *testing.T) {
 
 func TestExpressionToAlias(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	tests := []struct {
 		name     string
@@ -4159,7 +4033,7 @@ func TestExpressionToAlias(t *testing.T) {
 
 func TestEvaluateExpression(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	node := &storage.Node{
 		ID:     "eval-1",
@@ -4204,7 +4078,7 @@ func TestEvaluateExpression(t *testing.T) {
 
 func TestIsInternalProperty(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	internalProps := []string{
 		"embedding",
@@ -4243,7 +4117,7 @@ func TestIsInternalProperty(t *testing.T) {
 
 func TestNodeToMapFiltersEmbeddings(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	node := &storage.Node{
 		ID:        "embed-filter-1",
@@ -4292,7 +4166,7 @@ func TestNodeToMapFiltersEmbeddings(t *testing.T) {
 
 func TestMergeWithOnCreateSet(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// MERGE a new node with ON CREATE SET
@@ -4313,7 +4187,7 @@ func TestMergeWithOnCreateSet(t *testing.T) {
 
 func TestMergeWithOnMatchSet(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// First create a node
@@ -4332,7 +4206,7 @@ func TestMergeWithOnMatchSet(t *testing.T) {
 
 func TestMergeRouting(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// MERGE with ON CREATE SET should NOT be routed to executeSet
@@ -4348,7 +4222,7 @@ func TestMergeRouting(t *testing.T) {
 
 func TestMergeWithParameterSubstitution(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	params := map[string]interface{}{
@@ -4372,7 +4246,7 @@ func TestMergeWithParameterSubstitution(t *testing.T) {
 
 func TestMergeReturnIdFunction(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	result, err := exec.Execute(ctx, `
@@ -4396,7 +4270,7 @@ func TestMergeReturnIdFunction(t *testing.T) {
 
 func TestExtractVarName(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	tests := []struct {
 		name     string
@@ -4421,7 +4295,7 @@ func TestExtractVarName(t *testing.T) {
 
 func TestExtractLabels(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	tests := []struct {
 		name     string
@@ -4449,7 +4323,7 @@ func TestExtractLabels(t *testing.T) {
 
 func TestDropIndexNoOp(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// DROP INDEX should be treated as no-op (returns empty result, no error)
@@ -4465,7 +4339,7 @@ func TestDropIndexNoOp(t *testing.T) {
 
 func TestSubstituteParamsEdgeCases(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	tests := []struct {
 		name   string
@@ -4512,7 +4386,7 @@ func TestSubstituteParamsEdgeCases(t *testing.T) {
 
 func TestSubstituteParamsComplexQuery(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Test with a complex MERGE query like Mimir uses
@@ -4552,7 +4426,7 @@ func TestSubstituteParamsComplexQuery(t *testing.T) {
 // all relationships instead of returning 1 (the bug that was fixed)
 func TestRelationshipCountAggregation(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create a small graph with multiple relationships
@@ -4686,7 +4560,7 @@ func TestRelationshipCountAggregation(t *testing.T) {
 
 func TestSetLabelSyntax(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create a node without the target label
@@ -4728,7 +4602,7 @@ func TestSetLabelSyntax(t *testing.T) {
 
 func TestSetLabelWithPropertyAssignment(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create a node
@@ -4761,7 +4635,7 @@ func TestSetLabelWithPropertyAssignment(t *testing.T) {
 
 func TestSetMultipleLabels(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create a node
@@ -4797,7 +4671,7 @@ func TestSetMultipleLabels(t *testing.T) {
 
 func TestWhereLabelCheck(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create test nodes with different labels
@@ -4837,7 +4711,7 @@ func TestWhereLabelCheck(t *testing.T) {
 
 func TestWhereNotLabelMigrationPattern(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// This tests the exact pattern from the Mimir schema initialization:
@@ -4899,7 +4773,7 @@ func TestWhereNotLabelMigrationPattern(t *testing.T) {
 
 func TestWhereLabelWithAndCondition(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create test nodes

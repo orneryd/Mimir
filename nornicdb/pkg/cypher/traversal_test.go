@@ -13,7 +13,7 @@ import (
 //   Alice -[KNOWS]-> Bob -[KNOWS]-> Carol
 //   Alice -[WORKS_WITH]-> Carol
 //   Bob -[FOLLOWS]-> Dave
-func setupTraversalTestData(t *testing.T, exec *StorageExecutor) {
+func setupTraversalTestData(t *testing.T, exec *ASTExecutor) {
 	ctx := context.Background()
 
 	// Create nodes

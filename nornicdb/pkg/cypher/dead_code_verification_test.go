@@ -44,7 +44,7 @@ import (
 // re-add the removed executeCreateRelationship function.
 func TestRegressionPrevention_CreateRelationship(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	tests := []struct {
@@ -88,7 +88,7 @@ func TestRegressionPrevention_CreateRelationship(t *testing.T) {
 // removed executeImplicit function.
 func TestRegressionPrevention_ImplicitTransaction(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// All query types should work via executeImplicitAsync
@@ -111,7 +111,7 @@ func TestRegressionPrevention_ImplicitTransaction(t *testing.T) {
 // work correctly without extractVariablesFromMatch function.
 func TestRegressionPrevention_MatchVariableExtraction(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create test data

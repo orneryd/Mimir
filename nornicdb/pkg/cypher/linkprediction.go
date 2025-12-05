@@ -157,7 +157,7 @@ import (
 //   - O(n * avg_degree²) where n = number of nodes
 //   - Fast for sparse graphs
 //   - Memory: ~O(nodes + edges)
-func (e *StorageExecutor) callGdsLinkPredictionAdamicAdar(cypher string) (*ExecuteResult, error) {
+func (e *ASTExecutor) callGdsLinkPredictionAdamicAdar(cypher string) (*ExecuteResult, error) {
 	config, err := e.parseLinkPredictionConfig(cypher)
 	if err != nil {
 		return nil, err
@@ -263,7 +263,7 @@ func (e *StorageExecutor) callGdsLinkPredictionAdamicAdar(cypher string) (*Execu
 //   - O(n * avg_degree) where n = number of nodes
 //   - Fastest link prediction algorithm
 //   - Memory: ~O(nodes + edges)
-func (e *StorageExecutor) callGdsLinkPredictionCommonNeighbors(cypher string) (*ExecuteResult, error) {
+func (e *ASTExecutor) callGdsLinkPredictionCommonNeighbors(cypher string) (*ExecuteResult, error) {
 	config, err := e.parseLinkPredictionConfig(cypher)
 	if err != nil {
 		return nil, err
@@ -280,7 +280,7 @@ func (e *StorageExecutor) callGdsLinkPredictionCommonNeighbors(cypher string) (*
 }
 
 // callGdsLinkPredictionResourceAllocation implements gds.linkPrediction.resourceAllocation.stream
-func (e *StorageExecutor) callGdsLinkPredictionResourceAllocation(cypher string) (*ExecuteResult, error) {
+func (e *ASTExecutor) callGdsLinkPredictionResourceAllocation(cypher string) (*ExecuteResult, error) {
 	config, err := e.parseLinkPredictionConfig(cypher)
 	if err != nil {
 		return nil, err
@@ -297,7 +297,7 @@ func (e *StorageExecutor) callGdsLinkPredictionResourceAllocation(cypher string)
 }
 
 // callGdsLinkPredictionPreferentialAttachment implements gds.linkPrediction.preferentialAttachment.stream
-func (e *StorageExecutor) callGdsLinkPredictionPreferentialAttachment(cypher string) (*ExecuteResult, error) {
+func (e *ASTExecutor) callGdsLinkPredictionPreferentialAttachment(cypher string) (*ExecuteResult, error) {
 	config, err := e.parseLinkPredictionConfig(cypher)
 	if err != nil {
 		return nil, err
@@ -314,7 +314,7 @@ func (e *StorageExecutor) callGdsLinkPredictionPreferentialAttachment(cypher str
 }
 
 // callGdsLinkPredictionJaccard implements gds.linkPrediction.jaccard.stream (not standard GDS but useful)
-func (e *StorageExecutor) callGdsLinkPredictionJaccard(cypher string) (*ExecuteResult, error) {
+func (e *ASTExecutor) callGdsLinkPredictionJaccard(cypher string) (*ExecuteResult, error) {
 	config, err := e.parseLinkPredictionConfig(cypher)
 	if err != nil {
 		return nil, err
@@ -334,7 +334,7 @@ func (e *StorageExecutor) callGdsLinkPredictionJaccard(cypher string) (*ExecuteR
 //
 // This is a NornicDB extension that combines topological and semantic signals,
 // but follows Neo4j GDS naming conventions for compatibility.
-func (e *StorageExecutor) callGdsLinkPredictionPredict(cypher string) (*ExecuteResult, error) {
+func (e *ASTExecutor) callGdsLinkPredictionPredict(cypher string) (*ExecuteResult, error) {
 	config, err := e.parseLinkPredictionConfig(cypher)
 	if err != nil {
 		return nil, err
@@ -393,7 +393,7 @@ type linkPredictionConfig struct {
 //   - Map syntax: {sourceNode: 123, topK: 10}
 //   - Named params: sourceNode: 123, topK: 10
 //   - Positional: (123, 10)
-func (e *StorageExecutor) parseLinkPredictionConfig(cypher string) (*linkPredictionConfig, error) {
+func (e *ASTExecutor) parseLinkPredictionConfig(cypher string) (*linkPredictionConfig, error) {
 	config := &linkPredictionConfig{
 		TopK:           10,        // Default
 		Algorithm:      "adamic_adar", // Default
@@ -487,7 +487,7 @@ func (e *StorageExecutor) parseLinkPredictionConfig(cypher string) (*linkPredict
 }
 
 // formatLinkPredictionResults formats topology predictions as Neo4j-compatible result
-func (e *StorageExecutor) formatLinkPredictionResults(predictions []linkpredict.Prediction, sourceNode storage.NodeID) *ExecuteResult {
+func (e *ASTExecutor) formatLinkPredictionResults(predictions []linkpredict.Prediction, sourceNode storage.NodeID) *ExecuteResult {
 	result := &ExecuteResult{
 		Columns: []string{"node1", "node2", "score"},
 		Rows:    make([][]interface{}, 0, len(predictions)),
@@ -506,7 +506,7 @@ func (e *StorageExecutor) formatLinkPredictionResults(predictions []linkpredict.
 }
 
 // formatHybridPredictionResults formats hybrid predictions with extended columns
-func (e *StorageExecutor) formatHybridPredictionResults(predictions []linkpredict.HybridPrediction, sourceNode storage.NodeID) *ExecuteResult {
+func (e *ASTExecutor) formatHybridPredictionResults(predictions []linkpredict.HybridPrediction, sourceNode storage.NodeID) *ExecuteResult {
 	result := &ExecuteResult{
 		Columns: []string{"node1", "node2", "score", "topology_score", "semantic_score", "reason"},
 		Rows:    make([][]interface{}, 0, len(predictions)),

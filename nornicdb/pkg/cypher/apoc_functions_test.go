@@ -12,7 +12,7 @@ import (
 func TestApocCreateUUID(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	defer engine.Close()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	result, err := executor.Execute(ctx, "RETURN apoc.create.uuid() AS uuid", nil)
@@ -34,7 +34,7 @@ func TestApocCreateUUID(t *testing.T) {
 func TestApocTextJoin(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	defer engine.Close()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Note: Inline list parsing may have limitations
@@ -54,7 +54,7 @@ func TestApocTextJoin(t *testing.T) {
 func TestApocCollFlatten(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	defer engine.Close()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	t.Run("flatten nested list", func(t *testing.T) {
@@ -77,7 +77,7 @@ func TestApocCollFlatten(t *testing.T) {
 func TestApocCollToSet(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	defer engine.Close()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	t.Run("remove duplicates", func(t *testing.T) {
@@ -98,7 +98,7 @@ func TestApocCollToSet(t *testing.T) {
 func TestApocConvertToJson(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	defer engine.Close()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	t.Run("map to json", func(t *testing.T) {
@@ -121,7 +121,7 @@ func TestApocConvertToJson(t *testing.T) {
 func TestApocConvertFromJsonMap(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	defer engine.Close()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	t.Run("json to map", func(t *testing.T) {
@@ -142,7 +142,7 @@ func TestApocConvertFromJsonMap(t *testing.T) {
 func TestApocConvertFromJsonList(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	defer engine.Close()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	t.Run("json to list", func(t *testing.T) {
@@ -161,7 +161,7 @@ func TestApocConvertFromJsonList(t *testing.T) {
 func TestApocMetaType(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	defer engine.Close()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	tests := []struct {
@@ -218,7 +218,7 @@ func TestApocMetaType(t *testing.T) {
 func TestApocMetaIsType(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	defer engine.Close()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	tests := []struct {
@@ -268,7 +268,7 @@ func TestApocMetaIsType(t *testing.T) {
 func TestApocMapMergeViaCypher(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	defer engine.Close()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	t.Run("merge maps", func(t *testing.T) {
@@ -287,7 +287,7 @@ func TestApocMapMergeViaCypher(t *testing.T) {
 func TestApocMapFromPairs(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	defer engine.Close()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	t.Run("create map from pairs", func(t *testing.T) {
@@ -308,7 +308,7 @@ func TestApocMapFromPairs(t *testing.T) {
 func TestApocMapFromLists(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	defer engine.Close()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	t.Run("create map from parallel lists", func(t *testing.T) {
@@ -411,7 +411,7 @@ func TestMergeMaps(t *testing.T) {
 func TestApocCaseInsensitive(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	defer engine.Close()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Test uppercase variant

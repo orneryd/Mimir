@@ -340,6 +340,9 @@ type Config struct {
 
 	// Memory management
 	LowMemoryMode bool `yaml:"low_memory_mode"` // Use minimal RAM (for containers with limited memory)
+
+	// Executor selection
+	UseASTExecutor bool `yaml:"use_ast_executor"` // Use new ANTLR-based executor (experimental)
 }
 
 // DefaultConfig returns sensible default configuration for NornicDB.
@@ -427,8 +430,8 @@ type DB struct {
 	wal            *storage.WAL // Write-ahead log for durability
 	decay          *decay.Manager
 	inference      *inference.Engine
-	cypherExecutor *cypher.StorageExecutor
-	gpuManager     interface{} // *gpu.Manager - interface to avoid circular import
+	cypherExecutor cypher.CypherExecutor
+	gpuManager     interface{}           // *gpu.Manager - interface to avoid circular import
 
 	// Search service (uses pre-computed embeddings from Mimir)
 	searchService *search.Service
@@ -788,8 +791,8 @@ func Open(dataDir string, config *Config) (*DB, error) {
 		fmt.Println("⚠️  Using in-memory storage (data will not persist)")
 	}
 
-	// Initialize Cypher executor
-	db.cypherExecutor = cypher.NewStorageExecutor(db.storage)
+	// Initialize AST-based Cypher executor
+	db.cypherExecutor = cypher.NewASTExecutor(db.storage)
 
 	// Load plugins from configured directory (NORNICDB_PLUGINS_DIR)
 	pluginsDir := os.Getenv("NORNICDB_PLUGINS_DIR")

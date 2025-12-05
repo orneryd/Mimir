@@ -19,7 +19,7 @@ import (
 
 func TestMergeNode_CreateWhenEmpty(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	e := NewStorageExecutor(store)
+	e := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// MERGE on empty store should create
@@ -42,7 +42,7 @@ func TestMergeNode_CreateWhenEmpty(t *testing.T) {
 
 func TestMergeNode_MatchWhenExists(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	e := NewStorageExecutor(store)
+	e := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create a node first
@@ -76,7 +76,7 @@ func TestMergeNode_MatchWhenExists(t *testing.T) {
 
 func TestMergeNode_OnCreateSet(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	e := NewStorageExecutor(store)
+	e := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// ON CREATE SET should run when creating
@@ -101,7 +101,7 @@ func TestMergeNode_OnCreateSet(t *testing.T) {
 
 func TestMergeNode_OnMatchSet(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	e := NewStorageExecutor(store)
+	e := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create initial node
@@ -136,7 +136,7 @@ func TestMergeNode_OnMatchSet(t *testing.T) {
 
 func TestMergeNode_Idempotent(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	e := NewStorageExecutor(store)
+	e := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// First MERGE - should create
@@ -185,7 +185,7 @@ func TestMergeNode_Idempotent(t *testing.T) {
 
 func TestMergeRelationship_Basic(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	e := NewStorageExecutor(store)
+	e := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes first
@@ -213,7 +213,7 @@ func TestMergeRelationship_Basic(t *testing.T) {
 
 func TestMergeRelationship_Idempotent(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	e := NewStorageExecutor(store)
+	e := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes
@@ -252,7 +252,7 @@ func TestMergeRelationship_Idempotent(t *testing.T) {
 
 func TestMerge_FileIndexerPattern(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	e := NewStorageExecutor(store)
+	e := NewASTExecutor(store)
 	ctx := context.Background()
 
 	t.Run("create file and chunk nodes", func(t *testing.T) {
@@ -354,7 +354,7 @@ func TestMerge_FileIndexerPattern(t *testing.T) {
 // Test exact Mimir FileIndexer query format with SET on separate line
 func TestMerge_FileIndexerExactFormat(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	e := NewStorageExecutor(store)
+	e := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create file node
@@ -414,7 +414,7 @@ func TestMerge_FileIndexerExactFormat(t *testing.T) {
 
 func TestMerge_WithParameters(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	e := NewStorageExecutor(store)
+	e := NewASTExecutor(store)
 	ctx := context.Background()
 
 	params := map[string]interface{}{

@@ -10,7 +10,7 @@ import (
 
 // TestParseLinkPredictionConfig tests configuration parsing
 func TestParseLinkPredictionConfig(t *testing.T) {
-	executor := &StorageExecutor{
+	executor := &ASTExecutor{
 		storage: storage.NewMemoryEngine(),
 	}
 
@@ -80,7 +80,7 @@ func TestGdsLinkPredictionAdamicAdar(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	setupTestGraph(t, engine)
 
-	executor := &StorageExecutor{
+	executor := &ASTExecutor{
 		storage: engine,
 	}
 
@@ -130,7 +130,7 @@ func TestGdsLinkPredictionCommonNeighbors(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	setupTestGraph(t, engine)
 
-	executor := &StorageExecutor{
+	executor := &ASTExecutor{
 		storage: engine,
 	}
 
@@ -151,7 +151,7 @@ func TestGdsLinkPredictionResourceAllocation(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	setupTestGraph(t, engine)
 
-	executor := &StorageExecutor{
+	executor := &ASTExecutor{
 		storage: engine,
 	}
 
@@ -172,7 +172,7 @@ func TestGdsLinkPredictionPreferentialAttachment(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	setupTestGraph(t, engine)
 
-	executor := &StorageExecutor{
+	executor := &ASTExecutor{
 		storage: engine,
 	}
 
@@ -193,7 +193,7 @@ func TestGdsLinkPredictionJaccard(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	setupTestGraph(t, engine)
 
-	executor := &StorageExecutor{
+	executor := &ASTExecutor{
 		storage: engine,
 	}
 
@@ -224,7 +224,7 @@ func TestGdsLinkPredictionPredict(t *testing.T) {
 		}
 	}
 
-	executor := &StorageExecutor{
+	executor := &ASTExecutor{
 		storage: engine,
 	}
 
@@ -268,7 +268,7 @@ func TestGdsLinkPredictionPredict(t *testing.T) {
 
 // TestFormatLinkPredictionResults tests result formatting
 func TestFormatLinkPredictionResults(t *testing.T) {
-	executor := &StorageExecutor{}
+	executor := &ASTExecutor{}
 
 	// Create test predictions using linkpredict.Prediction type
 	predictions := []linkpredict.Prediction{

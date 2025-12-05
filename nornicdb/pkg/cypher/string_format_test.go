@@ -10,7 +10,7 @@ import (
 
 func TestFormatStringFunction(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create a simple test node to ensure executor works
@@ -75,7 +75,7 @@ func TestFormatStringFunction(t *testing.T) {
 
 func TestExistingStringFunctionsStillWork(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	tests := []struct {

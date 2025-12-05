@@ -310,7 +310,7 @@ func TestKalmanVelocityProcess_InvalidState(t *testing.T) {
 
 func TestCypherKalmanInit(t *testing.T) {
 	store := setupKalmanTestStorage(t)
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	tests := []struct {
@@ -347,7 +347,7 @@ func TestCypherKalmanInit(t *testing.T) {
 
 func TestCypherKalmanProcess(t *testing.T) {
 	store := setupKalmanTestStorage(t)
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// First get initial state
@@ -386,7 +386,7 @@ func TestCypherKalmanProcess(t *testing.T) {
 
 func TestCypherKalmanPredict(t *testing.T) {
 	store := setupKalmanTestStorage(t)
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Get initial state and process some values
@@ -422,7 +422,7 @@ func TestCypherKalmanPredict(t *testing.T) {
 
 func TestCypherKalmanVelocityPrediction(t *testing.T) {
 	store := setupKalmanTestStorage(t)
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Initialize velocity filter
@@ -460,7 +460,7 @@ func TestCypherKalmanVelocityPrediction(t *testing.T) {
 
 func TestCypherKalmanAdaptiveModeSwitching(t *testing.T) {
 	store := setupKalmanTestStorage(t)
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Initialize adaptive filter with low hysteresis for quick switching
@@ -487,7 +487,7 @@ func TestCypherKalmanAdaptiveModeSwitching(t *testing.T) {
 
 func TestCypherKalmanReset(t *testing.T) {
 	store := setupKalmanTestStorage(t)
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Initialize and process some data
@@ -529,7 +529,7 @@ func TestCypherKalmanReset(t *testing.T) {
 
 func TestCypherKalmanNoiseSmoothingDemo(t *testing.T) {
 	store := setupKalmanTestStorage(t)
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Simulate noisy sensor readings around 50.0
@@ -561,7 +561,7 @@ func TestCypherKalmanNoiseSmoothingDemo(t *testing.T) {
 func TestCypherKalmanStockPricePrediction(t *testing.T) {
 	// Simulates the AP News → Stock prediction use case from docs
 	store := setupKalmanTestStorage(t)
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Simulated stock prices with upward trend + noise
@@ -601,7 +601,7 @@ func TestCypherKalmanStockPricePrediction(t *testing.T) {
 func TestCypherKalmanWithNodeProperty(t *testing.T) {
 	// Tests storing/retrieving Kalman state in node properties
 	store := setupKalmanTestStorage(t)
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create a sensor node with initial Kalman state
@@ -703,7 +703,7 @@ func BenchmarkKalmanAdaptiveProcess(b *testing.B) {
 
 func BenchmarkCypherKalmanProcess(b *testing.B) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Get initial state

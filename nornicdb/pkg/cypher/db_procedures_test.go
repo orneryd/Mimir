@@ -15,7 +15,7 @@ import (
 
 func TestCallDbInfoExtended(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create some test data
@@ -63,7 +63,7 @@ func TestCallDbInfoExtended(t *testing.T) {
 
 func TestCallDbInfoYield(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Test YIELD clause
@@ -83,7 +83,7 @@ func TestCallDbInfoYield(t *testing.T) {
 
 func TestCallDbPingExtended(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	result, err := exec.Execute(ctx, `CALL db.ping()`, nil)
@@ -106,7 +106,7 @@ func TestCallDbPingExtended(t *testing.T) {
 
 func TestCallDbAwaitIndex(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	tests := []struct {
@@ -147,7 +147,7 @@ func TestCallDbAwaitIndex(t *testing.T) {
 
 func TestCallDbAwaitIndexes(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	tests := []struct {
@@ -187,7 +187,7 @@ func TestCallDbAwaitIndexes(t *testing.T) {
 
 func TestCallDbResampleIndex(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	tests := []struct {
@@ -227,7 +227,7 @@ func TestCallDbResampleIndex(t *testing.T) {
 
 func TestCallTxSetMetadata(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	tests := []struct {
@@ -262,7 +262,7 @@ func TestCallTxSetMetadata(t *testing.T) {
 
 func TestCallDbStatsClear(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	result, err := exec.Execute(ctx, `CALL db.stats.clear()`, nil)
@@ -281,7 +281,7 @@ func TestCallDbStatsClear(t *testing.T) {
 
 func TestCallDbStatsCollect(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	result, err := exec.Execute(ctx, `CALL db.stats.collect('QUERIES')`, nil)
@@ -307,7 +307,7 @@ func TestCallDbStatsCollect(t *testing.T) {
 
 func TestCallDbStatsRetrieve(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	result, err := exec.Execute(ctx, `CALL db.stats.retrieve('QUERIES')`, nil)
@@ -326,7 +326,7 @@ func TestCallDbStatsRetrieve(t *testing.T) {
 
 func TestCallDbStatsStatus(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	result, err := exec.Execute(ctx, `CALL db.stats.status()`, nil)
@@ -345,7 +345,7 @@ func TestCallDbStatsStatus(t *testing.T) {
 
 func TestCallDbStatsStop(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	result, err := exec.Execute(ctx, `CALL db.stats.stop()`, nil)
@@ -367,7 +367,7 @@ func TestCallDbStatsStop(t *testing.T) {
 
 func TestCallDbStatsRetrieveAllAnTheStats(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create some data first
@@ -395,7 +395,7 @@ func TestCallDbStatsRetrieveAllAnTheStats(t *testing.T) {
 
 func TestCallDbClearQueryCaches(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	result, err := exec.Execute(ctx, `CALL db.clearQueryCaches()`, nil)
@@ -418,7 +418,7 @@ func TestCallDbClearQueryCaches(t *testing.T) {
 
 func TestCallDbmsInfoExtended(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	result, err := exec.Execute(ctx, `CALL dbms.info()`, nil)
@@ -438,7 +438,7 @@ func TestCallDbmsInfoExtended(t *testing.T) {
 
 func TestCallDbmsListConfigExtended(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	result, err := exec.Execute(ctx, `CALL dbms.listConfig()`, nil)
@@ -459,7 +459,7 @@ func TestCallDbmsListConfigExtended(t *testing.T) {
 
 func TestCallDbmsClientConfig(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	result, err := exec.Execute(ctx, `CALL dbms.clientConfig()`, nil)
@@ -479,7 +479,7 @@ func TestCallDbmsClientConfig(t *testing.T) {
 
 func TestCallDbmsListConnections(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	result, err := exec.Execute(ctx, `CALL dbms.listConnections()`, nil)
@@ -501,7 +501,7 @@ func TestCallDbmsListConnections(t *testing.T) {
 
 func TestCallDbIndexFulltextListAvailableAnalyzersExtended(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	result, err := exec.Execute(ctx, `CALL db.index.fulltext.listAvailableAnalyzers()`, nil)
@@ -535,7 +535,7 @@ func TestCallDbIndexFulltextListAvailableAnalyzersExtended(t *testing.T) {
 
 func TestCallDbInfoWithYieldAndWhere(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create test data to ensure non-zero counts
@@ -556,7 +556,7 @@ func TestCallDbInfoWithYieldAndWhere(t *testing.T) {
 
 func TestCallDbLabelsWithYield(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create test data

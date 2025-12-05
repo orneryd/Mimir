@@ -51,7 +51,7 @@ import (
 //   - t: The testing context for error reporting
 //
 // Returns:
-//   - A fully initialized StorageExecutor ready for query execution
+//   - A fully initialized ASTExecutor ready for query execution
 //
 // Example:
 //
@@ -60,10 +60,10 @@ import (
 //	    result, err := exec.Execute(ctx, "RETURN 1", nil)
 //	    require.NoError(t, err)
 //	}
-func SetupTestExecutor(t *testing.T) *cypher.StorageExecutor {
+func SetupTestExecutor(t *testing.T) *cypher.ASTExecutor {
 	t.Helper()
 	store := storage.NewMemoryEngine()
-	return cypher.NewStorageExecutor(store)
+	return cypher.NewASTExecutor(store)
 }
 
 // SetupTestExecutorWithStore creates a test executor with a provided storage engine.
@@ -76,7 +76,7 @@ func SetupTestExecutor(t *testing.T) *cypher.StorageExecutor {
 //   - store: The storage engine to use
 //
 // Returns:
-//   - A StorageExecutor using the provided storage
+//   - A ASTExecutor using the provided storage
 //
 // Example:
 //
@@ -86,9 +86,9 @@ func SetupTestExecutor(t *testing.T) *cypher.StorageExecutor {
 //	    // Test something and verify storage directly
 //	    nodes := store.GetAllNodes()
 //	}
-func SetupTestExecutorWithStore(t *testing.T, store storage.Engine) *cypher.StorageExecutor {
+func SetupTestExecutorWithStore(t *testing.T, store storage.Engine) *cypher.ASTExecutor {
 	t.Helper()
-	return cypher.NewStorageExecutor(store)
+	return cypher.NewASTExecutor(store)
 }
 
 // CreateTestNodes creates a standard set of Person nodes for testing.
@@ -112,7 +112,7 @@ func SetupTestExecutorWithStore(t *testing.T, store storage.Engine) *cypher.Stor
 //	    require.NoError(t, err)
 //	    assert.Len(t, result.Rows, 3)
 //	}
-func CreateTestNodes(t *testing.T, exec *cypher.StorageExecutor) {
+func CreateTestNodes(t *testing.T, exec *cypher.ASTExecutor) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -149,7 +149,7 @@ func CreateTestNodes(t *testing.T, exec *cypher.StorageExecutor) {
 //	        "MATCH (p:Person)-[:WORKS_AT]->(c:Company) RETURN p.name, c.name", nil)
 //	    require.NoError(t, err)
 //	}
-func CreateTestGraph(t *testing.T, exec *cypher.StorageExecutor) {
+func CreateTestGraph(t *testing.T, exec *cypher.ASTExecutor) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -235,7 +235,7 @@ func AssertQueryResultColumns(t *testing.T, result *cypher.ExecuteResult, expect
 //
 //	result := testutil.ExecuteQuery(t, exec, "RETURN 1 + 2 as sum", nil)
 //	assert.Equal(t, int64(3), result.Rows[0][0])
-func ExecuteQuery(t *testing.T, exec *cypher.StorageExecutor, query string, params map[string]interface{}) *cypher.ExecuteResult {
+func ExecuteQuery(t *testing.T, exec *cypher.ASTExecutor, query string, params map[string]interface{}) *cypher.ExecuteResult {
 	t.Helper()
 	ctx := context.Background()
 	result, err := exec.Execute(ctx, query, params)
@@ -256,7 +256,7 @@ func ExecuteQuery(t *testing.T, exec *cypher.StorageExecutor, query string, para
 // Example:
 //
 //	testutil.MustExecute(t, exec, "CREATE (n:Node {value: 42})")
-func MustExecute(t *testing.T, exec *cypher.StorageExecutor, query string) {
+func MustExecute(t *testing.T, exec *cypher.ASTExecutor, query string) {
 	t.Helper()
 	ctx := context.Background()
 	_, err := exec.Execute(ctx, query, nil)

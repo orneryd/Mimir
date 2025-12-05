@@ -16,7 +16,7 @@ import (
 func TestDocumentationExamples_FirstQueries(t *testing.T) {
 	ctx := context.Background()
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	t.Run("CreateFirstNode", func(t *testing.T) {
 		query := `
@@ -114,7 +114,7 @@ func TestDocumentationExamples_FirstQueries(t *testing.T) {
 func TestDocumentationExamples_QueryPatterns(t *testing.T) {
 	ctx := context.Background()
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	// Setup test data
 	setupQueries := []string{
@@ -212,7 +212,7 @@ func TestDocumentationExamples_QueryPatterns(t *testing.T) {
 func TestDocumentationExamples_Aggregations(t *testing.T) {
 	ctx := context.Background()
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	// Setup test data
 	setupQueries := []string{
@@ -297,7 +297,7 @@ func TestDocumentationExamples_Aggregations(t *testing.T) {
 func TestDocumentationExamples_Updates(t *testing.T) {
 	ctx := context.Background()
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	t.Run("SetProperty", func(t *testing.T) {
 		// Create node
@@ -362,7 +362,7 @@ func TestDocumentationExamples_Updates(t *testing.T) {
 func TestDocumentationExamples_Delete(t *testing.T) {
 	ctx := context.Background()
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	t.Run("DeleteNode", func(t *testing.T) {
 		// Create node
@@ -404,7 +404,7 @@ func TestDocumentationExamples_Delete(t *testing.T) {
 func TestDocumentationExamples_Functions(t *testing.T) {
 	ctx := context.Background()
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	// Setup
 	_, err := exec.Execute(ctx, `CREATE (p:Person:Employee {name: "FuncTest", email: "test@example.com"})`, nil)
@@ -481,7 +481,7 @@ func TestDocumentationExamples_Functions(t *testing.T) {
 func TestDocumentationExamples_StringFunctions(t *testing.T) {
 	ctx := context.Background()
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	t.Run("ToUpperToLower", func(t *testing.T) {
 		query := `RETURN toUpper('hello') as upper, toLower('WORLD') as lower`
@@ -529,7 +529,7 @@ func TestDocumentationExamples_StringFunctions(t *testing.T) {
 func TestDocumentationExamples_ListFunctions(t *testing.T) {
 	ctx := context.Background()
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	t.Run("RangeFunction", func(t *testing.T) {
 		query := `RETURN range(1, 5) as nums`
@@ -571,7 +571,7 @@ func TestDocumentationExamples_ListFunctions(t *testing.T) {
 func TestDocumentationExamples_CaseExpression(t *testing.T) {
 	ctx := context.Background()
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	// Setup
 	setupQueries := []string{
@@ -605,7 +605,7 @@ func TestDocumentationExamples_CaseExpression(t *testing.T) {
 func TestDocumentationExamples_UnwindClause(t *testing.T) {
 	ctx := context.Background()
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	t.Run("UnwindSimpleList", func(t *testing.T) {
 		query := `
@@ -647,7 +647,7 @@ func TestDocumentationExamples_UnwindClause(t *testing.T) {
 func TestDocumentationExamples_ListComprehension(t *testing.T) {
 	ctx := context.Background()
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	t.Run("SimpleListComprehension", func(t *testing.T) {
 		query := `RETURN [x IN [1, 2, 3, 4, 5]] as nums`
@@ -684,7 +684,7 @@ func TestDocumentationExamples_ListComprehension(t *testing.T) {
 func TestDocumentationExamples_Procedures(t *testing.T) {
 	ctx := context.Background()
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	t.Run("DbmsComponents", func(t *testing.T) {
 		query := `CALL dbms.components()`

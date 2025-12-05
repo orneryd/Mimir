@@ -11,7 +11,7 @@ import (
 
 func TestCallDbIndexVectorCreateNodeIndex(t *testing.T) {
 	engine := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	t.Run("create_vector_index", func(t *testing.T) {
@@ -45,7 +45,7 @@ func TestCallDbIndexVectorCreateNodeIndex(t *testing.T) {
 
 func TestCallDbCreateSetNodeVectorProperty(t *testing.T) {
 	engine := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Create a node first
@@ -93,7 +93,7 @@ func TestCallDbCreateSetNodeVectorProperty(t *testing.T) {
 
 func TestCallDbCreateSetRelationshipVectorProperty(t *testing.T) {
 	engine := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Create nodes and relationship first
@@ -133,7 +133,7 @@ func TestCallDbCreateSetRelationshipVectorProperty(t *testing.T) {
 
 func TestVectorIndexQueryNodesWithProcedure(t *testing.T) {
 	engine := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// This tests the existing queryNodes procedure with index created via CALL
@@ -188,7 +188,7 @@ func (m *mockQueryEmbedder) Embed(ctx context.Context, text string) ([]float32, 
 // 3. Parameter reference ($queryVector)
 func TestVectorSearchQueryModes(t *testing.T) {
 	engine := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Create test nodes with embeddings via Cypher SET (like Mimir does with Neo4j)
@@ -288,7 +288,7 @@ func TestVectorSearchQueryModes(t *testing.T) {
 
 	t.Run("string_query_error_without_embedder", func(t *testing.T) {
 		// Create fresh executor without embedder
-		freshExec := NewStorageExecutor(engine)
+		freshExec := NewASTExecutor(engine)
 
 		// Should fail gracefully with helpful message
 		_, err := freshExec.Execute(ctx,
@@ -323,7 +323,7 @@ func TestVectorSearchQueryModes(t *testing.T) {
 // 3. Mimir queries via db.index.vector.queryNodes with vector
 func TestVectorSearchEndToEnd(t *testing.T) {
 	engine := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Simulate Mimir storing a node with embedding (as it does with Neo4j today)
@@ -359,7 +359,7 @@ func TestVectorSearchEndToEnd(t *testing.T) {
 // TestMultiLineSetWithArray tests that SET clauses with arrays and multiple properties work
 func TestMultiLineSetWithArray(t *testing.T) {
 	engine := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Create a node
@@ -395,7 +395,7 @@ func TestMultiLineSetWithArray(t *testing.T) {
 
 func TestCallDbIndexVectorQueryRelationships(t *testing.T) {
 	engine := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	t.Run("query_relationship_vectors", func(t *testing.T) {
@@ -409,7 +409,7 @@ func TestCallDbIndexVectorQueryRelationships(t *testing.T) {
 
 func TestCallDbIndexFulltextQueryRelationships(t *testing.T) {
 	engine := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	// Create nodes and relationship with text property
@@ -439,7 +439,7 @@ func TestCallDbIndexFulltextQueryRelationships(t *testing.T) {
 
 func TestCallDbIndexVectorCreateRelationshipIndex(t *testing.T) {
 	engine := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	t.Run("create_relationship_vector_index", func(t *testing.T) {
@@ -483,7 +483,7 @@ func TestCallDbIndexVectorCreateRelationshipIndex(t *testing.T) {
 
 func TestCallDbIndexFulltextCreateNodeIndex(t *testing.T) {
 	engine := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	t.Run("create_single_label_single_property", func(t *testing.T) {
@@ -532,7 +532,7 @@ func TestCallDbIndexFulltextCreateNodeIndex(t *testing.T) {
 
 func TestCallDbIndexFulltextCreateRelationshipIndex(t *testing.T) {
 	engine := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	t.Run("create_single_type_single_property", func(t *testing.T) {
@@ -567,7 +567,7 @@ func TestCallDbIndexFulltextCreateRelationshipIndex(t *testing.T) {
 
 func TestCallDbIndexFulltextDrop(t *testing.T) {
 	engine := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	t.Run("drop_existing_index", func(t *testing.T) {
@@ -607,7 +607,7 @@ func TestCallDbIndexFulltextDrop(t *testing.T) {
 
 func TestCallDbIndexVectorDrop(t *testing.T) {
 	engine := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	t.Run("drop_existing_vector_index", func(t *testing.T) {
@@ -643,7 +643,7 @@ func TestCallDbIndexVectorDrop(t *testing.T) {
 
 func TestFulltextIndexWorkflow(t *testing.T) {
 	engine := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	t.Run("complete_fulltext_workflow", func(t *testing.T) {
@@ -680,7 +680,7 @@ func TestFulltextIndexWorkflow(t *testing.T) {
 
 func TestVectorIndexWorkflow(t *testing.T) {
 	engine := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	t.Run("complete_vector_workflow", func(t *testing.T) {
@@ -730,7 +730,7 @@ func TestVectorIndexWorkflow(t *testing.T) {
 
 func TestMimirCompatibleWorkflow(t *testing.T) {
 	engine := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	t.Run("mimir_style_index_management", func(t *testing.T) {

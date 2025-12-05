@@ -33,7 +33,7 @@ func TestFastPath_MatchCreateDeleteRel(t *testing.T) {
 		})
 	}
 
-	executor := NewStorageExecutor(asyncEngine)
+	executor := NewASTExecutor(asyncEngine)
 	ctx := context.Background()
 
 	// Test Pattern 1: WITH LIMIT pattern (benchmark style)
@@ -79,7 +79,7 @@ func TestFastPath_LDBCPattern(t *testing.T) {
 		})
 	}
 
-	executor := NewStorageExecutor(asyncEngine)
+	executor := NewASTExecutor(asyncEngine)
 	ctx := context.Background()
 
 	// Test Pattern 2: LDBC style (property match, no WITH)
@@ -197,7 +197,7 @@ func BenchmarkFastPath_WithLimit(b *testing.B) {
 		})
 	}
 
-	executor := NewStorageExecutor(asyncEngine)
+	executor := NewASTExecutor(asyncEngine)
 	ctx := context.Background()
 	query := "MATCH (a:Actor), (m:Movie) WITH a, m LIMIT 1 CREATE (a)-[r:T]->(m) DELETE r"
 
@@ -224,7 +224,7 @@ func BenchmarkFastPath_LDBC(b *testing.B) {
 		})
 	}
 
-	executor := NewStorageExecutor(asyncEngine)
+	executor := NewASTExecutor(asyncEngine)
 	ctx := context.Background()
 	query := "MATCH (p1:Person {id: 1}), (p2:Person {id: 2}) CREATE (p1)-[r:KNOWS]->(p2) DELETE r"
 

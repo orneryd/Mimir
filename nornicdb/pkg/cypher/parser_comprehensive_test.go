@@ -16,7 +16,7 @@ import (
 
 func TestParseNodePatterns(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Setup: Create nodes for testing
@@ -132,7 +132,7 @@ func TestParseNodePatterns(t *testing.T) {
 
 func TestParseRelationshipPatterns(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Setup: Create nodes and relationships
@@ -258,7 +258,7 @@ func TestParseRelationshipPatterns(t *testing.T) {
 
 func TestParseVariableLengthPaths(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Setup: Create a chain of nodes
@@ -353,7 +353,7 @@ func TestParseVariableLengthPaths(t *testing.T) {
 
 func TestParseWhereOperators(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Setup test data
@@ -556,7 +556,7 @@ func TestParseWhereOperators(t *testing.T) {
 
 func TestParseReturnClause(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Setup
@@ -737,7 +737,7 @@ func TestParseReturnClause(t *testing.T) {
 
 func TestParseWithClause(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Setup
@@ -839,7 +839,7 @@ func TestParseWithClause(t *testing.T) {
 
 func TestParseOrderBySkipLimit(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Setup
@@ -1002,7 +1002,7 @@ func TestParseCreatePatterns(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Fresh store for each test
 			store := storage.NewMemoryEngine()
-			exec := NewStorageExecutor(store)
+			exec := NewASTExecutor(store)
 			ctx := context.Background()
 
 			_, err := exec.Execute(ctx, tt.query, nil)
@@ -1072,7 +1072,7 @@ func TestParseCreateRelationships(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			store := storage.NewMemoryEngine()
-			exec := NewStorageExecutor(store)
+			exec := NewASTExecutor(store)
 			ctx := context.Background()
 
 			// Run setup if present
@@ -1156,7 +1156,7 @@ func TestParseMergePatterns(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			store := storage.NewMemoryEngine()
-			exec := NewStorageExecutor(store)
+			exec := NewASTExecutor(store)
 			ctx := context.Background()
 
 			if tt.setup != "" {
@@ -1259,7 +1259,7 @@ func TestParseSetRemove(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			store := storage.NewMemoryEngine()
-			exec := NewStorageExecutor(store)
+			exec := NewASTExecutor(store)
 			ctx := context.Background()
 
 			if tt.setup != "" {
@@ -1339,7 +1339,7 @@ func TestParseDeletePatterns(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			store := storage.NewMemoryEngine()
-			exec := NewStorageExecutor(store)
+			exec := NewASTExecutor(store)
 			ctx := context.Background()
 
 			if tt.setup != "" {
@@ -1371,7 +1371,7 @@ func TestParseDeletePatterns(t *testing.T) {
 
 func TestParseSpecialCharacters(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Setup nodes with special characters
@@ -1479,7 +1479,7 @@ func TestParseSpecialCharacters(t *testing.T) {
 
 func TestParseMultipleMatchPatterns(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Setup: Create a graph with multiple relationship types
@@ -1586,7 +1586,7 @@ func TestParseMultipleMatchPatterns(t *testing.T) {
 
 func TestParseOptionalMatch(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Setup
@@ -1655,7 +1655,7 @@ func TestParseOptionalMatch(t *testing.T) {
 
 func TestParseUnwind(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	tests := []struct {
@@ -1722,7 +1722,7 @@ func TestParseUnwind(t *testing.T) {
 
 func TestParseParameters(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Setup
@@ -1804,7 +1804,7 @@ func TestParseParameters(t *testing.T) {
 
 func TestParseCaseExpressions(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Setup
@@ -1881,7 +1881,7 @@ func TestParseCaseExpressions(t *testing.T) {
 
 func TestParseStringFunctions(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Setup
@@ -1977,7 +1977,7 @@ func TestParseStringFunctions(t *testing.T) {
 
 func TestParseListFunctions(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	tests := []struct {

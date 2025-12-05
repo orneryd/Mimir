@@ -11,9 +11,9 @@ import (
 
 // Helper to create test graph: A -> B -> C -> D
 //                              \-> E -> F
-func createTestGraph(t *testing.T) *StorageExecutor {
+func createTestGraph(t *testing.T) *ASTExecutor {
 	engine := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 
 	// Create nodes
 	nodes := []struct {
@@ -218,7 +218,7 @@ func TestApocNeighborsByhop(t *testing.T) {
 
 func TestDijkstraWithWeights(t *testing.T) {
 	engine := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(engine)
+	exec := NewASTExecutor(engine)
 
 	// Create a graph where shorter hop count != shortest weighted path
 	// A --1-- B --1-- C

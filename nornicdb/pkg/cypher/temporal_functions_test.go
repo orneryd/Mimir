@@ -13,7 +13,7 @@ import (
 func TestTimestampFunction(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	defer engine.Close()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	result, err := executor.Execute(ctx, "RETURN timestamp() AS ts", nil)
@@ -39,7 +39,7 @@ func TestTimestampFunction(t *testing.T) {
 func TestDatetimeFunction(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	defer engine.Close()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	t.Run("datetime no args returns current datetime", func(t *testing.T) {
@@ -69,7 +69,7 @@ func TestDatetimeFunction(t *testing.T) {
 func TestDateFunction(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	defer engine.Close()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	t.Run("date no args returns current date", func(t *testing.T) {
@@ -99,7 +99,7 @@ func TestDateFunction(t *testing.T) {
 func TestTimeFunction(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	defer engine.Close()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	t.Run("time no args returns current time", func(t *testing.T) {
@@ -129,7 +129,7 @@ func TestTimeFunction(t *testing.T) {
 func TestLocaldatetimeFunction(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	defer engine.Close()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	result, err := executor.Execute(ctx, "RETURN localdatetime() AS ldt", nil)
@@ -146,7 +146,7 @@ func TestLocaldatetimeFunction(t *testing.T) {
 func TestLocaltimeFunction(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	defer engine.Close()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	result, err := executor.Execute(ctx, "RETURN localtime() AS lt", nil)
@@ -163,7 +163,7 @@ func TestLocaltimeFunction(t *testing.T) {
 func TestDateComponentFunctions(t *testing.T) {
 	engine := storage.NewMemoryEngine()
 	defer engine.Close()
-	executor := NewStorageExecutor(engine)
+	executor := NewASTExecutor(engine)
 	ctx := context.Background()
 
 	t.Run("date.year extracts year", func(t *testing.T) {

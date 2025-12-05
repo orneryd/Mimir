@@ -16,7 +16,7 @@ import (
 // setupAggregationTestData creates test data for aggregation tests
 func setupAggregationTestData(t *testing.T, store *storage.MemoryEngine) {
 	ctx := context.Background()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 
 	// Create File nodes with various extensions
 	queries := []string{
@@ -42,7 +42,7 @@ func setupAggregationTestData(t *testing.T, store *storage.MemoryEngine) {
 
 func TestBug_WhereIsNotNullWithAggregation(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	setupAggregationTestData(t, store)
@@ -108,7 +108,7 @@ func TestBug_WhereIsNotNullWithAggregation(t *testing.T) {
 
 func TestBug_CountInWithClauseReturnsNull(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	setupAggregationTestData(t, store)
@@ -154,7 +154,7 @@ func TestBug_CountInWithClauseReturnsNull(t *testing.T) {
 
 func TestAggregation_GroupByProperty(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	setupAggregationTestData(t, store)
@@ -184,7 +184,7 @@ func TestAggregation_GroupByProperty(t *testing.T) {
 
 func TestAggregation_WithThenReturn(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	setupAggregationTestData(t, store)
@@ -217,7 +217,7 @@ func TestAggregation_WithThenReturn(t *testing.T) {
 
 func TestAggregation_ChainedWith(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	setupAggregationTestData(t, store)
@@ -236,7 +236,7 @@ func TestAggregation_ChainedWith(t *testing.T) {
 
 func TestAggregation_NullHandling(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	setupAggregationTestData(t, store)
@@ -269,7 +269,7 @@ func TestAggregation_NullHandling(t *testing.T) {
 
 func TestAggregation_CollectDistinct(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	setupAggregationTestData(t, store)
@@ -293,7 +293,7 @@ func TestAggregation_CollectDistinct(t *testing.T) {
 
 func TestAggregation_SumAndAvg(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Create nodes with numeric values
@@ -327,7 +327,7 @@ func TestAggregation_SumAndAvg(t *testing.T) {
 
 func TestAggregation_WhereOnAggregatedResult(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	setupAggregationTestData(t, store)
@@ -355,7 +355,7 @@ func TestAggregation_WhereOnAggregatedResult(t *testing.T) {
 
 func TestAggregation_OrderByAggregatedValue(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	setupAggregationTestData(t, store)
@@ -381,7 +381,7 @@ func TestAggregation_OrderByAggregatedValue(t *testing.T) {
 
 func TestAggregation_WithMultipleAggregates(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	setupAggregationTestData(t, store)
@@ -422,7 +422,7 @@ func TestAggregation_WithMultipleAggregates(t *testing.T) {
 
 func TestMimirIndexStatsExtensionQuery(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	setupAggregationTestData(t, store)
@@ -456,7 +456,7 @@ func TestMimirIndexStatsExtensionQuery(t *testing.T) {
 // TestMimirIndexStatsTypeQuery tests the exact byType query from Mimir's index-api.ts
 func TestMimirIndexStatsTypeQuery(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Setup: Create File nodes like Mimir does (note: no "type" property)
@@ -487,7 +487,7 @@ func TestMimirIndexStatsTypeQuery(t *testing.T) {
 // TestMimirComplexStatsQuery tests the complex stats query from Mimir's index-api.ts
 func TestMimirComplexStatsQuery(t *testing.T) {
 	store := storage.NewMemoryEngine()
-	exec := NewStorageExecutor(store)
+	exec := NewASTExecutor(store)
 	ctx := context.Background()
 
 	// Setup: Create File nodes
