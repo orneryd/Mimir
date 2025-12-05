@@ -792,7 +792,14 @@ func Open(dataDir string, config *Config) (*DB, error) {
 	// Initialize Cypher executor based on NORNICDB_EXECUTOR_MODE
 	db.cypherExecutor = cypher.NewCypherExecutor(db.storage)
 	execInfo := cypher.GetExecutorInfo()
-	fmt.Printf("🔧 Cypher executor: %s (%s)\n", execInfo.Mode, execInfo.Description)
+	fmt.Println("")
+	fmt.Println("╔═══════════════════════════════════════════════════════════════════════╗")
+	fmt.Printf("║  🔧 CYPHER EXECUTOR MODE: %-45s║\n", execInfo.Mode)
+	fmt.Printf("║     %-64s║\n", execInfo.Description)
+	fmt.Println("║                                                                       ║")
+	fmt.Println("║  Set NORNICDB_EXECUTOR_MODE to: nornic | antlr | hybrid               ║")
+	fmt.Println("╚═══════════════════════════════════════════════════════════════════════╝")
+	fmt.Println("")
 
 	// Load plugins from configured directory (NORNICDB_PLUGINS_DIR)
 	pluginsDir := os.Getenv("NORNICDB_PLUGINS_DIR")
