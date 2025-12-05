@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/antlr4-go/antlr/v4"
 )
 
 // ExpressionEvaluator evaluates expressions from AST nodes
@@ -132,14 +134,26 @@ func (e *ExpressionEvaluator) evaluateComparison(comp IComparisonExpressionConte
 		return true
 	}
 
-	// Get left value
-	leftVal := e.evaluateAddSub(adds[0])
-
 	// Get comparison signs
 	signs := comp.AllComparisonSigns()
+
+	// If no comparison signs, this might be a standalone boolean expression
+	// like "n.name CONTAINS 'li'" or "n.email IS NULL"
 	if len(signs) == 0 {
+		// Check if this is an atomic expression with string/list/null predicates
+		atomic := e.findAtomicInAddSub(adds[0])
+		if atomic != nil {
+			if result, handled := e.evaluateAtomicAsBool(atomic); handled {
+				return result
+			}
+		}
+		// Fall back to truthiness check
+		leftVal := e.evaluateAddSub(adds[0])
 		return e.isTruthy(leftVal)
 	}
+
+	// Get left value
+	leftVal := e.evaluateAddSub(adds[0])
 
 	// Evaluate each comparison
 	currentLeft := leftVal
@@ -160,6 +174,30 @@ func (e *ExpressionEvaluator) evaluateComparison(comp IComparisonExpressionConte
 	}
 
 	return true
+}
+
+// findAtomicInAddSub walks down to find the AtomicExpression
+func (e *ExpressionEvaluator) findAtomicInAddSub(add IAddSubExpressionContext) IAtomicExpressionContext {
+	if add == nil {
+		return nil
+	}
+
+	mults := add.AllMultDivExpression()
+	if len(mults) != 1 {
+		return nil
+	}
+
+	powers := mults[0].AllPowerExpression()
+	if len(powers) != 1 {
+		return nil
+	}
+
+	unarys := powers[0].AllUnaryAddSubExpression()
+	if len(unarys) != 1 {
+		return nil
+	}
+
+	return unarys[0].AtomicExpression()
 }
 
 // evaluateComparisonSign evaluates a comparison sign from AST tokens
@@ -222,7 +260,7 @@ func (e *ExpressionEvaluator) evaluateAddSub(add IAddSubExpressionContext) inter
 		}
 	}
 	_ = plusTokens // Used for type checking
-	return result
+	return maybeInt64(result)
 }
 
 // evaluateMultDiv evaluates a MultDivExpression
@@ -241,18 +279,40 @@ func (e *ExpressionEvaluator) evaluateMultDiv(mult IMultDivExpressionContext) in
 	}
 
 	result := e.toFloat64(e.evaluatePower(powers[0]))
+
+	// Get operator tokens in order from children
+	children := mult.GetChildren()
+	opIndex := 0
+
 	for i := 1; i < len(powers); i++ {
 		val := e.toFloat64(e.evaluatePower(powers[i]))
-		// Check for MULT/DIV tokens
-		if mult.AllDIV() != nil && len(mult.AllDIV()) > 0 {
-			if val != 0 {
-				result /= val
+
+		// Find the operator between powers[i-1] and powers[i]
+		for opIndex < len(children) {
+			child := children[opIndex]
+			opIndex++
+			if term, ok := child.(antlr.TerminalNode); ok {
+				tokenType := term.GetSymbol().GetTokenType()
+				switch tokenType {
+				case CypherParserMULT:
+					result *= val
+					goto nextPower
+				case CypherParserDIV:
+					if val != 0 {
+						result /= val
+					}
+					goto nextPower
+				case CypherParserMOD:
+					if val != 0 {
+						result = float64(int64(result) % int64(val))
+					}
+					goto nextPower
+				}
 			}
-		} else {
-			result *= val
 		}
+	nextPower:
 	}
-	return result
+	return maybeInt64(result)
 }
 
 // evaluatePower evaluates a PowerExpression
@@ -812,6 +872,14 @@ func (e *ExpressionEvaluator) toNumericOk(val interface{}) (float64, bool) {
 		return float64(v), true
 	}
 	return 0, false
+}
+
+// maybeInt64 returns int64 if the float64 is a whole number, otherwise returns float64
+func maybeInt64(f float64) interface{} {
+	if f == float64(int64(f)) {
+		return int64(f)
+	}
+	return f
 }
 
 // ExtractPropertyAccess extracts variable and property name from a property expression AST

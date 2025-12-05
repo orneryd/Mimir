@@ -15,7 +15,7 @@ import (
 
 // performanceQueryExecutor wraps the Cypher executor for performance tests.
 type performanceQueryExecutor struct {
-	executor *cypher.StorageExecutor
+	executor *cypher.ASTExecutor
 }
 
 func (p *performanceQueryExecutor) Execute(ctx context.Context, query string, params map[string]any) (*QueryResult, error) {
@@ -32,7 +32,7 @@ func (p *performanceQueryExecutor) Execute(ctx context.Context, query string, pa
 // startPerfTestServer starts a server for performance testing
 func startPerfTestServer(t *testing.T) (*Server, int) {
 	store := storage.NewMemoryEngine()
-	cypherExec := cypher.NewStorageExecutor(store)
+	cypherExec := cypher.NewASTExecutor(store)
 	executor := &performanceQueryExecutor{executor: cypherExec}
 
 	config := &Config{

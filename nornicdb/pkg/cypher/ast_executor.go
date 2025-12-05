@@ -351,6 +351,12 @@ func (e *ASTExecutor) executeMatch(match cyantlr.IMatchStContext) error {
 	}
 
 	// Store matched rows for subsequent clauses
+	// Ensure matchedRows is non-nil to indicate MATCH was executed
+	// (nil means no MATCH, empty slice means MATCH found nothing)
+	if matchedRows == nil {
+		matchedRows = []map[string]interface{}{}
+	}
+
 	if e.matchedRows == nil {
 		e.matchedRows = matchedRows
 	} else {
@@ -1170,6 +1176,15 @@ func (e *ASTExecutor) executeMerge(merge cyantlr.IMergeStContext) error {
 		if err := e.createPatternPart(patternPart); err != nil {
 			return err
 		}
+
+		// After creation, set up matchedRows from variables for ON CREATE SET
+		// The createPatternPart stores created nodes in e.variables
+		row := make(map[string]interface{})
+		for k, v := range e.variables {
+			row[k] = v
+		}
+		e.matchedRows = []map[string]interface{}{row}
+
 		for _, action := range merge.AllMergeAction() {
 			if action.CREATE() != nil {
 				if setSt := action.SetSt(); setSt != nil {
@@ -1200,6 +1215,9 @@ func (e *ASTExecutor) executeReturn(ret cyantlr.IReturnStContext) error {
 		return nil
 	}
 
+	// Check for DISTINCT - AST token
+	isDistinct := projBody.DISTINCT() != nil
+
 	// Check for RETURN *
 	if projItems.MULT() != nil {
 		return e.executeReturnStar()
@@ -1224,6 +1242,12 @@ func (e *ASTExecutor) executeReturn(ret cyantlr.IReturnStContext) error {
 
 	// Create expression evaluator
 	eval := cyantlr.NewExpressionEvaluator(e.params, e.variables)
+
+	// IMPORTANT: Apply ORDER BY on matchedRows BEFORE projection
+	// ORDER BY can reference expressions not in RETURN clause (e.g., ORDER BY n.age when RETURN n.name)
+	if orderBy := projBody.OrderSt(); orderBy != nil {
+		e.applyOrderByMatchedRows(orderBy)
+	}
 
 	if hasAggregation {
 		// Handle aggregation - group by non-aggregated columns
@@ -1274,7 +1298,9 @@ func (e *ASTExecutor) executeReturn(ret cyantlr.IReturnStContext) error {
 				}
 				e.result.Rows = append(e.result.Rows, row)
 			}
-		} else if len(e.variables) > 0 {
+		} else if e.matchedRows == nil {
+			// Standalone RETURN without MATCH (e.g., RETURN 'hello', RETURN 42)
+			// Only when matchedRows is nil (no MATCH ran), not when empty (MATCH found nothing)
 			eval.SetRow(e.variables)
 			row := make([]interface{}, len(projections))
 			for i, pi := range projections {
@@ -1284,24 +1310,46 @@ func (e *ASTExecutor) executeReturn(ret cyantlr.IReturnStContext) error {
 			}
 			e.result.Rows = append(e.result.Rows, row)
 		}
+		// If matchedRows is empty slice (MATCH ran but found nothing), return 0 rows
 	}
 
-	// Apply ORDER BY if present
-	if orderBy := projBody.OrderSt(); orderBy != nil {
-		e.applyOrderBy(orderBy)
+	// Apply DISTINCT - deduplicate result rows
+	if isDistinct {
+		e.applyDistinct()
 	}
 
-	// Apply SKIP if present
+	// Apply SKIP if present - operates on result rows
 	if skip := projBody.SkipSt(); skip != nil {
 		e.applySkip(skip)
 	}
 
-	// Apply LIMIT if present
+	// Apply LIMIT if present - operates on result rows
 	if limit := projBody.LimitSt(); limit != nil {
 		e.applyLimit(limit)
 	}
 
 	return nil
+}
+
+// applyDistinct removes duplicate rows from result
+func (e *ASTExecutor) applyDistinct() {
+	if len(e.result.Rows) == 0 {
+		return
+	}
+
+	seen := make(map[string]bool)
+	var unique [][]interface{}
+
+	for _, row := range e.result.Rows {
+		// Create a key from the row values
+		key := fmt.Sprintf("%v", row)
+		if !seen[key] {
+			seen[key] = true
+			unique = append(unique, row)
+		}
+	}
+
+	e.result.Rows = unique
 }
 
 // executeReturnStar handles RETURN *
@@ -1399,7 +1447,10 @@ func (e *ASTExecutor) executeUnwind(unwind cyantlr.IUnwindStContext) error {
 	}
 
 	varName := sym.GetText()
-	listVal := e.evaluateExpression(expr)
+
+	// Use AST evaluator for proper list literal parsing
+	eval := cyantlr.NewExpressionEvaluator(e.params, e.variables)
+	listVal := eval.Evaluate(expr)
 
 	// Convert to slice
 	var items []interface{}
@@ -1610,19 +1661,19 @@ func (e *ASTExecutor) executeWith(with cyantlr.IWithStContext) error {
 		e.matchedRows = filtered
 	}
 
-	// Apply ORDER BY if present
+	// Apply ORDER BY if present - for WITH, operate on matchedRows
 	if orderBy := projBody.OrderSt(); orderBy != nil {
-		e.applyOrderBy(orderBy)
+		e.applyOrderByMatchedRows(orderBy)
 	}
 
-	// Apply SKIP if present
+	// Apply SKIP if present - for WITH, operate on matchedRows
 	if skip := projBody.SkipSt(); skip != nil {
-		e.applySkip(skip)
+		e.applySkipMatchedRows(skip)
 	}
 
-	// Apply LIMIT if present
+	// Apply LIMIT if present - for WITH, operate on matchedRows
 	if limit := projBody.LimitSt(); limit != nil {
-		e.applyLimit(limit)
+		e.applyLimitMatchedRows(limit)
 	}
 
 	return nil
@@ -1995,13 +2046,54 @@ func (e *ASTExecutor) toNumeric(val interface{}) (float64, bool) {
 	return 0, false
 }
 
-// applyOrderBy sorts matchedRows based on ORDER BY clause using antlr package
-func (e *ASTExecutor) applyOrderBy(order cyantlr.IOrderStContext) {
-	if order == nil {
+// applySkip removes first N rows from result
+func (e *ASTExecutor) applySkip(skip cyantlr.ISkipStContext) {
+	if skip == nil {
 		return
 	}
 
-	// Extract sort items using antlr package
+	expr := skip.Expression()
+	if expr == nil {
+		return
+	}
+
+	eval := cyantlr.NewExpressionEvaluator(e.params, e.variables)
+	skipVal := eval.Evaluate(expr)
+	n := int(cyantlr.ToFloat64(skipVal))
+
+	if n > 0 && n < len(e.result.Rows) {
+		e.result.Rows = e.result.Rows[n:]
+	} else if n >= len(e.result.Rows) {
+		e.result.Rows = nil
+	}
+}
+
+// applyLimit keeps only first N rows in result
+func (e *ASTExecutor) applyLimit(limit cyantlr.ILimitStContext) {
+	if limit == nil {
+		return
+	}
+
+	expr := limit.Expression()
+	if expr == nil {
+		return
+	}
+
+	eval := cyantlr.NewExpressionEvaluator(e.params, e.variables)
+	limitVal := eval.Evaluate(expr)
+	n := int(cyantlr.ToFloat64(limitVal))
+
+	if n >= 0 && n < len(e.result.Rows) {
+		e.result.Rows = e.result.Rows[:n]
+	}
+}
+
+// applyOrderByMatchedRows sorts matchedRows for WITH clause
+func (e *ASTExecutor) applyOrderByMatchedRows(order cyantlr.IOrderStContext) {
+	if order == nil || len(e.matchedRows) == 0 {
+		return
+	}
+
 	sortItems := cyantlr.ExtractSortItems(order)
 	if len(sortItems) == 0 {
 		return
@@ -2033,8 +2125,8 @@ func (e *ASTExecutor) applyOrderBy(order cyantlr.IOrderStContext) {
 	})
 }
 
-// applySkip removes first N rows
-func (e *ASTExecutor) applySkip(skip cyantlr.ISkipStContext) {
+// applySkipMatchedRows removes first N rows from matchedRows for WITH clause
+func (e *ASTExecutor) applySkipMatchedRows(skip cyantlr.ISkipStContext) {
 	if skip == nil {
 		return
 	}
@@ -2055,8 +2147,8 @@ func (e *ASTExecutor) applySkip(skip cyantlr.ISkipStContext) {
 	}
 }
 
-// applyLimit keeps only first N rows
-func (e *ASTExecutor) applyLimit(limit cyantlr.ILimitStContext) {
+// applyLimitMatchedRows keeps only first N rows in matchedRows for WITH clause
+func (e *ASTExecutor) applyLimitMatchedRows(limit cyantlr.ILimitStContext) {
 	if limit == nil {
 		return
 	}

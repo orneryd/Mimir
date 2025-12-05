@@ -18,7 +18,7 @@ import (
 
 // cypherQueryExecutor wraps the Cypher executor for Bolt server.
 type cypherQueryExecutor struct {
-	executor *cypher.StorageExecutor
+	executor *cypher.ASTExecutor
 }
 
 func (c *cypherQueryExecutor) Execute(ctx context.Context, query string, params map[string]any) (*QueryResult, error) {
@@ -37,7 +37,7 @@ func (c *cypherQueryExecutor) Execute(ctx context.Context, query string, params 
 func TestBoltCypherIntegration(t *testing.T) {
 	// Create storage and executor
 	store := storage.NewMemoryEngine()
-	cypherExec := cypher.NewStorageExecutor(store)
+	cypherExec := cypher.NewASTExecutor(store)
 	executor := &cypherQueryExecutor{executor: cypherExec}
 
 	// Start Bolt server on random port
@@ -422,7 +422,7 @@ func TestBoltServerStress(t *testing.T) {
 
 	// Create storage and executor
 	store := storage.NewMemoryEngine()
-	cypherExec := cypher.NewStorageExecutor(store)
+	cypherExec := cypher.NewASTExecutor(store)
 	executor := &cypherQueryExecutor{executor: cypherExec}
 
 	// Start server
@@ -489,7 +489,7 @@ func TestBoltBenchmarkCreateDeleteRelationship(t *testing.T) {
 	// Create storage with AsyncEngine
 	store := storage.NewMemoryEngine()
 	asyncStore := storage.NewAsyncEngine(store, nil)
-	cypherExec := cypher.NewStorageExecutor(asyncStore)
+	cypherExec := cypher.NewASTExecutor(asyncStore)
 	executor := &cypherQueryExecutor{executor: cypherExec}
 
 	config := &Config{
@@ -565,7 +565,7 @@ func TestBoltBenchmarkCreateDeleteRelationship(t *testing.T) {
 func TestBoltBenchmarkCreateDeleteRelationship_LargeDataset(t *testing.T) {
 	store := storage.NewMemoryEngine()
 	asyncStore := storage.NewAsyncEngine(store, nil)
-	cypherExec := cypher.NewStorageExecutor(asyncStore)
+	cypherExec := cypher.NewASTExecutor(asyncStore)
 	executor := &cypherQueryExecutor{executor: cypherExec}
 
 	config := &Config{Port: 0, MaxConnections: 10}
@@ -636,7 +636,7 @@ func TestBoltBenchmarkCreateDeleteRelationship_Badger(t *testing.T) {
 	defer badgerEngine.Close()
 
 	asyncStore := storage.NewAsyncEngine(badgerEngine, nil)
-	cypherExec := cypher.NewStorageExecutor(asyncStore)
+	cypherExec := cypher.NewASTExecutor(asyncStore)
 	executor := &cypherQueryExecutor{executor: cypherExec}
 
 	config := &Config{Port: 0, MaxConnections: 10}
@@ -701,7 +701,7 @@ func TestBoltBenchmarkCreateDeleteRelationship_Badger(t *testing.T) {
 func TestBoltResponseMetadata(t *testing.T) {
 	store := storage.NewMemoryEngine()
 	asyncStore := storage.NewAsyncEngine(store, nil)
-	cypherExec := cypher.NewStorageExecutor(asyncStore)
+	cypherExec := cypher.NewASTExecutor(asyncStore)
 	executor := &cypherQueryExecutor{executor: cypherExec}
 
 	config := &Config{Port: 0, MaxConnections: 10}
@@ -741,7 +741,7 @@ func TestBoltResponseMetadata(t *testing.T) {
 func TestBoltLatencyBreakdown(t *testing.T) {
 	store := storage.NewMemoryEngine()
 	asyncStore := storage.NewAsyncEngine(store, nil)
-	cypherExec := cypher.NewStorageExecutor(asyncStore)
+	cypherExec := cypher.NewASTExecutor(asyncStore)
 	executor := &cypherQueryExecutor{executor: cypherExec}
 
 	config := &Config{Port: 0, MaxConnections: 10}
