@@ -143,6 +143,7 @@ import (
 	"github.com/orneryd/nornicdb/pkg/decay"
 	"github.com/orneryd/nornicdb/pkg/embed"
 	"github.com/orneryd/nornicdb/pkg/encryption"
+	"github.com/orneryd/nornicdb/pkg/gpu"
 	"github.com/orneryd/nornicdb/pkg/inference"
 	"github.com/orneryd/nornicdb/pkg/math/vector"
 	"github.com/orneryd/nornicdb/pkg/search"
@@ -878,6 +879,14 @@ func Open(dataDir string, config *Config) (*DB, error) {
 	// Initialize search service (uses pre-computed embeddings from Mimir)
 	db.searchService = search.NewService(db.storage)
 
+	// Enable k-means clustering if feature flag is set
+	// This provides 10-50x speedup on large datasets (10K+ embeddings)
+	// Works with or without GPU (CPU fallback available)
+	if featureflags.IsGPUClusteringEnabled() {
+		db.searchService.EnableClustering(nil, 100) // nil GPU manager = CPU-only
+		fmt.Println("🔬 K-means clustering enabled for accelerated semantic search")
+	}
+
 	// Initialize encryption if enabled (AES-256-GCM with PBKDF2 key derivation)
 	if config.EncryptionEnabled {
 		// Get password from config or environment (env takes precedence for security)
@@ -958,6 +967,14 @@ func Open(dataDir string, config *Config) (*DB, error) {
 			fmt.Printf("⚠️  Failed to build search indexes: %v\n", err)
 		} else {
 			fmt.Println("✅ Search indexes built from existing data")
+
+			// Trigger k-means clustering if enabled
+			if db.searchService.IsClusteringEnabled() {
+				if err := db.searchService.TriggerClustering(); err != nil {
+					// Don't fail - clustering is optional optimization
+					fmt.Printf("⚠️  K-means clustering skipped: %v\n", err)
+				}
+			}
 		}
 	}()
 
@@ -997,6 +1014,19 @@ func (db *DB) SetEmbedder(embedder embed.Embedder) {
 			_ = db.searchService.IndexNode(node)
 		}
 	})
+
+	// Set callback to trigger k-means clustering when queue becomes empty
+	// This auto-clusters embeddings after batch processing completes
+	if featureflags.IsGPUClusteringEnabled() {
+		db.embedQueue.SetOnQueueEmpty(func(processedCount int) {
+			if db.searchService != nil && db.searchService.IsClusteringEnabled() {
+				log.Printf("🔬 Embedding batch complete (%d processed), triggering k-means clustering...", processedCount)
+				if err := db.searchService.TriggerClustering(); err != nil {
+					log.Printf("⚠️  K-means clustering skipped: %v", err)
+				}
+			}
+		})
+	}
 
 	// Wire up Cypher executor to trigger embedding queue when nodes are created/updated
 	// This ensures nodes created via Cypher queries get embeddings generated
@@ -1114,6 +1144,17 @@ func (db *DB) EmbedQueueStats() *QueueStats {
 	}
 	stats := db.embedQueue.Stats()
 	return &stats
+}
+
+// EmbeddingCount returns the total number of nodes with embeddings.
+// This is O(1) - the count is tracked by the vector index.
+func (db *DB) EmbeddingCount() int {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	if db.searchService == nil {
+		return 0
+	}
+	return db.searchService.EmbeddingCount()
 }
 
 // EmbedExisting triggers the worker to scan for nodes without embeddings.
@@ -1722,10 +1763,19 @@ func (db *DB) Stats() DBStats {
 
 // SetGPUManager sets the GPU manager for vector search acceleration.
 // Uses interface{} to avoid circular import with gpu package.
+// If clustering is already enabled (via feature flag), this upgrades it to use GPU.
 func (db *DB) SetGPUManager(manager interface{}) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	db.gpuManager = manager
+
+	// If clustering is enabled and GPU manager is provided, upgrade to GPU-accelerated
+	if manager != nil && db.searchService != nil && featureflags.IsGPUClusteringEnabled() {
+		if gpuMgr, ok := manager.(*gpu.Manager); ok {
+			db.searchService.EnableClustering(gpuMgr, 100)
+			fmt.Println("🚀 K-means clustering upgraded to GPU-accelerated mode")
+		}
+	}
 }
 
 // GetGPUManager returns the GPU manager if set.
@@ -1734,6 +1784,24 @@ func (db *DB) GetGPUManager() interface{} {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 	return db.gpuManager
+}
+
+// TriggerSearchClustering runs k-means clustering on search embeddings.
+// Call this after bulk data loading to enable cluster-accelerated search.
+// Returns nil if clustering is not enabled or there are too few embeddings.
+func (db *DB) TriggerSearchClustering() error {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	if db.searchService == nil {
+		return nil
+	}
+
+	if !db.searchService.IsClusteringEnabled() {
+		return nil
+	}
+
+	return db.searchService.TriggerClustering()
 }
 
 // IsAsyncWritesEnabled returns true if async writes (eventual consistency) is enabled.

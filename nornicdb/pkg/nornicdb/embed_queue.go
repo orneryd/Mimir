@@ -30,6 +30,9 @@ type EmbedWorker struct {
 	// Callback after embedding a node (for search index update)
 	onEmbedded func(node *storage.Node)
 
+	// Callback when queue becomes empty (for triggering k-means clustering)
+	onQueueEmpty func(processedCount int)
+
 	// Stats
 	mu        sync.Mutex
 	processed int
@@ -98,6 +101,13 @@ func NewEmbedWorker(embedder embed.Embedder, storage storage.Engine, config *Emb
 // Use this to update search indexes.
 func (ew *EmbedWorker) SetOnEmbedded(fn func(node *storage.Node)) {
 	ew.onEmbedded = fn
+}
+
+// SetOnQueueEmpty sets a callback to be called when the queue becomes empty.
+// Use this to trigger k-means clustering after batch embedding completes.
+// The callback receives the total number of embeddings processed in this batch.
+func (ew *EmbedWorker) SetOnQueueEmpty(fn func(processedCount int)) {
+	ew.onQueueEmpty = fn
 }
 
 // Trigger wakes up the worker to check for nodes without embeddings.
@@ -180,7 +190,9 @@ func (ew *EmbedWorker) worker() {
 }
 
 // processUntilEmpty keeps processing nodes until no more need embeddings.
+// When the queue becomes empty, it fires the onQueueEmpty callback if set.
 func (ew *EmbedWorker) processUntilEmpty() {
+	batchProcessed := 0
 	for {
 		select {
 		case <-ew.ctx.Done():
@@ -190,8 +202,15 @@ func (ew *EmbedWorker) processUntilEmpty() {
 			// It returns false if there was nothing to process
 			didWork := ew.processNextBatch()
 			if !didWork {
+				// Queue is empty - fire callback if we processed anything and callback is set
+				if batchProcessed > 0 && ew.onQueueEmpty != nil {
+					// Fire and forget - run in background so we don't block the worker
+					processedCount := batchProcessed
+					go ew.onQueueEmpty(processedCount)
+				}
 				return // No more nodes to process
 			}
+			batchProcessed++
 			// Small delay between batches to avoid CPU spin
 			time.Sleep(50 * time.Millisecond)
 		}

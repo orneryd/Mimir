@@ -13,17 +13,24 @@ interface EmbedStats {
   failed: number;
 }
 
+interface EmbedData {
+  stats: EmbedStats | null;
+  totalEmbeddings: number;
+  enabled: boolean;
+}
+
 export function Browser() {
   const {
     stats, connected, fetchStats,
     cypherQuery, setCypherQuery, cypherResult, executeCypher, queryLoading, queryError, queryHistory,
     searchQuery, setSearchQuery, searchResults, executeSearch, searchLoading,
     selectedNode, setSelectedNode, findSimilar,
+    expandedSimilar, collapseSimilar,
   } = useAppStore();
   
   const [activeTab, setActiveTab] = useState<'query' | 'search'>('query');
   const [showHistory, setShowHistory] = useState(false);
-  const [embedStats, setEmbedStats] = useState<EmbedStats | null>(null);
+  const [embedData, setEmbedData] = useState<EmbedData>({ stats: null, totalEmbeddings: 0, enabled: false });
   const [embedTriggering, setEmbedTriggering] = useState(false);
   const [embedMessage, setEmbedMessage] = useState<string | null>(null);
   const [showAIChat, setShowAIChat] = useState(false);
@@ -35,9 +42,11 @@ export function Browser() {
         const res = await fetch('/nornicdb/embed/stats');
         if (res.ok) {
           const data = await res.json();
-          if (data.enabled) {
-            setEmbedStats(data.stats);
-          }
+          setEmbedData({
+            stats: data.stats || null,
+            totalEmbeddings: data.total_embeddings || 0,
+            enabled: data.enabled || false,
+          });
         }
       } catch {
         // Ignore errors
@@ -58,7 +67,7 @@ export function Browser() {
       if (res.ok) {
         setEmbedMessage(data.message);
         if (data.stats) {
-          setEmbedStats(data.stats);
+          setEmbedData(prev => ({ ...prev, stats: data.stats }));
         }
       } else {
         setEmbedMessage(data.message || 'Failed to trigger embeddings');
@@ -152,23 +161,21 @@ export function Browser() {
               onClick={handleTriggerEmbed}
               disabled={embedTriggering}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                embedStats?.running 
+                embedData.stats?.running 
                   ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' 
                   : 'bg-norse-shadow hover:bg-norse-rune text-norse-silver hover:text-white border border-norse-rune'
               }`}
-              title={embedStats ? `Processed: ${embedStats.processed}, Failed: ${embedStats.failed}` : 'Trigger embedding generation'}
+              title={`Total embeddings: ${embedData.totalEmbeddings}${embedData.stats ? `, Session: ${embedData.stats.processed} processed, ${embedData.stats.failed} failed` : ''}`}
             >
-              {embedTriggering || embedStats?.running ? (
+              {embedTriggering || embedData.stats?.running ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <Zap className="w-4 h-4" />
               )}
               <span>
-                {embedStats?.running ? 'Embedding...' : 'Regenerate Embeddings'}
+                {embedData.stats?.running ? 'Embedding...' : 'Embeddings'}
               </span>
-              {embedStats && embedStats.processed > 0 && (
-                <span className="text-xs text-norse-silver">({embedStats.processed})</span>
-              )}
+              <span className="text-xs text-valhalla-gold">({embedData.totalEmbeddings.toLocaleString()})</span>
             </button>
 
             <button
@@ -359,32 +366,89 @@ export function Browser() {
               {/* Search Results */}
               <div className="flex-1 overflow-auto space-y-2">
                 {searchResults.map((result) => (
-                  <button
-                    type="button"
-                    key={result.node.id}
-                    onClick={() => setSelectedNode(result)}
-                    className={`w-full text-left p-3 rounded-lg border transition-colors ${
-                      selectedNode?.node.id === result.node.id
-                        ? 'bg-nornic-primary/20 border-nornic-primary'
-                        : 'bg-norse-stone border-norse-rune hover:border-norse-fog'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center gap-2">
-                        {result.node.labels.map((label) => (
-                          <span key={label} className="px-2 py-0.5 text-xs bg-frost-ice/20 text-frost-ice rounded">
-                            {label}
-                          </span>
-                        ))}
+                  <div key={result.node.id}>
+                    {/* Main result card */}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedNode(result)}
+                      className={`w-full text-left p-3 rounded-lg border transition-colors ${
+                        selectedNode?.node.id === result.node.id
+                          ? 'bg-nornic-primary/20 border-nornic-primary'
+                          : 'bg-norse-stone border-norse-rune hover:border-norse-fog'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          {result.node.labels.map((label) => (
+                            <span key={label} className="px-2 py-0.5 text-xs bg-frost-ice/20 text-frost-ice rounded">
+                              {label}
+                            </span>
+                          ))}
+                        </div>
+                        <span className="text-xs text-valhalla-gold">
+                          Score: {result.score.toFixed(2)}
+                        </span>
                       </div>
-                      <span className="text-xs text-valhalla-gold">
-                        Score: {result.score.toFixed(2)}
-                      </span>
-                    </div>
-                    <p className="text-sm text-norse-silver truncate">
-                      {getNodePreview(result.node.properties)}
-                    </p>
-                  </button>
+                      <p className="text-sm text-norse-silver truncate">
+                        {getNodePreview(result.node.properties)}
+                      </p>
+                    </button>
+                    
+                    {/* Inline Similar Expansion */}
+                    {expandedSimilar?.nodeId === result.node.id && (
+                      <div className="ml-4 mt-2 mb-3 border-l-2 border-frost-ice/30 pl-3 animate-in slide-in-from-top-2 duration-200">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-medium text-frost-ice flex items-center gap-1">
+                            <Sparkles className="w-3 h-3" />
+                            Similar Items ({expandedSimilar.results.length})
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => collapseSimilar()}
+                            className="text-xs text-norse-fog hover:text-white transition-colors"
+                          >
+                            Close
+                          </button>
+                        </div>
+                        
+                        {expandedSimilar.loading ? (
+                          <div className="flex items-center gap-2 text-norse-fog text-sm py-2">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Finding similar...
+                          </div>
+                        ) : expandedSimilar.results.length === 0 ? (
+                          <p className="text-xs text-norse-fog py-2">No similar items found</p>
+                        ) : (
+                          <div className="space-y-1">
+                            {expandedSimilar.results.map((similar) => (
+                              <button
+                                type="button"
+                                key={similar.node.id}
+                                onClick={() => setSelectedNode(similar)}
+                                className="w-full text-left p-2 rounded bg-norse-shadow/50 hover:bg-norse-shadow border border-transparent hover:border-frost-ice/20 transition-colors"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-1">
+                                    {similar.node.labels.slice(0, 2).map((label) => (
+                                      <span key={label} className="px-1.5 py-0.5 text-xs bg-frost-ice/10 text-frost-ice/80 rounded">
+                                        {label}
+                                      </span>
+                                    ))}
+                                  </div>
+                                  <span className="text-xs text-valhalla-gold/70">
+                                    {similar.score.toFixed(2)}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-norse-silver/80 truncate mt-1">
+                                  {getNodePreview(similar.node.properties)}
+                                </p>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 ))}
                 
                 {searchResults.length === 0 && searchQuery && !searchLoading && (
@@ -404,11 +468,22 @@ export function Browser() {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => findSimilar(selectedNode.node.id)}
-                    className="flex items-center gap-1 px-3 py-1 text-sm bg-frost-ice/20 text-frost-ice rounded hover:bg-frost-ice/30 transition-colors"
+                    onClick={() => {
+                      // Toggle: if already expanded for this node, collapse
+                      if (expandedSimilar?.nodeId === selectedNode.node.id) {
+                        collapseSimilar();
+                      } else {
+                        findSimilar(selectedNode.node.id);
+                      }
+                    }}
+                    className={`flex items-center gap-1 px-3 py-1 text-sm rounded transition-colors ${
+                      expandedSimilar?.nodeId === selectedNode.node.id
+                        ? 'bg-frost-ice text-norse-night hover:bg-frost-ice/90'
+                        : 'bg-frost-ice/20 text-frost-ice hover:bg-frost-ice/30'
+                    }`}
                   >
                     <Sparkles className="w-3 h-3" />
-                    Find Similar
+                    {expandedSimilar?.nodeId === selectedNode.node.id ? 'Hide Similar' : 'Find Similar'}
                   </button>
                   <button
                     type="button"
@@ -472,7 +547,7 @@ export function Browser() {
                 )}
 
                 {/* Properties (excluding embedding - shown above) */}
-                <div>
+                <div className="mb-4">
                   <h3 className="text-xs font-medium text-norse-silver mb-2">PROPERTIES</h3>
                   <div className="space-y-2">
                     {Object.entries(selectedNode.node.properties)
@@ -490,6 +565,61 @@ export function Browser() {
                     ))}
                   </div>
                 </div>
+
+                {/* Similar Items Section - Shows when Find Similar is clicked */}
+                {expandedSimilar?.nodeId === selectedNode.node.id && (
+                  <div className="border-t border-norse-rune pt-4 animate-in slide-in-from-bottom-2 duration-200">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Sparkles className="w-4 h-4 text-frost-ice" />
+                      <h3 className="text-sm font-medium text-frost-ice">Similar Items</h3>
+                      {!expandedSimilar.loading && (
+                        <span className="text-xs text-norse-fog">({expandedSimilar.results.length} found)</span>
+                      )}
+                    </div>
+                    
+                    {expandedSimilar.loading ? (
+                      <div className="flex items-center gap-2 text-norse-fog py-4">
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <span>Finding similar nodes...</span>
+                      </div>
+                    ) : expandedSimilar.results.length === 0 ? (
+                      <div className="text-center py-4 text-norse-fog">
+                        <p>No similar items found</p>
+                        <p className="text-xs mt-1">This node may not have an embedding yet</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {expandedSimilar.results.map((similar) => (
+                          <button
+                            type="button"
+                            key={similar.node.id}
+                            onClick={() => setSelectedNode(similar)}
+                            className="w-full text-left p-3 rounded-lg bg-norse-stone hover:bg-norse-shadow border border-transparent hover:border-frost-ice/30 transition-colors"
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {similar.node.labels.slice(0, 3).map((label) => (
+                                  <span key={label} className="px-2 py-0.5 text-xs bg-frost-ice/20 text-frost-ice rounded">
+                                    {label}
+                                  </span>
+                                ))}
+                              </div>
+                              <span className="text-xs text-valhalla-gold font-medium">
+                                {(similar.score * 100).toFixed(1)}% similar
+                              </span>
+                            </div>
+                            <p className="text-sm text-norse-silver line-clamp-2">
+                              {getNodePreview(similar.node.properties)}
+                            </p>
+                            <p className="text-xs text-norse-fog mt-1 font-mono">
+                              {similar.node.id}
+                            </p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </>
           ) : (

@@ -1,6 +1,13 @@
 import { create } from 'zustand';
 import { api, DatabaseStats, SearchResult, CypherResponse } from '../utils/api';
 
+// Similar results for inline expansion
+interface SimilarExpansion {
+  nodeId: string;
+  results: SearchResult[];
+  loading: boolean;
+}
+
 interface AppState {
   // Auth
   isAuthenticated: boolean;
@@ -26,6 +33,9 @@ interface AppState {
   // Selected
   selectedNode: SearchResult | null;
   
+  // Similar - inline expansion
+  expandedSimilar: SimilarExpansion | null;
+  
   // Actions
   checkAuth: () => Promise<void>;
   login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
@@ -37,6 +47,7 @@ interface AppState {
   executeSearch: () => Promise<void>;
   setSelectedNode: (node: SearchResult | null) => void;
   findSimilar: (nodeId: string) => Promise<void>;
+  collapseSimilar: () => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -55,6 +66,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   searchResults: [],
   searchLoading: false,
   selectedNode: null,
+  expandedSimilar: null,
 
   // Auth actions
   checkAuth: async () => {
@@ -150,13 +162,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Node actions
   setSelectedNode: (node) => set({ selectedNode: node }),
 
+  // Find similar with inline expansion (doesn't replace search results)
   findSimilar: async (nodeId) => {
-    set({ searchLoading: true });
+    // Start loading for this node
+    set({ expandedSimilar: { nodeId, results: [], loading: true } });
     try {
-      const results = await api.findSimilar(nodeId, 10);
-      set({ searchResults: results, searchLoading: false });
+      const results = await api.findSimilar(nodeId, 6); // Show 6 similar items
+      set({ expandedSimilar: { nodeId, results, loading: false } });
     } catch {
-      set({ searchLoading: false });
+      set({ expandedSimilar: null });
     }
   },
+
+  // Collapse the similar results
+  collapseSimilar: () => set({ expandedSimilar: null }),
 }));

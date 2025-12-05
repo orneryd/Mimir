@@ -1862,17 +1862,21 @@ func (s *Server) handleEmbedTrigger(w http.ResponseWriter, r *http.Request) {
 // handleEmbedStats returns embedding worker statistics.
 func (s *Server) handleEmbedStats(w http.ResponseWriter, r *http.Request) {
 	stats := s.db.EmbedQueueStats()
+	totalEmbeddings := s.db.EmbeddingCount()
+	
 	if stats == nil {
 		response := map[string]interface{}{
-			"enabled": false,
-			"message": "Auto-embed not enabled",
+			"enabled":          false,
+			"message":          "Auto-embed not enabled",
+			"total_embeddings": totalEmbeddings,
 		}
 		s.writeJSON(w, http.StatusOK, response)
 		return
 	}
 	response := map[string]interface{}{
-		"enabled": true,
-		"stats":   stats,
+		"enabled":          true,
+		"stats":            stats,
+		"total_embeddings": totalEmbeddings,
 	}
 	s.writeJSON(w, http.StatusOK, response)
 }
