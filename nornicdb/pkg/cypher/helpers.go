@@ -47,8 +47,9 @@ func findKeywordIndex(s, keyword string) int {
 	keywordUpper := strings.ToUpper(keyword)
 	keyLen := len(keywordUpper)
 
-	// Build a map of positions that are inside string literals
+	// Build masks for positions inside string literals and parentheses
 	inStringLiteral := makeStringLiteralMask(s)
+	inParentheses := makeParenthesesMask(s)
 
 	idx := 0
 	for {
@@ -60,6 +61,15 @@ func findKeywordIndex(s, keyword string) int {
 
 		// Skip if this position is inside a string literal
 		if absolutePos < len(inStringLiteral) && inStringLiteral[absolutePos] {
+			idx = absolutePos + 1
+			if idx >= len(upper) {
+				return -1
+			}
+			continue
+		}
+
+		// Skip if this position is inside parentheses (part of node/relationship patterns)
+		if absolutePos < len(inParentheses) && inParentheses[absolutePos] {
 			idx = absolutePos + 1
 			if idx >= len(upper) {
 				return -1
@@ -85,6 +95,58 @@ func findKeywordIndex(s, keyword string) int {
 			return -1
 		}
 	}
+}
+
+// makeParenthesesMask creates a boolean slice marking positions inside parentheses or square brackets.
+// This is used to skip keywords that appear inside node patterns (parentheses) or list comprehensions (brackets).
+func makeParenthesesMask(s string) []bool {
+	mask := make([]bool, len(s))
+	parenDepth := 0
+	bracketDepth := 0
+	inString := false
+	stringChar := byte(0)
+
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+
+		// Handle string boundaries
+		if (c == '\'' || c == '"') && (i == 0 || s[i-1] != '\\') {
+			if !inString {
+				inString = true
+				stringChar = c
+			} else if c == stringChar {
+				inString = false
+			}
+			continue
+		}
+
+		if inString {
+			continue
+		}
+
+		// Track parentheses
+		if c == '(' {
+			parenDepth++
+		} else if c == ')' {
+			if parenDepth > 0 {
+				parenDepth--
+			}
+		}
+
+		// Track square brackets (list comprehensions, array literals)
+		if c == '[' {
+			bracketDepth++
+		} else if c == ']' {
+			if bracketDepth > 0 {
+				bracketDepth--
+			}
+		}
+
+		// Mark as inside if in either parentheses or brackets
+		mask[i] = parenDepth > 0 || bracketDepth > 0
+	}
+
+	return mask
 }
 
 // containsKeywordOutsideStrings checks if a keyword exists in the string but NOT inside

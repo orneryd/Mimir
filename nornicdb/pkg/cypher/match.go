@@ -13,10 +13,136 @@ import (
 	"github.com/orneryd/nornicdb/pkg/storage"
 )
 
+// isAggregateFunc checks if expression is an aggregate function (whitespace-tolerant)
+func isAggregateFunc(expr string) bool {
+	return isFunctionCallWS(expr, "count") ||
+		isFunctionCallWS(expr, "sum") ||
+		isFunctionCallWS(expr, "avg") ||
+		isFunctionCallWS(expr, "min") ||
+		isFunctionCallWS(expr, "max") ||
+		isFunctionCallWS(expr, "collect")
+}
+
+// containsAggregateFunc checks if expression contains any aggregate function
+// (handles expressions like SUM(a) + SUM(b))
+func containsAggregateFunc(expr string) bool {
+	upper := strings.ToUpper(expr)
+	// Check for aggregate function names followed by opening paren (with optional whitespace)
+	for _, fn := range []string{"COUNT", "SUM", "AVG", "MIN", "MAX", "COLLECT"} {
+		idx := strings.Index(upper, fn)
+		if idx >= 0 {
+			// Check if followed by ( with optional whitespace
+			rest := strings.TrimSpace(upper[idx+len(fn):])
+			if len(rest) > 0 && rest[0] == '(' {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// isAggregateFuncName checks if expr starts with a specific aggregate function (whitespace-tolerant)
+func isAggregateFuncName(expr, funcName string) bool {
+	return isFunctionCallWS(expr, funcName)
+}
+
+// extractFuncInner extracts the inner expression from a function call (whitespace-tolerant)
+// e.g., "COUNT(n)" -> "n", "SUM (x.val)" -> "x.val"
+func extractFuncInner(expr string) string {
+	// Find opening paren (may have whitespace before it)
+	openIdx := strings.Index(expr, "(")
+	if openIdx < 0 {
+		return ""
+	}
+	// Find matching closing paren
+	closeIdx := strings.LastIndex(expr, ")")
+	if closeIdx <= openIdx {
+		return ""
+	}
+	return strings.TrimSpace(expr[openIdx+1 : closeIdx])
+}
+
+// compareForSort compares two values for sorting, returns true if a < b
+func compareForSort(a, b interface{}) bool {
+	if a == nil && b == nil {
+		return false
+	}
+	if a == nil {
+		return true
+	}
+	if b == nil {
+		return false
+	}
+	switch av := a.(type) {
+	case int64:
+		if bv, ok := b.(int64); ok {
+			return av < bv
+		}
+		if bv, ok := b.(float64); ok {
+			return float64(av) < bv
+		}
+	case int:
+		if bv, ok := b.(int); ok {
+			return av < bv
+		}
+		if bv, ok := b.(int64); ok {
+			return int64(av) < bv
+		}
+	case float64:
+		if bv, ok := b.(float64); ok {
+			return av < bv
+		}
+		if bv, ok := b.(int64); ok {
+			return av < float64(bv)
+		}
+	case string:
+		if bv, ok := b.(string); ok {
+			return av < bv
+		}
+	}
+	return fmt.Sprintf("%v", a) < fmt.Sprintf("%v", b)
+}
+
 func (e *StorageExecutor) executeMatch(ctx context.Context, cypher string) (*ExecuteResult, error) {
 	// Substitute parameters AFTER routing to avoid keyword detection issues
 	if params := getParamsFromContext(ctx); params != nil {
 		cypher = e.substituteParams(cypher, params)
+	}
+
+	// Validate MATCH syntax
+	trimmed := strings.TrimSpace(cypher)
+	upper := strings.ToUpper(trimmed)
+
+	// Check for empty MATCH pattern
+	if strings.TrimSpace(strings.TrimPrefix(upper, "MATCH")) == "" ||
+		strings.HasPrefix(strings.TrimSpace(strings.TrimPrefix(upper, "MATCH")), "RETURN") {
+		// MATCH with no pattern or MATCH followed immediately by RETURN
+		if !strings.Contains(upper, "(") {
+			return nil, fmt.Errorf("MATCH clause requires a pattern")
+		}
+	}
+
+	// Check for bracket syntax without node pattern: MATCH [r] RETURN r
+	if strings.Contains(trimmed, "MATCH") {
+		afterMatch := strings.TrimSpace(trimmed[5:]) // Skip "MATCH"
+		if strings.HasPrefix(afterMatch, "[") && !strings.Contains(strings.Split(afterMatch, "]")[0], "(") {
+			return nil, fmt.Errorf("MATCH clause requires a node pattern, not just a relationship pattern")
+		}
+	}
+
+	// Check for empty RETURN items
+	returnIdx := findKeywordIndex(cypher, "RETURN")
+	if returnIdx > 0 {
+		returnPart := strings.TrimSpace(cypher[returnIdx+6:])
+		// Remove trailing clauses
+		for _, kw := range []string{"ORDER BY", "SKIP", "LIMIT"} {
+			if idx := findKeywordIndex(returnPart, kw); idx >= 0 {
+				returnPart = strings.TrimSpace(returnPart[:idx])
+			}
+		}
+		if returnPart == "" {
+			return nil, fmt.Errorf("RETURN clause requires at least one expression")
+		}
 	}
 
 	result := &ExecuteResult{
@@ -24,8 +150,6 @@ func (e *StorageExecutor) executeMatch(ctx context.Context, cypher string) (*Exe
 		Rows:    [][]interface{}{},
 		Stats:   &QueryStats{},
 	}
-
-	upper := strings.ToUpper(cypher)
 
 	// Check for multiple MATCH clauses (excluding OPTIONAL MATCH, UNION, EXISTS)
 	// This handles: MATCH (a)-[:REL]->(b) MATCH (c)-[:REL]->(b) WHERE a <> c RETURN a, b, c
@@ -49,7 +173,7 @@ func (e *StorageExecutor) executeMatch(ctx context.Context, cypher string) (*Exe
 	// This handles MATCH ... WITH (CASE WHEN) ... RETURN queries
 	// But we must avoid false positives from "STARTS WITH" or "ENDS WITH" in WHERE clauses
 	withIdx := findKeywordIndex(cypher, "WITH")
-	returnIdx := findKeywordIndex(cypher, "RETURN")
+	returnIdx = findKeywordIndex(cypher, "RETURN")
 
 	// Check if WITH is actually a standalone clause (not part of "STARTS WITH" or "ENDS WITH")
 	isStandaloneWith := false
@@ -113,13 +237,9 @@ func (e *StorageExecutor) executeMatch(ctx context.Context, cypher string) (*Exe
 	// Check if this is an aggregation query
 	hasAggregation := false
 	for _, item := range returnItems {
-		upperExpr := strings.ToUpper(item.expr)
-		if strings.HasPrefix(upperExpr, "COUNT(") ||
-			strings.HasPrefix(upperExpr, "SUM(") ||
-			strings.HasPrefix(upperExpr, "AVG(") ||
-			strings.HasPrefix(upperExpr, "MIN(") ||
-			strings.HasPrefix(upperExpr, "MAX(") ||
-			strings.HasPrefix(upperExpr, "COLLECT(") {
+		// Use whitespace-tolerant aggregation check
+		// containsAggregateFunc handles both standalone (SUM(x)) and arithmetic (SUM(a) + SUM(b))
+		if containsAggregateFunc(item.expr) {
 			hasAggregation = true
 			break
 		}
@@ -180,39 +300,48 @@ func (e *StorageExecutor) executeMatch(ctx context.Context, cypher string) (*Exe
 		if err != nil {
 			return nil, err
 		}
-		// Apply ORDER BY to aggregated results
-		orderByIdx := strings.Index(upper, "ORDER BY")
+		// Apply ORDER BY to aggregated results (whitespace-tolerant)
+		orderByIdx := findKeywordIndex(cypher, "ORDER")
 		if orderByIdx > 0 {
-			orderPart := upper[orderByIdx+8:]
+			orderStart := orderByIdx + 5
+			for orderStart < len(cypher) && isWhitespace(cypher[orderStart]) {
+				orderStart++
+			}
+			if orderStart+2 <= len(cypher) && strings.EqualFold(cypher[orderStart:orderStart+2], "BY") {
+				orderStart += 2
+			}
+			orderPart := cypher[orderStart:]
 			endIdx := len(orderPart)
-			for _, kw := range []string{" SKIP ", " LIMIT "} {
-				if idx := strings.Index(orderPart, kw); idx >= 0 && idx < endIdx {
+			for _, kw := range []string{"SKIP", "LIMIT"} {
+				if idx := findKeywordIndex(orderPart, kw); idx >= 0 && idx < endIdx {
 					endIdx = idx
 				}
 			}
-			orderExpr := strings.TrimSpace(cypher[orderByIdx+8 : orderByIdx+8+endIdx])
+			orderExpr := strings.TrimSpace(orderPart[:endIdx])
 			aggResult.Rows = e.orderResultRows(aggResult.Rows, aggResult.Columns, orderExpr)
 		}
 
-		// Apply SKIP to aggregated results
-		skipIdx := strings.Index(upper, "SKIP")
+		// Apply SKIP to aggregated results (whitespace-tolerant)
+		skipIdx := findKeywordIndex(cypher, "SKIP")
 		skip := 0
 		if skipIdx > 0 {
 			skipPart := strings.TrimSpace(cypher[skipIdx+4:])
-			skipPart = strings.Split(skipPart, " ")[0]
-			if s, err := strconv.Atoi(skipPart); err == nil {
-				skip = s
+			if fields := strings.Fields(skipPart); len(fields) > 0 {
+				if s, err := strconv.Atoi(fields[0]); err == nil {
+					skip = s
+				}
 			}
 		}
 
-		// Apply LIMIT to aggregated results
-		limitIdx := strings.Index(upper, "LIMIT")
+		// Apply LIMIT to aggregated results (whitespace-tolerant)
+		limitIdx := findKeywordIndex(cypher, "LIMIT")
 		limit := -1
 		if limitIdx > 0 {
 			limitPart := strings.TrimSpace(cypher[limitIdx+5:])
-			limitPart = strings.Split(limitPart, " ")[0]
-			if l, err := strconv.Atoi(limitPart); err == nil {
-				limit = l
+			if fields := strings.Fields(limitPart); len(fields) > 0 {
+				if l, err := strconv.Atoi(fields[0]); err == nil {
+					limit = l
+				}
 			}
 		}
 
@@ -232,40 +361,48 @@ func (e *StorageExecutor) executeMatch(ctx context.Context, cypher string) (*Exe
 		return aggResult, nil
 	}
 
-	// Parse ORDER BY
-	orderByIdx := strings.Index(upper, "ORDER BY")
+	// Parse ORDER BY (whitespace-tolerant)
+	orderByIdx := findKeywordIndex(cypher, "ORDER")
 	if orderByIdx > 0 {
-		orderPart := upper[orderByIdx+8:]
-		// Find end
+		orderStart := orderByIdx + 5
+		for orderStart < len(cypher) && isWhitespace(cypher[orderStart]) {
+			orderStart++
+		}
+		if orderStart+2 <= len(cypher) && strings.EqualFold(cypher[orderStart:orderStart+2], "BY") {
+			orderStart += 2
+		}
+		orderPart := cypher[orderStart:]
 		endIdx := len(orderPart)
-		for _, kw := range []string{" SKIP ", " LIMIT "} {
-			if idx := strings.Index(orderPart, kw); idx >= 0 && idx < endIdx {
+		for _, kw := range []string{"SKIP", "LIMIT"} {
+			if idx := findKeywordIndex(orderPart, kw); idx >= 0 && idx < endIdx {
 				endIdx = idx
 			}
 		}
-		orderExpr := strings.TrimSpace(cypher[orderByIdx+8 : orderByIdx+8+endIdx])
+		orderExpr := strings.TrimSpace(orderPart[:endIdx])
 		nodes = e.orderNodes(nodes, nodePattern.variable, orderExpr)
 	}
 
-	// Parse SKIP
-	skipIdx := strings.Index(upper, "SKIP")
+	// Parse SKIP (whitespace-tolerant)
+	skipIdx := findKeywordIndex(cypher, "SKIP")
 	skip := 0
 	if skipIdx > 0 {
 		skipPart := strings.TrimSpace(cypher[skipIdx+4:])
-		skipPart = strings.Split(skipPart, " ")[0]
-		if s, err := strconv.Atoi(skipPart); err == nil {
-			skip = s
+		if fields := strings.Fields(skipPart); len(fields) > 0 {
+			if s, err := strconv.Atoi(fields[0]); err == nil {
+				skip = s
+			}
 		}
 	}
 
-	// Parse LIMIT
-	limitIdx := strings.Index(upper, "LIMIT")
+	// Parse LIMIT (whitespace-tolerant)
+	limitIdx := findKeywordIndex(cypher, "LIMIT")
 	limit := -1
 	if limitIdx > 0 {
 		limitPart := strings.TrimSpace(cypher[limitIdx+5:])
-		limitPart = strings.Split(limitPart, " ")[0]
-		if l, err := strconv.Atoi(limitPart); err == nil {
-			limit = l
+		if fields := strings.Fields(limitPart); len(fields) > 0 {
+			if l, err := strconv.Atoi(fields[0]); err == nil {
+				limit = l
+			}
 		}
 	}
 
@@ -324,13 +461,8 @@ func (e *StorageExecutor) executeAggregation(nodes []*storage.Node, variable str
 	colInfos := make([]colInfo, len(items))
 
 	for i, item := range items {
-		upperExpr := upperExprs[i] // Use pre-computed upper-case
-		if strings.HasPrefix(upperExpr, "COUNT(") ||
-			strings.HasPrefix(upperExpr, "SUM(") ||
-			strings.HasPrefix(upperExpr, "AVG(") ||
-			strings.HasPrefix(upperExpr, "MIN(") ||
-			strings.HasPrefix(upperExpr, "MAX(") ||
-			strings.HasPrefix(upperExpr, "COLLECT(") {
+		// Use whitespace-tolerant function check
+		if isAggregateFunc(item.expr) {
 			colInfos[i] = colInfo{isAggregation: true}
 		} else {
 			// Non-aggregation - this becomes an implicit GROUP BY key
@@ -420,17 +552,33 @@ func (e *StorageExecutor) executeAggregation(nodes []*storage.Node, variable str
 			case strings.HasPrefix(upperExpr, "SUM("):
 				propMatch := sumPropPattern.FindStringSubmatch(item.expr)
 				if len(propMatch) == 3 {
-					sum := float64(0)
+					var sumInt int64
+					var sumFloat float64
+					hasFloat := false
 					for _, node := range groupNodes {
 						if val, exists := node.Properties[propMatch[2]]; exists {
-							if num, ok := toFloat64(val); ok {
-								sum += num
+							switch v := val.(type) {
+							case int64:
+								sumInt += v
+								sumFloat += float64(v)
+							case int:
+								sumInt += int64(v)
+								sumFloat += float64(v)
+							case float64:
+								hasFloat = true
+								sumFloat += v
 							}
 						}
 					}
-					row[i] = sum
+					// Return float64 if any input was float, otherwise int64
+					// This is more predictable and prevents type assertion panics
+					if hasFloat {
+						row[i] = sumFloat
+					} else {
+						row[i] = sumInt
+					}
 				} else {
-					row[i] = float64(0)
+					row[i] = int64(0)
 				}
 
 			case strings.HasPrefix(upperExpr, "AVG("):
@@ -458,19 +606,33 @@ func (e *StorageExecutor) executeAggregation(nodes []*storage.Node, variable str
 			case strings.HasPrefix(upperExpr, "MIN("):
 				propMatch := minPropPattern.FindStringSubmatch(item.expr)
 				if len(propMatch) == 3 {
-					var min *float64
+					var minInt *int64
+					var minFloat *float64
+					hasFloat := false
 					for _, node := range groupNodes {
 						if val, exists := node.Properties[propMatch[2]]; exists {
-							if num, ok := toFloat64(val); ok {
-								if min == nil || num < *min {
-									minVal := num
-									min = &minVal
+							switch v := val.(type) {
+							case int64:
+								if minInt == nil || v < *minInt {
+									minInt = &v
+								}
+							case int:
+								iv := int64(v)
+								if minInt == nil || iv < *minInt {
+									minInt = &iv
+								}
+							case float64:
+								hasFloat = true
+								if minFloat == nil || v < *minFloat {
+									minFloat = &v
 								}
 							}
 						}
 					}
-					if min != nil {
-						row[i] = *min
+					if hasFloat && minFloat != nil {
+						row[i] = *minFloat
+					} else if minInt != nil {
+						row[i] = *minInt
 					} else {
 						row[i] = nil
 					}
@@ -481,19 +643,33 @@ func (e *StorageExecutor) executeAggregation(nodes []*storage.Node, variable str
 			case strings.HasPrefix(upperExpr, "MAX("):
 				propMatch := maxPropPattern.FindStringSubmatch(item.expr)
 				if len(propMatch) == 3 {
-					var max *float64
+					var maxInt *int64
+					var maxFloat *float64
+					hasFloat := false
 					for _, node := range groupNodes {
 						if val, exists := node.Properties[propMatch[2]]; exists {
-							if num, ok := toFloat64(val); ok {
-								if max == nil || num > *max {
-									maxVal := num
-									max = &maxVal
+							switch v := val.(type) {
+							case int64:
+								if maxInt == nil || v > *maxInt {
+									maxInt = &v
+								}
+							case int:
+								iv := int64(v)
+								if maxInt == nil || iv > *maxInt {
+									maxInt = &iv
+								}
+							case float64:
+								hasFloat = true
+								if maxFloat == nil || v > *maxFloat {
+									maxFloat = &v
 								}
 							}
 						}
 					}
-					if max != nil {
-						row[i] = *max
+					if hasFloat && maxFloat != nil {
+						row[i] = *maxFloat
+					} else if maxInt != nil {
+						row[i] = *maxInt
 					} else {
 						row[i] = nil
 					}
@@ -603,16 +779,30 @@ func (e *StorageExecutor) executeAggregationSingleGroup(nodes []*storage.Node, v
 			inner := item.expr[4 : len(item.expr)-1] // Extract inner expression
 			propMatch := sumPropPattern.FindStringSubmatch(item.expr)
 			if len(propMatch) == 3 {
-				// SUM(n.property)
-				sum := float64(0)
+				// SUM(n.property) - preserve integer type if all values are integers
+				var sumInt int64
+				var sumFloat float64
+				hasFloat := false
 				for _, node := range nodes {
 					if val, exists := node.Properties[propMatch[2]]; exists {
-						if num, ok := toFloat64(val); ok {
-							sum += num
+						switch v := val.(type) {
+						case int64:
+							sumInt += v
+							sumFloat += float64(v)
+						case int:
+							sumInt += int64(v)
+							sumFloat += float64(v)
+						case float64:
+							hasFloat = true
+							sumFloat += v
 						}
 					}
 				}
-				row[i] = sum
+				if hasFloat {
+					row[i] = sumFloat
+				} else {
+					row[i] = sumInt
+				}
 			} else if isCaseExpression(inner) {
 				// SUM(CASE WHEN ... END)
 				sum := float64(0)
@@ -628,7 +818,7 @@ func (e *StorageExecutor) executeAggregationSingleGroup(nodes []*storage.Node, v
 				// SUM(literal) like SUM(1)
 				row[i] = num * float64(len(nodes))
 			} else {
-				row[i] = float64(0)
+				row[i] = int64(0)
 			}
 
 		case strings.HasPrefix(upperExpr, "AVG("):
@@ -656,19 +846,33 @@ func (e *StorageExecutor) executeAggregationSingleGroup(nodes []*storage.Node, v
 		case strings.HasPrefix(upperExpr, "MIN("):
 			propMatch := minPropPattern.FindStringSubmatch(item.expr)
 			if len(propMatch) == 3 {
-				var min *float64
+				var minInt *int64
+				var minFloat *float64
+				hasFloat := false
 				for _, node := range nodes {
 					if val, exists := node.Properties[propMatch[2]]; exists {
-						if num, ok := toFloat64(val); ok {
-							if min == nil || num < *min {
-								minVal := num
-								min = &minVal
+						switch v := val.(type) {
+						case int64:
+							if minInt == nil || v < *minInt {
+								minInt = &v
+							}
+						case int:
+							iv := int64(v)
+							if minInt == nil || iv < *minInt {
+								minInt = &iv
+							}
+						case float64:
+							hasFloat = true
+							if minFloat == nil || v < *minFloat {
+								minFloat = &v
 							}
 						}
 					}
 				}
-				if min != nil {
-					row[i] = *min
+				if hasFloat && minFloat != nil {
+					row[i] = *minFloat
+				} else if minInt != nil {
+					row[i] = *minInt
 				} else {
 					row[i] = nil
 				}
@@ -679,19 +883,33 @@ func (e *StorageExecutor) executeAggregationSingleGroup(nodes []*storage.Node, v
 		case strings.HasPrefix(upperExpr, "MAX("):
 			propMatch := maxPropPattern.FindStringSubmatch(item.expr)
 			if len(propMatch) == 3 {
-				var max *float64
+				var maxInt *int64
+				var maxFloat *float64
+				hasFloat := false
 				for _, node := range nodes {
 					if val, exists := node.Properties[propMatch[2]]; exists {
-						if num, ok := toFloat64(val); ok {
-							if max == nil || num > *max {
-								maxVal := num
-								max = &maxVal
+						switch v := val.(type) {
+						case int64:
+							if maxInt == nil || v > *maxInt {
+								maxInt = &v
+							}
+						case int:
+							iv := int64(v)
+							if maxInt == nil || iv > *maxInt {
+								maxInt = &iv
+							}
+						case float64:
+							hasFloat = true
+							if maxFloat == nil || v > *maxFloat {
+								maxFloat = &v
 							}
 						}
 					}
 				}
-				if max != nil {
-					row[i] = *max
+				if hasFloat && maxFloat != nil {
+					row[i] = *maxFloat
+				} else if maxInt != nil {
+					row[i] = *maxInt
 				} else {
 					row[i] = nil
 				}
@@ -943,13 +1161,8 @@ func (e *StorageExecutor) executeMatchRelationshipsWithClause(ctx context.Contex
 			alias = item
 		}
 
-		upperExpr := strings.ToUpper(expr)
-		isAgg := strings.HasPrefix(upperExpr, "COUNT(") ||
-			strings.HasPrefix(upperExpr, "SUM(") ||
-			strings.HasPrefix(upperExpr, "AVG(") ||
-			strings.HasPrefix(upperExpr, "COLLECT(") ||
-			strings.HasPrefix(upperExpr, "MIN(") ||
-			strings.HasPrefix(upperExpr, "MAX(")
+		// Use whitespace-tolerant aggregation check
+		isAgg := isAggregateFunc(expr)
 
 		if isAgg {
 			hasWithAggregation = true
@@ -1013,24 +1226,24 @@ func (e *StorageExecutor) executeMatchRelationshipsWithClause(ctx context.Contex
 				values[k] = v
 			}
 
-			// Calculate aggregates
+			// Calculate aggregates (using whitespace-tolerant helpers)
 			for _, ae := range aggregateExprs {
-				upperExpr := strings.ToUpper(ae.expr)
+				inner := extractFuncInner(ae.expr)
 				switch {
-				case strings.HasPrefix(upperExpr, "COUNT(DISTINCT "):
-					inner := ae.expr[15 : len(ae.expr)-1]
+				case isAggregateFuncName(ae.expr, "count") && strings.Contains(strings.ToUpper(inner), "DISTINCT"):
+					// COUNT(DISTINCT ...) - extract after DISTINCT
+					distinctInner := strings.TrimSpace(inner[8:]) // skip "DISTINCT"
 					seen := make(map[string]bool)
 					for _, p := range groupPaths {
 						pCtx := e.buildPathContext(p, matches)
-						val := e.evaluateExpressionWithContext(inner, pCtx.nodes, pCtx.rels)
+						val := e.evaluateExpressionWithContext(distinctInner, pCtx.nodes, pCtx.rels)
 						if val != nil {
 							seen[fmt.Sprintf("%v", val)] = true
 						}
 					}
 					values[ae.alias] = int64(len(seen))
 
-				case strings.HasPrefix(upperExpr, "COUNT("):
-					inner := ae.expr[6 : len(ae.expr)-1]
+				case isAggregateFuncName(ae.expr, "count"):
 					if inner == "*" {
 						values[ae.alias] = int64(len(groupPaths))
 					} else {
@@ -1045,20 +1258,37 @@ func (e *StorageExecutor) executeMatchRelationshipsWithClause(ctx context.Contex
 						values[ae.alias] = count
 					}
 
-				case strings.HasPrefix(upperExpr, "SUM("):
-					inner := ae.expr[4 : len(ae.expr)-1]
-					sum := float64(0)
+				case isAggregateFuncName(ae.expr, "sum"):
+					var sumInt int64
+					var sumFloat float64
+					hasFloat := false
 					for _, p := range groupPaths {
 						pCtx := e.buildPathContext(p, matches)
 						val := e.evaluateExpressionWithContext(inner, pCtx.nodes, pCtx.rels)
-						if num, ok := toFloat64(val); ok {
-							sum += num
+						switch v := val.(type) {
+						case int64:
+							sumInt += v
+							sumFloat += float64(v)
+						case int:
+							sumInt += int64(v)
+							sumFloat += float64(v)
+						case float64:
+							hasFloat = true
+							sumFloat += v
+							// Check if it's a whole number
+							if v == float64(int64(v)) {
+								sumInt += int64(v)
+							}
 						}
 					}
-					values[ae.alias] = sum
+					// Return float64 if any input was float, otherwise int64
+					if hasFloat {
+						values[ae.alias] = sumFloat
+					} else {
+						values[ae.alias] = sumInt
+					}
 
-				case strings.HasPrefix(upperExpr, "AVG("):
-					inner := ae.expr[4 : len(ae.expr)-1]
+				case isAggregateFuncName(ae.expr, "avg"):
 					sum := float64(0)
 					count := 0
 					for _, p := range groupPaths {
@@ -1075,8 +1305,7 @@ func (e *StorageExecutor) executeMatchRelationshipsWithClause(ctx context.Contex
 						values[ae.alias] = nil
 					}
 
-				case strings.HasPrefix(upperExpr, "MIN("):
-					inner := ae.expr[4 : len(ae.expr)-1]
+				case isAggregateFuncName(ae.expr, "min"):
 					var minVal interface{}
 					for _, p := range groupPaths {
 						pCtx := e.buildPathContext(p, matches)
@@ -1087,8 +1316,7 @@ func (e *StorageExecutor) executeMatchRelationshipsWithClause(ctx context.Contex
 					}
 					values[ae.alias] = minVal
 
-				case strings.HasPrefix(upperExpr, "MAX("):
-					inner := ae.expr[4 : len(ae.expr)-1]
+				case isAggregateFuncName(ae.expr, "max"):
 					var maxVal interface{}
 					for _, p := range groupPaths {
 						pCtx := e.buildPathContext(p, matches)
@@ -1099,13 +1327,14 @@ func (e *StorageExecutor) executeMatchRelationshipsWithClause(ctx context.Contex
 					}
 					values[ae.alias] = maxVal
 
-				case strings.HasPrefix(upperExpr, "COLLECT(DISTINCT "):
-					inner := ae.expr[17 : len(ae.expr)-1]
+				case isAggregateFuncName(ae.expr, "collect") && strings.Contains(strings.ToUpper(inner), "DISTINCT"):
+					// COLLECT(DISTINCT ...) - extract after DISTINCT
+					distinctInner := strings.TrimSpace(inner[8:]) // skip "DISTINCT"
 					seen := make(map[string]bool)
 					var collected []interface{}
 					for _, p := range groupPaths {
 						pCtx := e.buildPathContext(p, matches)
-						val := e.evaluateExpressionWithContext(inner, pCtx.nodes, pCtx.rels)
+						val := e.evaluateExpressionWithContext(distinctInner, pCtx.nodes, pCtx.rels)
 						key := fmt.Sprintf("%v", val)
 						if !seen[key] {
 							seen[key] = true
@@ -1114,8 +1343,7 @@ func (e *StorageExecutor) executeMatchRelationshipsWithClause(ctx context.Contex
 					}
 					values[ae.alias] = collected
 
-				case strings.HasPrefix(upperExpr, "COLLECT("):
-					inner := ae.expr[8 : len(ae.expr)-1]
+				case isAggregateFuncName(ae.expr, "collect"):
 					var collected []interface{}
 					for _, p := range groupPaths {
 						pCtx := e.buildPathContext(p, matches)
@@ -1352,15 +1580,46 @@ func (e *StorageExecutor) executeMatchWithClause(ctx context.Context, cypher str
 	var withClause string
 	var postWithWhere string
 
-	// Find WHERE in the section between WITH and RETURN
-	// Use findKeywordNotInBrackets to avoid matching WHERE inside list comprehensions like [x WHERE ...]
-	postWhereIdx := findKeywordNotInBrackets(strings.ToUpper(withSection), " WHERE ")
-	if postWhereIdx > 0 {
-		withClause = strings.TrimSpace(withSection[:postWhereIdx])
-		// Skip "WHERE" (5 chars) + any trailing whitespace
-		postWithWhere = strings.TrimSpace(withSection[postWhereIdx+5:])
+	// Check for multiple WITH clauses (chained WITH)
+	// e.g., WITH a AS x WHERE x > 5 WITH x, x * x AS squared
+	secondWithIdx := findKeywordIndex(withSection, "WITH")
+	if secondWithIdx > 0 {
+		// Extract first WITH clause (may contain WHERE)
+		firstWithSection := strings.TrimSpace(withSection[:secondWithIdx])
+		// Check for WHERE in the FIRST WITH section (between first WITH and second WITH)
+		firstWhereIdx := findKeywordIndex(firstWithSection, "WHERE")
+		if firstWhereIdx > 0 {
+			withClause = strings.TrimSpace(firstWithSection[:firstWhereIdx])
+			postWithWhere = strings.TrimSpace(firstWithSection[firstWhereIdx+5:])
+		} else {
+			withClause = firstWithSection
+		}
+		// Get the second WITH clause and check for WHERE there too
+		secondWithSection := strings.TrimSpace(withSection[secondWithIdx+4:])
+		secondWhereIdx := findKeywordIndex(secondWithSection, "WHERE")
+		if secondWhereIdx > 0 && postWithWhere == "" {
+			// Only use second WHERE if first didn't have one
+			postWithWhere = strings.TrimSpace(secondWithSection[secondWhereIdx+5:])
+		}
 	} else {
-		withClause = withSection
+		// Find WHERE in the section between WITH and RETURN
+		// Use findKeywordIndex which handles all whitespace (spaces, tabs, newlines)
+		postWhereIdx := findKeywordIndex(withSection, "WHERE")
+		if postWhereIdx > 0 {
+			withClause = strings.TrimSpace(withSection[:postWhereIdx])
+			// Skip "WHERE" (5 chars) + any trailing whitespace
+			postWithWhere = strings.TrimSpace(withSection[postWhereIdx+5:])
+		} else {
+			withClause = withSection
+		}
+	}
+
+	// Remove ORDER BY, SKIP, LIMIT from withClause (these apply after WITH processing)
+	// Use findKeywordIndex which handles all whitespace (spaces, tabs, newlines)
+	for _, keyword := range []string{"ORDER", "SKIP", "LIMIT"} {
+		if idx := findKeywordIndex(withClause, keyword); idx >= 0 {
+			withClause = strings.TrimSpace(withClause[:idx])
+		}
 	}
 	withItems := e.splitWithItems(withClause)
 
@@ -1401,13 +1660,8 @@ func (e *StorageExecutor) executeMatchWithClause(ctx context.Context, cypher str
 			alias = item
 		}
 
-		upperExpr := strings.ToUpper(expr)
-		isAgg := strings.HasPrefix(upperExpr, "COUNT(") ||
-			strings.HasPrefix(upperExpr, "SUM(") ||
-			strings.HasPrefix(upperExpr, "AVG(") ||
-			strings.HasPrefix(upperExpr, "COLLECT(") ||
-			strings.HasPrefix(upperExpr, "MIN(") ||
-			strings.HasPrefix(upperExpr, "MAX(")
+		// Use whitespace-tolerant aggregation check
+		isAgg := isAggregateFunc(expr)
 
 		if isAgg {
 			hasWithAggregation = true
@@ -1481,23 +1735,24 @@ func (e *StorageExecutor) executeMatchWithClause(ctx context.Context, cypher str
 				values[k] = v
 			}
 
-			// Calculate aggregates
+			// Calculate aggregates (using whitespace-tolerant helpers)
 			for _, ae := range aggregateExprs {
-				upperExpr := strings.ToUpper(ae.expr)
+				inner := extractFuncInner(ae.expr)
 				switch {
-				case strings.HasPrefix(upperExpr, "COUNT(DISTINCT "):
-					inner := ae.expr[15 : len(ae.expr)-1]
+				case isAggregateFuncName(ae.expr, "count") && strings.Contains(strings.ToUpper(inner), "DISTINCT"):
+					// COUNT(DISTINCT ...) - extract after DISTINCT
+					distinctInner := strings.TrimSpace(inner[8:]) // skip "DISTINCT"
 					seen := make(map[string]bool)
 					for _, n := range groupNodes {
 						nodeMap := map[string]*storage.Node{nodePattern.variable: n}
 						var val interface{}
-						if strings.HasPrefix(inner, nodePattern.variable+".") {
-							propName := inner[len(nodePattern.variable)+1:]
+						if strings.HasPrefix(distinctInner, nodePattern.variable+".") {
+							propName := distinctInner[len(nodePattern.variable)+1:]
 							val = n.Properties[propName]
-						} else if inner == nodePattern.variable {
+						} else if distinctInner == nodePattern.variable {
 							val = string(n.ID)
 						} else {
-							val = e.evaluateExpressionWithContext(inner, nodeMap, nil)
+							val = e.evaluateExpressionWithContext(distinctInner, nodeMap, nil)
 						}
 						if val != nil {
 							seen[fmt.Sprintf("%v", val)] = true
@@ -1505,8 +1760,7 @@ func (e *StorageExecutor) executeMatchWithClause(ctx context.Context, cypher str
 					}
 					values[ae.alias] = int64(len(seen))
 
-				case strings.HasPrefix(upperExpr, "COUNT("):
-					inner := ae.expr[6 : len(ae.expr)-1]
+				case isAggregateFuncName(ae.expr, "count"):
 					if inner == "*" {
 						values[ae.alias] = int64(len(groupNodes))
 					} else {
@@ -1530,9 +1784,10 @@ func (e *StorageExecutor) executeMatchWithClause(ctx context.Context, cypher str
 						values[ae.alias] = count
 					}
 
-				case strings.HasPrefix(upperExpr, "SUM("):
-					inner := ae.expr[4 : len(ae.expr)-1]
-					sum := float64(0)
+				case isAggregateFuncName(ae.expr, "sum"):
+					var sumInt int64
+					var sumFloat float64
+					hasFloat := false
 					for _, n := range groupNodes {
 						nodeMap := map[string]*storage.Node{nodePattern.variable: n}
 						var val interface{}
@@ -1542,26 +1797,43 @@ func (e *StorageExecutor) executeMatchWithClause(ctx context.Context, cypher str
 						} else {
 							val = e.evaluateExpressionWithContext(inner, nodeMap, nil)
 						}
-						if num, ok := toFloat64(val); ok {
-							sum += num
+						switch v := val.(type) {
+						case int64:
+							sumInt += v
+							sumFloat += float64(v)
+						case int:
+							sumInt += int64(v)
+							sumFloat += float64(v)
+						case float64:
+							hasFloat = true
+							sumFloat += v
+							if v == float64(int64(v)) {
+								sumInt += int64(v)
+							}
 						}
 					}
-					values[ae.alias] = sum
+					// Return float64 if any input was float, otherwise int64
+					if hasFloat {
+						values[ae.alias] = sumFloat
+					} else {
+						values[ae.alias] = sumInt
+					}
 
-				case strings.HasPrefix(upperExpr, "COLLECT(DISTINCT "):
-					inner := ae.expr[17 : len(ae.expr)-1] // Skip "COLLECT(DISTINCT "
+				case isAggregateFuncName(ae.expr, "collect") && strings.Contains(strings.ToUpper(inner), "DISTINCT"):
+					// COLLECT(DISTINCT ...) - extract after DISTINCT
+					distinctInner := strings.TrimSpace(inner[8:]) // skip "DISTINCT"
 					seen := make(map[string]bool)
 					var collected []interface{}
 					for _, n := range groupNodes {
 						nodeMap := map[string]*storage.Node{nodePattern.variable: n}
 						var val interface{}
-						if strings.HasPrefix(inner, nodePattern.variable+".") {
-							propName := inner[len(nodePattern.variable)+1:]
+						if strings.HasPrefix(distinctInner, nodePattern.variable+".") {
+							propName := distinctInner[len(nodePattern.variable)+1:]
 							val = n.Properties[propName]
-						} else if inner == nodePattern.variable {
+						} else if distinctInner == nodePattern.variable {
 							val = string(n.ID)
 						} else {
-							val = e.evaluateExpressionWithContext(inner, nodeMap, nil)
+							val = e.evaluateExpressionWithContext(distinctInner, nodeMap, nil)
 						}
 						key := fmt.Sprintf("%v", val)
 						if !seen[key] {
@@ -1571,8 +1843,7 @@ func (e *StorageExecutor) executeMatchWithClause(ctx context.Context, cypher str
 					}
 					values[ae.alias] = collected
 
-				case strings.HasPrefix(upperExpr, "COLLECT("):
-					inner := ae.expr[8 : len(ae.expr)-1]
+				case isAggregateFuncName(ae.expr, "collect"):
 					var collected []interface{}
 					for _, n := range groupNodes {
 						nodeMap := map[string]*storage.Node{nodePattern.variable: n}
@@ -1632,6 +1903,56 @@ func (e *StorageExecutor) executeMatchWithClause(ctx context.Context, cypher str
 		computedRows = filteredRows
 	}
 
+	// Apply ORDER BY to computedRows (before building result)
+	upperCypher := strings.ToUpper(cypher)
+	if orderByIdx := strings.Index(upperCypher, "ORDER BY"); orderByIdx > 0 {
+		orderPart := upperCypher[orderByIdx+8:]
+		endIdx := len(orderPart)
+		// Use findKeywordIndex which handles whitespace/newlines properly
+		for _, kw := range []string{"SKIP", "LIMIT", "RETURN"} {
+			if idx := findKeywordIndex(orderPart, kw); idx >= 0 && idx < endIdx {
+				endIdx = idx
+			}
+		}
+		orderExpr := strings.TrimSpace(cypher[orderByIdx+8 : orderByIdx+8+endIdx])
+		isDesc := strings.HasSuffix(strings.ToUpper(orderExpr), " DESC")
+		isAsc := strings.HasSuffix(strings.ToUpper(orderExpr), " ASC")
+		if isDesc {
+			orderExpr = strings.TrimSuffix(strings.TrimSuffix(orderExpr, " DESC"), " desc")
+			orderExpr = strings.TrimSpace(orderExpr)
+		} else if isAsc {
+			orderExpr = strings.TrimSuffix(strings.TrimSuffix(orderExpr, " ASC"), " asc")
+			orderExpr = strings.TrimSpace(orderExpr)
+		}
+
+		// Sort computedRows by the order expression
+		sort.SliceStable(computedRows, func(i, j int) bool {
+			var valI, valJ interface{}
+
+			// Check if order expression is a property access
+			if strings.Contains(orderExpr, ".") {
+				parts := strings.SplitN(orderExpr, ".", 2)
+				varName := parts[0]
+				propName := parts[1]
+				if nodeI, ok := computedRows[i].values[varName].(*storage.Node); ok {
+					valI = nodeI.Properties[propName]
+				}
+				if nodeJ, ok := computedRows[j].values[varName].(*storage.Node); ok {
+					valJ = nodeJ.Properties[propName]
+				}
+			} else {
+				valI = computedRows[i].values[orderExpr]
+				valJ = computedRows[j].values[orderExpr]
+			}
+
+			less := compareForSort(valI, valJ)
+			if isDesc {
+				return !less
+			}
+			return less
+		})
+	}
+
 	// Now process aggregations in RETURN clause
 	result := &ExecuteResult{
 		Columns: make([]string, len(returnItems)),
@@ -1664,24 +1985,23 @@ func (e *StorageExecutor) executeMatchWithClause(ctx context.Context, cypher str
 		row := make([]interface{}, len(returnItems))
 
 		for i, item := range returnItems {
-			upperExpr := strings.ToUpper(item.expr)
+			inner := extractFuncInner(item.expr)
 
 			switch {
-			case strings.HasPrefix(upperExpr, "COUNT(DISTINCT "):
-				// COUNT(DISTINCT variable)
-				inner := item.expr[15 : len(item.expr)-1]
+			case isAggregateFuncName(item.expr, "count") && strings.Contains(strings.ToUpper(inner), "DISTINCT"):
+				// COUNT(DISTINCT variable) - extract after DISTINCT
+				distinctInner := strings.TrimSpace(inner[8:]) // skip "DISTINCT"
 				seen := make(map[interface{}]bool)
 				for _, cr := range computedRows {
-					if val, ok := cr.values[inner]; ok && val != nil {
+					if val, ok := cr.values[distinctInner]; ok && val != nil {
 						seen[fmt.Sprintf("%v", val)] = true
-					} else if cr.node != nil && inner == nodePattern.variable {
+					} else if cr.node != nil && distinctInner == nodePattern.variable {
 						seen[string(cr.node.ID)] = true
 					}
 				}
 				row[i] = int64(len(seen))
 
-			case strings.HasPrefix(upperExpr, "COUNT("):
-				inner := item.expr[6 : len(item.expr)-1]
+			case isAggregateFuncName(item.expr, "count"):
 				if inner == "*" {
 					row[i] = int64(len(computedRows))
 				} else {
@@ -1696,20 +2016,32 @@ func (e *StorageExecutor) executeMatchWithClause(ctx context.Context, cypher str
 					row[i] = count
 				}
 
-			case strings.HasPrefix(upperExpr, "SUM("):
-				inner := item.expr[4 : len(item.expr)-1]
-				sum := float64(0)
+			case isAggregateFuncName(item.expr, "sum"):
+				var sumInt int64
+				var sumFloat float64
+				hasFloat := false
 				for _, cr := range computedRows {
 					if val, ok := cr.values[inner]; ok {
-						if num, ok := toFloat64(val); ok {
-							sum += num
+						switch v := val.(type) {
+						case int64:
+							sumInt += v
+							sumFloat += float64(v)
+						case int:
+							sumInt += int64(v)
+							sumFloat += float64(v)
+						case float64:
+							hasFloat = true
+							sumFloat += v
 						}
 					}
 				}
-				row[i] = sum
+				if hasFloat {
+					row[i] = sumFloat
+				} else {
+					row[i] = sumInt
+				}
 
-			case strings.HasPrefix(upperExpr, "COLLECT("):
-				inner := item.expr[8 : len(item.expr)-1]
+			case isAggregateFuncName(item.expr, "collect"):
 				var collected []interface{}
 				for _, cr := range computedRows {
 					if val, ok := cr.values[inner]; ok {
@@ -1737,12 +2069,41 @@ func (e *StorageExecutor) executeMatchWithClause(ctx context.Context, cypher str
 				if val, ok := cr.values[item.expr]; ok {
 					row[i] = val
 				} else {
-					// Try to evaluate expression by substituting bound variables
+					// Build node map for evaluation
+					nodeMap := make(map[string]*storage.Node)
+					for varName, varVal := range cr.values {
+						if node, ok := varVal.(*storage.Node); ok {
+							nodeMap[varName] = node
+						}
+					}
+
+					// Check if this is a property access on a node variable (e.g., n.name)
+					if strings.Contains(item.expr, ".") && !strings.Contains(item.expr, "(") {
+						parts := strings.SplitN(item.expr, ".", 2)
+						varName := parts[0]
+						propName := parts[1]
+						if node, ok := nodeMap[varName]; ok {
+							row[i] = node.Properties[propName]
+							continue
+						}
+					}
+
+					// Try to evaluate with nodes in context
+					if len(nodeMap) > 0 {
+						evalResult := e.evaluateExpressionWithContext(item.expr, nodeMap, nil)
+						if evalResult != nil {
+							if strResult, ok := evalResult.(string); !ok || strResult != item.expr {
+								row[i] = evalResult
+								continue
+							}
+						}
+					}
+
+					// Fall back to string substitution
 					expr := item.expr
 					hasSubstitution := false
 					for varName, varVal := range cr.values {
 						if strings.Contains(expr, varName) {
-							// Convert value to string representation for list comprehension
 							var replacement string
 							switch v := varVal.(type) {
 							case []interface{}:
@@ -1759,7 +2120,6 @@ func (e *StorageExecutor) executeMatchWithClause(ctx context.Context, cypher str
 							case string:
 								replacement = fmt.Sprintf("'%s'", v)
 							case *storage.Node:
-								// Skip node values - can't substitute directly
 								continue
 							default:
 								replacement = fmt.Sprintf("%v", v)
@@ -1769,13 +2129,6 @@ func (e *StorageExecutor) executeMatchWithClause(ctx context.Context, cypher str
 						}
 					}
 					if hasSubstitution {
-						// Build node map for evaluation (for labels() etc)
-						nodeMap := make(map[string]*storage.Node)
-						for varName, varVal := range cr.values {
-							if node, ok := varVal.(*storage.Node); ok {
-								nodeMap[varName] = node
-							}
-						}
 						row[i] = e.evaluateExpressionWithContext(expr, nodeMap, nil)
 					}
 				}
@@ -1784,40 +2137,48 @@ func (e *StorageExecutor) executeMatchWithClause(ctx context.Context, cypher str
 		}
 	}
 
-	// Apply ORDER BY, SKIP, LIMIT to results
-	upper = strings.ToUpper(cypher)
+	// Apply ORDER BY, SKIP, LIMIT to results (using findKeywordIndex for whitespace tolerance)
 
 	// Apply ORDER BY
-	orderByIdx := strings.Index(upper, "ORDER BY")
+	orderByIdx := findKeywordIndex(cypher, "ORDER")
 	if orderByIdx > 0 {
-		orderPart := upper[orderByIdx+8:]
+		// Find start after "ORDER BY" (skip "ORDER" + whitespace + "BY")
+		orderStart := orderByIdx + 5 // skip "ORDER"
+		for orderStart < len(cypher) && isWhitespace(cypher[orderStart]) {
+			orderStart++
+		}
+		if orderStart+2 <= len(cypher) && strings.EqualFold(cypher[orderStart:orderStart+2], "BY") {
+			orderStart += 2
+		}
+		orderPart := cypher[orderStart:]
 		endIdx := len(orderPart)
-		for _, kw := range []string{" SKIP ", " LIMIT "} {
-			if idx := strings.Index(orderPart, kw); idx >= 0 && idx < endIdx {
+		// Find SKIP or LIMIT
+		for _, kw := range []string{"SKIP", "LIMIT"} {
+			if idx := findKeywordIndex(orderPart, kw); idx >= 0 && idx < endIdx {
 				endIdx = idx
 			}
 		}
-		orderExpr := strings.TrimSpace(cypher[orderByIdx+8 : orderByIdx+8+endIdx])
+		orderExpr := strings.TrimSpace(orderPart[:endIdx])
 		result.Rows = e.orderResultRows(result.Rows, result.Columns, orderExpr)
 	}
 
 	// Apply SKIP
-	skipIdx := strings.Index(upper, "SKIP")
+	skipIdx := findKeywordIndex(cypher, "SKIP")
 	skip := 0
 	if skipIdx > 0 {
 		skipPart := strings.TrimSpace(cypher[skipIdx+4:])
-		skipPart = strings.Split(skipPart, " ")[0]
+		skipPart = strings.Fields(skipPart)[0]
 		if s, err := strconv.Atoi(skipPart); err == nil {
 			skip = s
 		}
 	}
 
 	// Apply LIMIT
-	limitIdx := strings.Index(upper, "LIMIT")
+	limitIdx := findKeywordIndex(cypher, "LIMIT")
 	limit := -1
 	if limitIdx > 0 {
 		limitPart := strings.TrimSpace(cypher[limitIdx+5:])
-		limitPart = strings.Split(limitPart, " ")[0]
+		limitPart = strings.Fields(limitPart)[0]
 		if l, err := strconv.Atoi(limitPart); err == nil {
 			limit = l
 		}
@@ -2374,11 +2735,8 @@ func (e *StorageExecutor) executeMatchUnwind(ctx context.Context, cypher string)
 			keyValues := make(map[string]interface{})
 
 			for _, item := range returnItems {
-				upperExpr := strings.ToUpper(item.expr)
-				isAgg := strings.HasPrefix(upperExpr, "COUNT(") ||
-					strings.HasPrefix(upperExpr, "SUM(") ||
-					strings.HasPrefix(upperExpr, "AVG(") ||
-					strings.HasPrefix(upperExpr, "COLLECT(")
+				// Use whitespace-tolerant aggregation check
+				isAgg := isAggregateFunc(item.expr)
 
 				if !isAgg {
 					var val interface{}
@@ -2414,11 +2772,8 @@ func (e *StorageExecutor) executeMatchUnwind(ctx context.Context, cypher string)
 			for _, ur := range unwoundRows {
 				keyParts := []string{}
 				for _, item := range returnItems {
-					upperExpr := strings.ToUpper(item.expr)
-					isAgg := strings.HasPrefix(upperExpr, "COUNT(") ||
-						strings.HasPrefix(upperExpr, "SUM(") ||
-						strings.HasPrefix(upperExpr, "AVG(") ||
-						strings.HasPrefix(upperExpr, "COLLECT(")
+					// Use whitespace-tolerant aggregation check
+					isAgg := isAggregateFunc(item.expr)
 
 					if !isAgg {
 						var val interface{}
@@ -2437,17 +2792,16 @@ func (e *StorageExecutor) executeMatchUnwind(ctx context.Context, cypher string)
 			}
 
 			for i, item := range returnItems {
-				upperExpr := strings.ToUpper(item.expr)
 				alias := item.alias
 				if alias == "" {
 					alias = item.expr
 				}
 
 				switch {
-				case strings.HasPrefix(upperExpr, "COUNT("):
+				case isAggregateFuncName(item.expr, "count"):
 					row[i] = int64(len(groupRows))
-				case strings.HasPrefix(upperExpr, "COLLECT("):
-					inner := item.expr[8 : len(item.expr)-1]
+				case isAggregateFuncName(item.expr, "collect"):
+					inner := extractFuncInner(item.expr)
 					collected := make([]interface{}, 0, len(groupRows))
 					for _, ur := range groupRows {
 						if inner == unwindVar {
@@ -2835,8 +3189,6 @@ func countKeywordOccurrences(upper, keyword string) int {
 // executeMultiMatch handles queries with multiple MATCH clauses
 // Example: MATCH (p1:Person)-[:WORKS_AT]->(c:Company) MATCH (p2:Person)-[:WORKS_AT]->(c) WHERE p1 <> p2 RETURN p1, p2, c
 func (e *StorageExecutor) executeMultiMatch(ctx context.Context, cypher string) (*ExecuteResult, error) {
-	upper := strings.ToUpper(cypher)
-
 	// Find RETURN and WHERE positions
 	returnIdx := findKeywordIndex(cypher, "RETURN")
 	if returnIdx == -1 {
@@ -2895,17 +3247,11 @@ func (e *StorageExecutor) executeMultiMatch(ctx context.Context, cypher string) 
 		}
 	}
 
-	// Check if this is an aggregation query
+	// Check if this is an aggregation query (whitespace-tolerant)
 	hasAggregation := false
 	isAggFlags := make([]bool, len(returnItems))
 	for i, item := range returnItems {
-		upperExpr := strings.ToUpper(item.expr)
-		isAggFlags[i] = strings.HasPrefix(upperExpr, "COUNT(") ||
-			strings.HasPrefix(upperExpr, "SUM(") ||
-			strings.HasPrefix(upperExpr, "AVG(") ||
-			strings.HasPrefix(upperExpr, "MIN(") ||
-			strings.HasPrefix(upperExpr, "MAX(") ||
-			strings.HasPrefix(upperExpr, "COLLECT(")
+		isAggFlags[i] = isAggregateFunc(item.expr)
 		if isAggFlags[i] {
 			hasAggregation = true
 		}
@@ -2945,11 +3291,10 @@ func (e *StorageExecutor) executeMultiMatch(ctx context.Context, cypher string) 
 					continue
 				}
 
-				// Aggregation function
-				upperExpr := strings.ToUpper(item.expr)
+				// Aggregation function (whitespace-tolerant)
+				inner := extractFuncInner(item.expr)
 				switch {
-				case strings.HasPrefix(upperExpr, "COUNT("):
-					inner := item.expr[6 : len(item.expr)-1]
+				case isAggregateFuncName(item.expr, "count"):
 					if inner == "*" {
 						row[i] = int64(len(groupBindings))
 					} else {
@@ -2963,8 +3308,7 @@ func (e *StorageExecutor) executeMultiMatch(ctx context.Context, cypher string) 
 						row[i] = count
 					}
 
-				case strings.HasPrefix(upperExpr, "SUM("):
-					inner := item.expr[4 : len(item.expr)-1]
+				case isAggregateFuncName(item.expr, "sum"):
 					sum := float64(0)
 					for _, b := range groupBindings {
 						val := e.resolveBindingItem(returnItem{expr: inner}, b)
@@ -2974,8 +3318,7 @@ func (e *StorageExecutor) executeMultiMatch(ctx context.Context, cypher string) 
 					}
 					row[i] = sum
 
-				case strings.HasPrefix(upperExpr, "AVG("):
-					inner := item.expr[4 : len(item.expr)-1]
+				case isAggregateFuncName(item.expr, "avg"):
 					sum := float64(0)
 					count := 0
 					for _, b := range groupBindings {
@@ -2991,8 +3334,7 @@ func (e *StorageExecutor) executeMultiMatch(ctx context.Context, cypher string) 
 						row[i] = nil
 					}
 
-				case strings.HasPrefix(upperExpr, "MIN("):
-					inner := item.expr[4 : len(item.expr)-1]
+				case isAggregateFuncName(item.expr, "min"):
 					var minVal interface{}
 					for _, b := range groupBindings {
 						val := e.resolveBindingItem(returnItem{expr: inner}, b)
@@ -3002,8 +3344,7 @@ func (e *StorageExecutor) executeMultiMatch(ctx context.Context, cypher string) 
 					}
 					row[i] = minVal
 
-				case strings.HasPrefix(upperExpr, "MAX("):
-					inner := item.expr[4 : len(item.expr)-1]
+				case isAggregateFuncName(item.expr, "max"):
 					var maxVal interface{}
 					for _, b := range groupBindings {
 						val := e.resolveBindingItem(returnItem{expr: inner}, b)
@@ -3013,8 +3354,7 @@ func (e *StorageExecutor) executeMultiMatch(ctx context.Context, cypher string) 
 					}
 					row[i] = maxVal
 
-				case strings.HasPrefix(upperExpr, "COLLECT("):
-					inner := item.expr[8 : len(item.expr)-1]
+				case isAggregateFuncName(item.expr, "collect"):
 					var collected []interface{}
 					for _, b := range groupBindings {
 						val := e.resolveBindingItem(returnItem{expr: inner}, b)
@@ -3036,17 +3376,24 @@ func (e *StorageExecutor) executeMultiMatch(ctx context.Context, cypher string) 
 		}
 	}
 
-	// Apply ORDER BY, SKIP, LIMIT
-	orderByIdx := strings.Index(upper, "ORDER BY")
+	// Apply ORDER BY, SKIP, LIMIT (whitespace-tolerant)
+	orderByIdx := findKeywordIndex(cypher, "ORDER")
 	if orderByIdx > 0 {
-		orderPart := upper[orderByIdx+8:]
+		orderStart := orderByIdx + 5
+		for orderStart < len(cypher) && isWhitespace(cypher[orderStart]) {
+			orderStart++
+		}
+		if orderStart+2 <= len(cypher) && strings.EqualFold(cypher[orderStart:orderStart+2], "BY") {
+			orderStart += 2
+		}
+		orderPart := cypher[orderStart:]
 		endIdx := len(orderPart)
-		for _, kw := range []string{" SKIP ", " LIMIT "} {
-			if idx := strings.Index(orderPart, kw); idx >= 0 && idx < endIdx {
+		for _, kw := range []string{"SKIP", "LIMIT"} {
+			if idx := findKeywordIndex(orderPart, kw); idx >= 0 && idx < endIdx {
 				endIdx = idx
 			}
 		}
-		orderExpr := strings.TrimSpace(cypher[orderByIdx+8 : orderByIdx+8+endIdx])
+		orderExpr := strings.TrimSpace(orderPart[:endIdx])
 		result.Rows = e.orderResultRows(result.Rows, result.Columns, orderExpr)
 	}
 

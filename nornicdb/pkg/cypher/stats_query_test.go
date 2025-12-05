@@ -306,8 +306,9 @@ func TestCaseWhenInStatsQuery(t *testing.T) {
 		require.Len(t, result.Rows, 1)
 
 		// Only 'A' has non-null value
+		// Neo4j: SUM of integers returns int64
 		countWithValue := result.Rows[0][0]
-		assert.Equal(t, float64(1), countWithValue)
+		assert.Equal(t, int64(1), countWithValue)
 	})
 
 	t.Run("CASE WHEN with AND condition", func(t *testing.T) {
@@ -319,8 +320,9 @@ func TestCaseWhenInStatsQuery(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, result.Rows, 1)
 
+		// Neo4j: SUM of integers returns int64
 		countLargeValue := result.Rows[0][0]
-		assert.Equal(t, float64(1), countLargeValue)
+		assert.Equal(t, int64(1), countLargeValue)
 	})
 }
 

@@ -144,14 +144,16 @@ func (e *StorageExecutor) executeWith(ctx context.Context, cypher string) (*Exec
 	}
 
 	remainderStart := withIdx + 4
-	for remainderStart < len(cypher) && cypher[remainderStart] == ' ' {
+	// Skip all whitespace (spaces, tabs, newlines)
+	for remainderStart < len(cypher) && isWhitespace(cypher[remainderStart]) {
 		remainderStart++
 	}
 
-	nextClauses := []string{" MATCH ", " WHERE ", " RETURN ", " CREATE ", " MERGE ", " DELETE ", " SET ", " UNWIND ", " ORDER BY ", " SKIP ", " LIMIT "}
+	// Use findKeywordIndex which handles whitespace/newlines properly
+	nextClauseKeywords := []string{"MATCH", "WHERE", "RETURN", "CREATE", "MERGE", "DELETE", "SET", "UNWIND", "ORDER", "SKIP", "LIMIT"}
 	nextClauseIdx := len(cypher)
-	for _, clause := range nextClauses {
-		idx := findKeywordNotInBrackets(upper[remainderStart:], clause)
+	for _, keyword := range nextClauseKeywords {
+		idx := findKeywordIndex(cypher[remainderStart:], keyword)
 		if idx >= 0 && remainderStart+idx < nextClauseIdx {
 			nextClauseIdx = remainderStart + idx
 		}
@@ -249,7 +251,43 @@ func (e *StorageExecutor) executeWith(ctx context.Context, cypher string) (*Exec
 			}, nil
 		}
 
-		return e.Execute(ctx, remainder, nil)
+		// Substitute bound variables into remainder before delegating
+		// e.g., WITH [[1,2],[3,4]] AS matrix UNWIND matrix ... -> UNWIND [[1,2],[3,4]] ...
+		substitutedRemainder := remainder
+		for varName, varVal := range boundVars {
+			switch v := varVal.(type) {
+			case []interface{}:
+				parts := make([]string, len(v))
+				for j, elem := range v {
+					switch e := elem.(type) {
+					case []interface{}:
+						innerParts := make([]string, len(e))
+						for k, innerElem := range e {
+							switch ie := innerElem.(type) {
+							case string:
+								innerParts[k] = fmt.Sprintf("'%s'", ie)
+							default:
+								innerParts[k] = fmt.Sprintf("%v", ie)
+							}
+						}
+						parts[j] = "[" + strings.Join(innerParts, ", ") + "]"
+					case string:
+						parts[j] = fmt.Sprintf("'%s'", e)
+					default:
+						parts[j] = fmt.Sprintf("%v", e)
+					}
+				}
+				replacement := "[" + strings.Join(parts, ", ") + "]"
+				substitutedRemainder = strings.ReplaceAll(substitutedRemainder, varName, replacement)
+			case string:
+				substitutedRemainder = strings.ReplaceAll(substitutedRemainder, varName, fmt.Sprintf("'%s'", v))
+			case nil:
+				substitutedRemainder = strings.ReplaceAll(substitutedRemainder, varName, "null")
+			default:
+				substitutedRemainder = strings.ReplaceAll(substitutedRemainder, varName, fmt.Sprintf("%v", v))
+			}
+		}
+		return e.Execute(ctx, substitutedRemainder, nil)
 	}
 
 	return &ExecuteResult{
@@ -311,6 +349,33 @@ func (e *StorageExecutor) executeUnwind(ctx context.Context, cypher string) (*Ex
 	}
 
 	upper := strings.ToUpper(cypher)
+
+	// Check for double UNWIND - handle by recursively processing
+	firstUnwind := strings.Index(upper, "UNWIND")
+	if firstUnwind >= 0 {
+		// Find the AS clause for the first UNWIND
+		afterFirstUnwind := upper[firstUnwind+6:]
+		firstAsIdx := strings.Index(afterFirstUnwind, " AS ")
+		if firstAsIdx >= 0 {
+			// Find where the variable ends (next space or UNWIND)
+			varStart := firstAsIdx + 4
+			restAfterAs := strings.TrimSpace(afterFirstUnwind[varStart:])
+			varEndIdx := strings.IndexAny(restAfterAs, " \t\n")
+			if varEndIdx > 0 {
+				restAfterVar := strings.TrimSpace(restAfterAs[varEndIdx:])
+				// Check if there's another UNWIND
+				if strings.HasPrefix(strings.ToUpper(restAfterVar), "UNWIND") {
+					// Handle double UNWIND by unwinding the first list and processing second UNWIND for each
+					return e.executeDoubleUnwind(ctx, cypher)
+				}
+			}
+		}
+	}
+
+	// Check for unsupported map keys() function
+	if strings.Contains(upper, "KEYS(") && strings.Contains(upper, "UNWIND") {
+		return nil, fmt.Errorf("keys() function with UNWIND is not supported in this context")
+	}
 
 	unwindIdx := strings.Index(upper, "UNWIND")
 	if unwindIdx == -1 {
@@ -501,6 +566,165 @@ func (e *StorageExecutor) executeUnwind(ctx context.Context, cypher string) (*Ex
 	}
 	for _, item := range items {
 		result.Rows = append(result.Rows, []interface{}{item})
+	}
+	return result, nil
+}
+
+// executeDoubleUnwind handles double UNWIND clauses like:
+// UNWIND [[1,2],[3,4]] AS pair UNWIND pair AS num RETURN num
+func (e *StorageExecutor) executeDoubleUnwind(ctx context.Context, cypher string) (*ExecuteResult, error) {
+	upper := strings.ToUpper(cypher)
+
+	// Check for dependent range expressions (range(1, i) where i is from first UNWIND)
+	if containsOutsideStrings(upper, "RANGE(") {
+		// Find if second UNWIND uses range with first variable
+		firstAsIdx := findKeywordIndex(cypher, "AS")
+		if firstAsIdx >= 0 {
+			afterAs := strings.TrimSpace(cypher[firstAsIdx+2:])
+			varEnd := strings.IndexAny(afterAs, " \t\n")
+			if varEnd > 0 {
+				firstVar := strings.ToUpper(afterAs[:varEnd])
+				restQuery := strings.ToUpper(afterAs[varEnd:])
+				// Check if range() contains the first variable
+				if containsOutsideStrings(restQuery, "RANGE(") && containsOutsideStrings(restQuery, firstVar) {
+					return nil, fmt.Errorf("dependent range in double UNWIND is not supported")
+				}
+			}
+		}
+	}
+
+	// Parse first UNWIND
+	firstUnwindIdx := strings.Index(upper, "UNWIND")
+	if firstUnwindIdx == -1 {
+		return nil, fmt.Errorf("UNWIND clause not found")
+	}
+
+	afterFirst := cypher[firstUnwindIdx+6:]
+	firstAsIdx := strings.Index(strings.ToUpper(afterFirst), " AS ")
+	if firstAsIdx == -1 {
+		return nil, fmt.Errorf("first UNWIND requires AS clause")
+	}
+
+	firstListExpr := strings.TrimSpace(afterFirst[:firstAsIdx])
+	afterFirstAs := strings.TrimSpace(afterFirst[firstAsIdx+4:])
+
+	// Get first variable name
+	varEndIdx := strings.IndexAny(afterFirstAs, " \t\n")
+	if varEndIdx == -1 {
+		return nil, fmt.Errorf("malformed double UNWIND")
+	}
+	firstVar := afterFirstAs[:varEndIdx]
+	restQuery := strings.TrimSpace(afterFirstAs[varEndIdx:])
+
+	// Parse second UNWIND
+	if !strings.HasPrefix(strings.ToUpper(restQuery), "UNWIND") {
+		return nil, fmt.Errorf("expected second UNWIND")
+	}
+
+	afterSecond := restQuery[6:]
+	secondAsIdx := strings.Index(strings.ToUpper(afterSecond), " AS ")
+	if secondAsIdx == -1 {
+		return nil, fmt.Errorf("second UNWIND requires AS clause")
+	}
+
+	secondListExpr := strings.TrimSpace(afterSecond[:secondAsIdx])
+	afterSecondAs := strings.TrimSpace(afterSecond[secondAsIdx+4:])
+
+	var secondVar, finalRest string
+	varEndIdx2 := strings.IndexAny(afterSecondAs, " \t\n")
+	if varEndIdx2 == -1 {
+		secondVar = afterSecondAs
+		finalRest = ""
+	} else {
+		secondVar = afterSecondAs[:varEndIdx2]
+		finalRest = strings.TrimSpace(afterSecondAs[varEndIdx2:])
+	}
+
+	// Evaluate the first list
+	firstList := e.evaluateExpressionWithContext(firstListExpr, make(map[string]*storage.Node), make(map[string]*storage.Edge))
+
+	var outerItems []interface{}
+	switch v := firstList.(type) {
+	case []interface{}:
+		outerItems = v
+	case nil:
+		outerItems = []interface{}{}
+	default:
+		outerItems = []interface{}{firstList}
+	}
+
+	// Collect all paired items (outer, inner) for cartesian or nested product
+	type pairedItem struct {
+		outer interface{}
+		inner interface{}
+	}
+	var allPairedItems []pairedItem
+
+	for _, outerItem := range outerItems {
+		// The second UNWIND expression should reference the first variable
+		// If secondListExpr == firstVar, use outerItem directly (nested case)
+		var innerList interface{}
+		if secondListExpr == firstVar {
+			innerList = outerItem
+		} else {
+			// Cartesian product - evaluate second list independently
+			innerList = e.evaluateExpressionWithContext(secondListExpr, make(map[string]*storage.Node), make(map[string]*storage.Edge))
+		}
+
+		switch inner := innerList.(type) {
+		case []interface{}:
+			for _, innerItem := range inner {
+				allPairedItems = append(allPairedItems, pairedItem{outer: outerItem, inner: innerItem})
+			}
+		case nil:
+			// Skip
+		default:
+			allPairedItems = append(allPairedItems, pairedItem{outer: outerItem, inner: innerList})
+		}
+	}
+
+	// Process RETURN clause
+	if strings.HasPrefix(strings.ToUpper(finalRest), "RETURN") {
+		returnClause := strings.TrimSpace(finalRest[6:])
+		returnItems := e.parseReturnItems(returnClause)
+
+		result := &ExecuteResult{
+			Columns: make([]string, len(returnItems)),
+			Rows:    make([][]interface{}, 0, len(allPairedItems)),
+		}
+
+		for i, item := range returnItems {
+			if item.alias != "" {
+				result.Columns[i] = item.alias
+			} else {
+				result.Columns[i] = item.expr
+			}
+		}
+
+		for _, paired := range allPairedItems {
+			row := make([]interface{}, len(returnItems))
+			for i, item := range returnItems {
+				if item.expr == secondVar {
+					row[i] = paired.inner
+				} else if item.expr == firstVar {
+					row[i] = paired.outer
+				} else {
+					row[i] = e.evaluateExpressionWithContext(item.expr, make(map[string]*storage.Node), make(map[string]*storage.Edge))
+				}
+			}
+			result.Rows = append(result.Rows, row)
+		}
+
+		return result, nil
+	}
+
+	// Default: return all paired items (inner values only)
+	result := &ExecuteResult{
+		Columns: []string{secondVar},
+		Rows:    make([][]interface{}, len(allPairedItems)),
+	}
+	for i, paired := range allPairedItems {
+		result.Rows[i] = []interface{}{paired.inner}
 	}
 	return result, nil
 }

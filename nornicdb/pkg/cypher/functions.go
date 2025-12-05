@@ -91,6 +91,31 @@ func (e *StorageExecutor) evaluateExpressionWithContext(expr string, nodes map[s
 	}
 
 	// ========================================
+	// Parenthesized Expressions - strip outer parens
+	// ========================================
+	if strings.HasPrefix(expr, "(") && strings.HasSuffix(expr, ")") {
+		// Check if these parentheses wrap the entire expression
+		depth := 0
+		allWrapped := true
+		for i, ch := range expr {
+			if ch == '(' {
+				depth++
+			} else if ch == ')' {
+				depth--
+			}
+			// If depth reaches 0 before the last character, parens don't wrap the whole thing
+			if depth == 0 && i < len(expr)-1 {
+				allWrapped = false
+				break
+			}
+		}
+		if allWrapped && depth == 0 {
+			// Strip outer parentheses and re-evaluate
+			return e.evaluateExpressionWithContext(expr[1:len(expr)-1], nodes, rels)
+		}
+	}
+
+	// ========================================
 	// CASE Expressions (must be checked first)
 	// ========================================
 	if isCaseExpression(expr) {
@@ -130,6 +155,7 @@ func (e *StorageExecutor) evaluateExpressionWithContext(expr string, nodes map[s
 	// labels(n) - return list of labels for a node
 	if matchFuncStartAndSuffix(expr, "labels") {
 		inner := extractFuncArgs(expr, "labels")
+		// fmt.Printf("DEBUG labels(): inner=%q, nodes=%+v\n", inner, nodes)
 		if node, ok := nodes[inner]; ok {
 			// Return labels as a list of strings
 			result := make([]interface{}, len(node.Labels))
@@ -137,6 +163,17 @@ func (e *StorageExecutor) evaluateExpressionWithContext(expr string, nodes map[s
 				result[i] = label
 			}
 			return result
+		}
+		// Check if this is a nested expression like labels(f) where f is a value in nodes
+		// Try to get the node if inner is a variable reference
+		if innerVal := e.evaluateExpressionWithContext(inner, nodes, rels); innerVal != nil {
+			if node, ok := innerVal.(*storage.Node); ok {
+				result := make([]interface{}, len(node.Labels))
+				for i, label := range node.Labels {
+					result[i] = label
+				}
+				return result
+			}
 		}
 		return nil
 	}
@@ -3790,9 +3827,19 @@ func (e *StorageExecutor) evaluateExpressionWithContext(expr string, nodes map[s
 
 	// String literal (single or double quotes)
 	if len(expr) >= 2 {
-		if (expr[0] == '\'' && expr[len(expr)-1] == '\'') ||
-			(expr[0] == '"' && expr[len(expr)-1] == '"') {
-			return expr[1 : len(expr)-1]
+		if expr[0] == '\'' && expr[len(expr)-1] == '\'' {
+			// Unescape doubled single quotes
+			inner := expr[1 : len(expr)-1]
+			inner = strings.ReplaceAll(inner, "''", "'")
+			inner = strings.ReplaceAll(inner, "\\\\", "\\")
+			return inner
+		}
+		if expr[0] == '"' && expr[len(expr)-1] == '"' {
+			// Unescape doubled double quotes
+			inner := expr[1 : len(expr)-1]
+			inner = strings.ReplaceAll(inner, "\"\"", "\"")
+			inner = strings.ReplaceAll(inner, "\\\\", "\\")
+			return inner
 		}
 	}
 

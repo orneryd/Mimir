@@ -52,6 +52,24 @@ import (
 	"strings"
 )
 
+// containsReservedKeyword checks if a string contains Cypher reserved keywords
+// or special characters that could indicate an injection attempt.
+// Only matches WHOLE keywords (not substrings like "OR" in "Order").
+func containsReservedKeyword(s string) bool {
+	// Check for special characters that shouldn't be in identifiers
+	dangerousChars := []string{"--", "//", "/*", "*/", ";", "`", "\"", "'", "(", ")", "[", "]", "{", "}", ","}
+	for _, ch := range dangerousChars {
+		if strings.Contains(s, ch) {
+			return true
+		}
+	}
+	// Only check for space (indicates multiple tokens which is invalid for identifiers)
+	if strings.Contains(s, " ") {
+		return true
+	}
+	return false
+}
+
 // parseNodePattern parses a Cypher node pattern like (n:Label {prop: value}).
 //
 // # Parameters
@@ -318,8 +336,19 @@ func (e *StorageExecutor) parsePropertyValue(valueStr string) interface{} {
 		}
 	}
 
+	// Check for malformed values (unquoted colon indicates injection attempt or syntax error)
+	if strings.Contains(valueStr, ":") && !strings.HasPrefix(valueStr, "{") {
+		// Return a special marker that will trigger validation error
+		return invalidPropertyValue{raw: valueStr}
+	}
+
 	// Otherwise return as string (handles unquoted identifiers, etc.)
 	return valueStr
+}
+
+// invalidPropertyValue marks a property value that failed parsing validation
+type invalidPropertyValue struct {
+	raw string
 }
 
 // parseArrayValue parses a Cypher array literal like [1, 2, 3] or ['a', 'b', 'c'].

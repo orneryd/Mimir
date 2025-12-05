@@ -2438,6 +2438,7 @@ func TestExecuteAggregationNonAggregateInQuery(t *testing.T) {
 	assert.Len(t, result.Rows, 3) // One row per distinct n.name
 
 	// Verify each row has the correct name and sum for that group
+	// Neo4j: SUM of float64 values returns float64
 	sumByName := make(map[string]float64)
 	for _, row := range result.Rows {
 		name := row[0].(string)
@@ -2475,7 +2476,7 @@ func TestExecuteAggregationSumNoMatch(t *testing.T) {
 
 	result, err := exec.Execute(ctx, "MATCH (n:SumNo) RETURN sum(invalid)", nil)
 	require.NoError(t, err)
-	assert.Equal(t, float64(0), result.Rows[0][0])
+	assert.Equal(t, int64(0), result.Rows[0][0])
 }
 
 func TestExecuteAggregationAvgNoMatch(t *testing.T) {
@@ -3565,7 +3566,7 @@ func TestExecuteAggregationWithNonNumeric(t *testing.T) {
 	// SUM should handle non-numeric gracefully
 	result, err := exec.Execute(ctx, "MATCH (n:NonNum) RETURN sum(n.value)", nil)
 	require.NoError(t, err)
-	assert.Equal(t, float64(0), result.Rows[0][0])
+	assert.Equal(t, int64(0), result.Rows[0][0])
 }
 
 func TestCallDbLabelsWithError(t *testing.T) {
@@ -3633,7 +3634,7 @@ func TestToFloat64TypeCoverage(t *testing.T) {
 
 	result, err = exec.Execute(ctx, "MATCH (n:IntTest) RETURN sum(n.val)", nil)
 	require.NoError(t, err)
-	assert.Equal(t, float64(100), result.Rows[0][0])
+	assert.Equal(t, int64(100), result.Rows[0][0])
 
 	// Test int32 through AVG
 	node3 := &storage.Node{
@@ -3647,7 +3648,7 @@ func TestToFloat64TypeCoverage(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, float64(50), result.Rows[0][0])
 
-	// Test string that can be parsed as float
+	// Test string value - Neo4j ignores non-numeric values in SUM
 	node4 := &storage.Node{
 		ID:         "str-num",
 		Labels:     []string{"StrNumTest"},
@@ -3657,7 +3658,8 @@ func TestToFloat64TypeCoverage(t *testing.T) {
 
 	result, err = exec.Execute(ctx, "MATCH (n:StrNumTest) RETURN sum(n.val)", nil)
 	require.NoError(t, err)
-	assert.Equal(t, float64(42.5), result.Rows[0][0])
+	// String values are not numeric, so SUM ignores them and returns 0
+	assert.Equal(t, int64(0), result.Rows[0][0])
 }
 
 // Test Parser MERGE clause

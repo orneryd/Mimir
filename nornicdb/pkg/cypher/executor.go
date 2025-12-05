@@ -796,6 +796,11 @@ func (e *StorageExecutor) executeWithoutTransaction(ctx context.Context, cypher 
 
 // executeReturn handles simple RETURN statements (e.g., "RETURN 1").
 func (e *StorageExecutor) executeReturn(ctx context.Context, cypher string) (*ExecuteResult, error) {
+	// Substitute parameters before processing
+	if params := getParamsFromContext(ctx); params != nil {
+		cypher = e.substituteParams(cypher, params)
+	}
+
 	// Parse RETURN clause - use word boundary detection
 	returnIdx := findKeywordIndex(cypher, "RETURN")
 	if returnIdx == -1 {
@@ -821,6 +826,12 @@ func (e *StorageExecutor) executeReturn(ctx context.Context, cypher string) (*Ex
 		}
 
 		columns = append(columns, alias)
+
+		// Handle NULL literal explicitly first
+		if strings.EqualFold(part, "null") {
+			values = append(values, nil)
+			continue
+		}
 
 		// Try to evaluate as a function or expression first
 		result := e.evaluateExpressionWithContext(part, nil, nil)
@@ -1950,6 +1961,17 @@ func (e *StorageExecutor) resolveReturnItem(item returnItem, variable string, no
 		return e.evaluateExpression(expr, variable, node)
 	}
 
+	// Check for IS NULL / IS NOT NULL - these need full evaluation
+	upperExpr := strings.ToUpper(expr)
+	if strings.Contains(upperExpr, " IS NULL") || strings.Contains(upperExpr, " IS NOT NULL") {
+		return e.evaluateExpression(expr, variable, node)
+	}
+
+	// Check for arithmetic operators - need full evaluation
+	if strings.ContainsAny(expr, "+-*/%") {
+		return e.evaluateExpression(expr, variable, node)
+	}
+
 	// Handle property access: variable.property
 	if strings.Contains(expr, ".") {
 		parts := strings.SplitN(expr, ".", 2)
@@ -2112,13 +2134,17 @@ func (e *StorageExecutor) checkSubqueryMatch(node *storage.Node, variable, subqu
 		pattern = strings.TrimSpace(pattern[:loc[0]])
 	}
 
-	// DEBUG: Uncomment to trace execution
-	// fmt.Printf("DEBUG checkSubqueryMatch: node=%v, variable=%s, pattern=%s, innerWhere=%s\n",
-	//     node.Properties["name"], variable, pattern, innerWhere)
-
 	// Check if pattern references our variable
 	if !strings.Contains(pattern, "("+variable+")") && !strings.Contains(pattern, "("+variable+":") {
 		return false
+	}
+
+	// Check for chained relationship pattern (e.g., (p)-[:KNOWS]->()-[:KNOWS]->())
+	// Count the number of relationship hops by counting relationship brackets [-
+	// Each hop has one -[...]-
+	relationshipCount := strings.Count(pattern, "-[")
+	if relationshipCount > 1 {
+		return e.checkChainedPattern(node, variable, pattern, innerWhere)
 	}
 
 	// Extract the target variable name from pattern (e.g., "report" from "(m)-[:MANAGES]->(report)")
@@ -2177,6 +2203,156 @@ func (e *StorageExecutor) checkSubqueryMatch(node *storage.Node, variable, subqu
 		incoming, _ := e.storage.GetIncomingEdges(node.ID)
 		outgoing, _ := e.storage.GetOutgoingEdges(node.ID)
 		return len(incoming) > 0 || len(outgoing) > 0
+	}
+
+	return false
+}
+
+// checkChainedPattern handles chained relationship patterns like (p)-[:KNOWS]->()-[:KNOWS]->()
+func (e *StorageExecutor) checkChainedPattern(node *storage.Node, variable, pattern, innerWhere string) bool {
+	// Parse the pattern to extract relationship hops
+	// E.g., (p)-[:KNOWS]->()-[:KNOWS]->() has two hops
+
+	// Find the first relationship part
+	// Pattern looks like: (variable)-[rel1]->(intermediate)-[rel2]->...
+
+	// Find the start of the first relationship (after the variable node)
+	varPattern := "(" + variable + ")"
+	if !strings.Contains(pattern, varPattern) {
+		// Try with label: (variable:Label)
+		idx := strings.Index(pattern, "("+variable+":")
+		if idx < 0 {
+			return false
+		}
+	}
+
+	// Extract relationship hops
+	hops := e.parseRelationshipHops(pattern, variable)
+	if len(hops) == 0 {
+		return false
+	}
+
+	// Traverse the chain starting from the given node
+	return e.traverseChain(node, hops, 0)
+}
+
+// relationshipHop represents one step in a chained relationship pattern
+type relationshipHop struct {
+	relTypes []string
+	outgoing bool
+}
+
+// parseRelationshipHops extracts relationship hops from a pattern
+func (e *StorageExecutor) parseRelationshipHops(pattern, variable string) []relationshipHop {
+	var hops []relationshipHop
+
+	// Find all relationship patterns: -[...]->  or  <-[...]-
+	remaining := pattern
+
+	for len(remaining) > 0 {
+		// Look for outgoing: -[...]->(
+		outIdx := strings.Index(remaining, "-[")
+		inIdx := strings.Index(remaining, "<-[")
+
+		if outIdx >= 0 && (inIdx < 0 || outIdx < inIdx) {
+			// Found outgoing pattern
+			relStart := outIdx + 2
+			relEnd := strings.Index(remaining[relStart:], "]")
+			if relEnd < 0 {
+				break
+			}
+			relEnd += relStart
+
+			relPart := remaining[relStart:relEnd]
+			// Extract relationship types
+			var relTypes []string
+			if strings.HasPrefix(relPart, ":") {
+				typePart := relPart[1:]
+				// Handle multiple types separated by |
+				for _, t := range strings.Split(typePart, "|") {
+					if t = strings.TrimSpace(t); t != "" {
+						relTypes = append(relTypes, t)
+					}
+				}
+			}
+
+			hops = append(hops, relationshipHop{
+				relTypes: relTypes,
+				outgoing: true,
+			})
+
+			remaining = remaining[relEnd+1:]
+		} else if inIdx >= 0 {
+			// Found incoming pattern
+			relStart := inIdx + 3
+			relEnd := strings.Index(remaining[relStart:], "]")
+			if relEnd < 0 {
+				break
+			}
+			relEnd += relStart
+
+			relPart := remaining[relStart:relEnd]
+			// Extract relationship types
+			var relTypes []string
+			if strings.HasPrefix(relPart, ":") {
+				typePart := relPart[1:]
+				for _, t := range strings.Split(typePart, "|") {
+					if t = strings.TrimSpace(t); t != "" {
+						relTypes = append(relTypes, t)
+					}
+				}
+			}
+
+			hops = append(hops, relationshipHop{
+				relTypes: relTypes,
+				outgoing: false,
+			})
+
+			remaining = remaining[relEnd+1:]
+		} else {
+			break
+		}
+	}
+
+	return hops
+}
+
+// traverseChain recursively checks if a chain of relationships exists
+func (e *StorageExecutor) traverseChain(node *storage.Node, hops []relationshipHop, hopIndex int) bool {
+	if hopIndex >= len(hops) {
+		return true // All hops matched
+	}
+
+	hop := hops[hopIndex]
+
+	if hop.outgoing {
+		edges, _ := e.storage.GetOutgoingEdges(node.ID)
+		for _, edge := range edges {
+			if len(hop.relTypes) == 0 || e.edgeTypeMatches(edge.Type, hop.relTypes) {
+				// Get the target node and recurse
+				nextNode, err := e.storage.GetNode(edge.EndNode)
+				if err != nil {
+					continue
+				}
+				if e.traverseChain(nextNode, hops, hopIndex+1) {
+					return true
+				}
+			}
+		}
+	} else {
+		edges, _ := e.storage.GetIncomingEdges(node.ID)
+		for _, edge := range edges {
+			if len(hop.relTypes) == 0 || e.edgeTypeMatches(edge.Type, hop.relTypes) {
+				// Get the source node and recurse
+				nextNode, err := e.storage.GetNode(edge.StartNode)
+				if err != nil {
+					continue
+				}
+				if e.traverseChain(nextNode, hops, hopIndex+1) {
+					return true
+				}
+			}
+		}
 	}
 
 	return false

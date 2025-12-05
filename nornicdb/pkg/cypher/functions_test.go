@@ -1496,8 +1496,8 @@ func TestArithmeticOperators(t *testing.T) {
 		{"2 * 3", int64(6)},
 		{"2.5 * 2", float64(5)},
 
-		// Division
-		{"6 / 2", float64(3)},
+		// Division - Neo4j returns int64 for exact division, float64 otherwise
+		{"6 / 2", int64(3)},
 		{"7 / 2", float64(3.5)},
 
 		// Modulo

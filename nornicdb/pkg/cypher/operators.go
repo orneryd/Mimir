@@ -397,7 +397,8 @@ func (e *StorageExecutor) evaluateComparisonExpr(expr string, nodes map[string]*
 //	hasArithmeticOperator("a - b")   // true
 func (e *StorageExecutor) hasArithmeticOperator(expr string) bool {
 	// Include + for date arithmetic (date + duration)
-	ops := []string{" + ", "*", "/", "%", " - "}
+	// Check with and without spaces for + and - operators
+	ops := []string{" + ", "+", "*", "/", "%", " - ", "-"}
 	for _, op := range ops {
 		if e.hasOperatorOutsideQuotes(expr, op) {
 			return true
@@ -431,7 +432,13 @@ func (e *StorageExecutor) hasArithmeticOperator(expr string) bool {
 //	evaluateArithmeticExpr("date('2025-01-01') + duration('P5D')", ...) // "2025-01-06..."
 func (e *StorageExecutor) evaluateArithmeticExpr(expr string, nodes map[string]*storage.Node, rels map[string]*storage.Edge) interface{} {
 	// Handle + operator (date + duration, or numeric addition)
+	// Try with spaces first, then without
 	if parts := e.splitByOperator(expr, " + "); len(parts) == 2 {
+		left := e.evaluateExpressionWithContext(parts[0], nodes, rels)
+		right := e.evaluateExpressionWithContext(parts[1], nodes, rels)
+		return e.add(left, right)
+	}
+	if parts := e.splitByOperator(expr, "+"); len(parts) == 2 {
 		left := e.evaluateExpressionWithContext(parts[0], nodes, rels)
 		right := e.evaluateExpressionWithContext(parts[1], nodes, rels)
 		return e.add(left, right)
@@ -459,10 +466,19 @@ func (e *StorageExecutor) evaluateArithmeticExpr(expr string, nodes map[string]*
 	}
 
 	// Handle - operator (binary subtraction, not unary minus)
+	// Try with spaces first, then without (but be careful with unary minus)
 	if parts := e.splitByOperator(expr, " - "); len(parts) == 2 {
 		left := e.evaluateExpressionWithContext(parts[0], nodes, rels)
 		right := e.evaluateExpressionWithContext(parts[1], nodes, rels)
 		return e.subtract(left, right)
+	}
+	// For - without spaces, only split if both sides would be valid expressions
+	if parts := e.splitByOperator(expr, "-"); len(parts) == 2 && parts[0] != "" {
+		left := e.evaluateExpressionWithContext(parts[0], nodes, rels)
+		right := e.evaluateExpressionWithContext(parts[1], nodes, rels)
+		if left != nil && right != nil {
+			return e.subtract(left, right)
+		}
 	}
 
 	return nil
@@ -623,6 +639,7 @@ func (e *StorageExecutor) multiply(left, right interface{}) interface{} {
 // divide performs numeric division.
 //
 // Note: Division by zero returns nil (NULL in Cypher).
+// Returns int64 if both operands are integers and division is exact.
 //
 // # Parameters
 //
@@ -631,11 +648,12 @@ func (e *StorageExecutor) multiply(left, right interface{}) interface{} {
 //
 // # Returns
 //
-//   - float64 result
+//   - int64 if exact integer division, float64 otherwise
 //   - nil if divisor is zero or operands invalid
 //
 // # Example
 //
+//	divide(10, 2)  // int64(5)
 //	divide(10, 3)  // float64(3.333...)
 //	divide(10, 0)  // nil (division by zero)
 func (e *StorageExecutor) divide(left, right interface{}) interface{} {
@@ -644,7 +662,18 @@ func (e *StorageExecutor) divide(left, right interface{}) interface{} {
 	if !okL || !okR || r == 0 {
 		return nil
 	}
-	return l / r
+	result := l / r
+	// Check if both operands were integers and result is exact
+	_, leftIsInt64 := left.(int64)
+	_, rightIsInt64 := right.(int64)
+	_, leftIsInt := left.(int)
+	_, rightIsInt := right.(int)
+	leftIsInteger := leftIsInt64 || leftIsInt
+	rightIsInteger := rightIsInt64 || rightIsInt
+	if leftIsInteger && rightIsInteger && result == float64(int64(result)) {
+		return int64(result)
+	}
+	return result
 }
 
 // modulo performs modulo operation (remainder after division).

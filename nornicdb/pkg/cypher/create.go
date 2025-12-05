@@ -63,6 +63,37 @@ func (e *StorageExecutor) executeCreate(ctx context.Context, cypher string) (*Ex
 
 		nodePattern := e.parseNodePattern(nodePatternStr)
 
+		// Check for empty label (e.g., "n:" or ":") - only check before properties
+		patternBeforeProps := nodePatternStr
+		if braceIdx := strings.Index(nodePatternStr, "{"); braceIdx >= 0 {
+			patternBeforeProps = nodePatternStr[:braceIdx]
+		}
+		// Check if there's a colon that doesn't have a label after it
+		if strings.Contains(patternBeforeProps, ":") && len(nodePattern.labels) == 0 {
+			return nil, fmt.Errorf("empty label name after colon in pattern: %s", nodePatternStr)
+		}
+
+		// SECURITY: Validate labels to prevent injection attacks
+		for _, label := range nodePattern.labels {
+			if !isValidIdentifier(label) {
+				return nil, fmt.Errorf("invalid label name: %q (must be alphanumeric starting with letter or underscore)", label)
+			}
+			if containsReservedKeyword(label) {
+				return nil, fmt.Errorf("invalid label name: %q (contains reserved keyword)", label)
+			}
+		}
+
+		// SECURITY: Validate property keys and values
+		for key, val := range nodePattern.properties {
+			if !isValidIdentifier(key) {
+				return nil, fmt.Errorf("invalid property key: %q (must be alphanumeric starting with letter or underscore)", key)
+			}
+			// Check for invalid property values (malformed syntax)
+			if _, ok := val.(invalidPropertyValue); ok {
+				return nil, fmt.Errorf("invalid property value for key %q: malformed syntax", key)
+			}
+		}
+
 		// Create the node
 		node := &storage.Node{
 			ID:         storage.NodeID(e.generateID()),
@@ -89,79 +120,109 @@ func (e *StorageExecutor) executeCreate(ctx context.Context, cypher string) (*Ex
 			continue
 		}
 
-		// Parse the relationship pattern: (varA)-[:TYPE {props}]->(varB)
-		sourceContent, relStr, targetContent, isReverse, err := e.parseCreateRelPatternWithVars(relPatternStr)
-		if err != nil {
-			return nil, err
-		}
+		// Process relationship chains - keep going until no remainder
+		currentPattern := relPatternStr
+		for currentPattern != "" {
+			// Parse the relationship pattern: (varA)-[:TYPE {props}]->(varB)
+			sourceContent, relStr, targetContent, isReverse, remainder, err := e.parseCreateRelPatternWithVars(currentPattern)
+			if err != nil {
+				return nil, err
+			}
 
-		// Determine source node - either lookup by variable or create inline
-		var sourceNode *storage.Node
-		if node, exists := createdNodes[sourceContent]; exists {
-			// Variable reference to existing node
-			sourceNode = node
-		} else {
-			// Inline node definition - parse and create
+			// Parse node patterns first to get variable names for lookup
 			sourcePattern := e.parseNodePattern("(" + sourceContent + ")")
-			sourceNode = &storage.Node{
-				ID:         storage.NodeID(e.generateID()),
-				Labels:     sourcePattern.labels,
-				Properties: sourcePattern.properties,
-			}
-			if err := e.storage.CreateNode(sourceNode); err != nil {
-				return nil, fmt.Errorf("failed to create source node: %w", err)
-			}
-			e.notifyNodeCreated(string(sourceNode.ID))
-			result.Stats.NodesCreated++
-			if sourcePattern.variable != "" {
-				createdNodes[sourcePattern.variable] = sourceNode
-			}
-		}
-
-		// Determine target node - either lookup by variable or create inline
-		var targetNode *storage.Node
-		if node, exists := createdNodes[targetContent]; exists {
-			// Variable reference to existing node
-			targetNode = node
-		} else {
-			// Inline node definition - parse and create
 			targetPattern := e.parseNodePattern("(" + targetContent + ")")
-			targetNode = &storage.Node{
-				ID:         storage.NodeID(e.generateID()),
-				Labels:     targetPattern.labels,
-				Properties: targetPattern.properties,
+
+			// Determine source node - either lookup by variable or create inline
+			var sourceNode *storage.Node
+			if sourcePattern.variable != "" {
+				if node, exists := createdNodes[sourcePattern.variable]; exists {
+					sourceNode = node
+				}
 			}
-			if err := e.storage.CreateNode(targetNode); err != nil {
-				return nil, fmt.Errorf("failed to create target node: %w", err)
+			if sourceNode == nil {
+				// Create new node
+				sourceNode = &storage.Node{
+					ID:         storage.NodeID(e.generateID()),
+					Labels:     sourcePattern.labels,
+					Properties: sourcePattern.properties,
+				}
+				if err := e.storage.CreateNode(sourceNode); err != nil {
+					return nil, fmt.Errorf("failed to create source node: %w", err)
+				}
+				e.notifyNodeCreated(string(sourceNode.ID))
+				result.Stats.NodesCreated++
+				if sourcePattern.variable != "" {
+					createdNodes[sourcePattern.variable] = sourceNode
+				}
 			}
-			e.notifyNodeCreated(string(targetNode.ID))
-			result.Stats.NodesCreated++
+
+			// Determine target node - either lookup by variable or create inline
+			var targetNode *storage.Node
 			if targetPattern.variable != "" {
-				createdNodes[targetPattern.variable] = targetNode
+				if node, exists := createdNodes[targetPattern.variable]; exists {
+					targetNode = node
+				}
+			}
+			if targetNode == nil {
+				// Create new node
+				targetNode = &storage.Node{
+					ID:         storage.NodeID(e.generateID()),
+					Labels:     targetPattern.labels,
+					Properties: targetPattern.properties,
+				}
+				if err := e.storage.CreateNode(targetNode); err != nil {
+					return nil, fmt.Errorf("failed to create target node: %w", err)
+				}
+				e.notifyNodeCreated(string(targetNode.ID))
+				result.Stats.NodesCreated++
+				if targetPattern.variable != "" {
+					createdNodes[targetPattern.variable] = targetNode
+				}
+			}
+
+			// Parse relationship type and properties
+			relType, relProps := e.parseRelationshipTypeAndProps(relStr)
+
+			// SECURITY: Validate relationship type
+			if relType != "" && !isValidIdentifier(relType) {
+				return nil, fmt.Errorf("invalid relationship type: %q (must be alphanumeric starting with letter or underscore)", relType)
+			}
+
+			// SECURITY: Validate relationship property keys
+			for key := range relProps {
+				if !isValidIdentifier(key) {
+					return nil, fmt.Errorf("invalid relationship property key: %q (must be alphanumeric starting with letter or underscore)", key)
+				}
+			}
+
+			// Handle reverse direction
+			startNode, endNode := sourceNode, targetNode
+			if isReverse {
+				startNode, endNode = targetNode, sourceNode
+			}
+
+			// Create relationship
+			edge := &storage.Edge{
+				ID:         storage.EdgeID(e.generateID()),
+				StartNode:  startNode.ID,
+				EndNode:    endNode.ID,
+				Type:       relType,
+				Properties: relProps,
+			}
+			if err := e.storage.CreateEdge(edge); err != nil {
+				return nil, fmt.Errorf("failed to create relationship: %w", err)
+			}
+			result.Stats.RelationshipsCreated++
+
+			// If there's more chain to process, continue with target as new source
+			if remainder != "" && (strings.HasPrefix(remainder, "-[") || strings.HasPrefix(remainder, "<-[")) {
+				// Build the next pattern: (targetContent) + remainder
+				currentPattern = "(" + targetContent + ")" + remainder
+			} else {
+				currentPattern = ""
 			}
 		}
-
-		// Parse relationship type and properties
-		relType, relProps := e.parseRelationshipTypeAndProps(relStr)
-
-		// Handle reverse direction
-		startNode, endNode := sourceNode, targetNode
-		if isReverse {
-			startNode, endNode = targetNode, sourceNode
-		}
-
-		// Create relationship
-		edge := &storage.Edge{
-			ID:         storage.EdgeID(e.generateID()),
-			StartNode:  startNode.ID,
-			EndNode:    endNode.ID,
-			Type:       relType,
-			Properties: relProps,
-		}
-		if err := e.storage.CreateEdge(edge); err != nil {
-			return nil, fmt.Errorf("failed to create relationship: %w", err)
-		}
-		result.Stats.RelationshipsCreated++
 	}
 
 	// Handle RETURN clause
@@ -274,91 +335,110 @@ func (e *StorageExecutor) executeCreateWithRefs(ctx context.Context, cypher stri
 			continue
 		}
 
-		// Parse the relationship pattern: (varA)-[:TYPE {props}]->(varB)
-		sourceContent, relStr, targetContent, isReverse, err := e.parseCreateRelPatternWithVars(relPatternStr)
-		if err != nil {
-			return nil, nil, nil, err
-		}
+		// Process relationship chains - keep going until no remainder
+		currentPattern := relPatternStr
+		for currentPattern != "" {
+			// Parse the relationship pattern: (varA)-[:TYPE {props}]->(varB)
+			sourceContent, relStr, targetContent, isReverse, remainder, err := e.parseCreateRelPatternWithVars(currentPattern)
+			if err != nil {
+				return nil, nil, nil, err
+			}
 
-		// Determine source node - either lookup by variable or create inline
-		var sourceNode *storage.Node
-		if node, exists := createdNodes[sourceContent]; exists {
-			sourceNode = node
-		} else {
+			// Parse node patterns first to get variable names for lookup
 			sourcePattern := e.parseNodePattern("(" + sourceContent + ")")
-			sourceNode = &storage.Node{
-				ID:         storage.NodeID(e.generateID()),
-				Labels:     sourcePattern.labels,
-				Properties: sourcePattern.properties,
-			}
-			if err := e.storage.CreateNode(sourceNode); err != nil {
-				return nil, nil, nil, fmt.Errorf("failed to create source node: %w", err)
-			}
-			e.notifyNodeCreated(string(sourceNode.ID))
-			result.Stats.NodesCreated++
-			if sourcePattern.variable != "" {
-				createdNodes[sourcePattern.variable] = sourceNode
-			}
-		}
-
-		// Determine target node - either lookup by variable or create inline
-		var targetNode *storage.Node
-		if node, exists := createdNodes[targetContent]; exists {
-			targetNode = node
-		} else {
 			targetPattern := e.parseNodePattern("(" + targetContent + ")")
-			targetNode = &storage.Node{
-				ID:         storage.NodeID(e.generateID()),
-				Labels:     targetPattern.labels,
-				Properties: targetPattern.properties,
+
+			// Determine source node - either lookup by variable or create inline
+			var sourceNode *storage.Node
+			if sourcePattern.variable != "" {
+				if node, exists := createdNodes[sourcePattern.variable]; exists {
+					sourceNode = node
+				}
 			}
-			if err := e.storage.CreateNode(targetNode); err != nil {
-				return nil, nil, nil, fmt.Errorf("failed to create target node: %w", err)
+			if sourceNode == nil {
+				sourceNode = &storage.Node{
+					ID:         storage.NodeID(e.generateID()),
+					Labels:     sourcePattern.labels,
+					Properties: sourcePattern.properties,
+				}
+				if err := e.storage.CreateNode(sourceNode); err != nil {
+					return nil, nil, nil, fmt.Errorf("failed to create source node: %w", err)
+				}
+				e.notifyNodeCreated(string(sourceNode.ID))
+				result.Stats.NodesCreated++
+				if sourcePattern.variable != "" {
+					createdNodes[sourcePattern.variable] = sourceNode
+				}
 			}
-			e.notifyNodeCreated(string(targetNode.ID))
-			result.Stats.NodesCreated++
+
+			// Determine target node - either lookup by variable or create inline
+			var targetNode *storage.Node
 			if targetPattern.variable != "" {
-				createdNodes[targetPattern.variable] = targetNode
+				if node, exists := createdNodes[targetPattern.variable]; exists {
+					targetNode = node
+				}
+			}
+			if targetNode == nil {
+				targetNode = &storage.Node{
+					ID:         storage.NodeID(e.generateID()),
+					Labels:     targetPattern.labels,
+					Properties: targetPattern.properties,
+				}
+				if err := e.storage.CreateNode(targetNode); err != nil {
+					return nil, nil, nil, fmt.Errorf("failed to create target node: %w", err)
+				}
+				e.notifyNodeCreated(string(targetNode.ID))
+				result.Stats.NodesCreated++
+				if targetPattern.variable != "" {
+					createdNodes[targetPattern.variable] = targetNode
+				}
+			}
+
+			// Parse relationship type and properties
+			relType, relProps := e.parseRelationshipTypeAndProps(relStr)
+
+			// Extract relationship variable if present (e.g., "r:TYPE" -> "r")
+			relVar := ""
+			if colonIdx := strings.Index(relStr, ":"); colonIdx > 0 {
+				relVar = strings.TrimSpace(relStr[:colonIdx])
+			} else if !strings.Contains(relStr, "{") {
+				// No colon and no props - entire string might be variable
+				relVar = strings.TrimSpace(relStr)
+			}
+
+			// Handle direction
+			var startNode, endNode *storage.Node
+			if isReverse {
+				startNode, endNode = targetNode, sourceNode
+			} else {
+				startNode, endNode = sourceNode, targetNode
+			}
+
+			// Create the relationship
+			edge := &storage.Edge{
+				ID:         storage.EdgeID(e.generateID()),
+				Type:       relType,
+				StartNode:  startNode.ID,
+				EndNode:    endNode.ID,
+				Properties: relProps,
+			}
+
+			if err := e.storage.CreateEdge(edge); err != nil {
+				return nil, nil, nil, fmt.Errorf("failed to create relationship: %w", err)
+			}
+
+			if relVar != "" {
+				createdEdges[relVar] = edge
+			}
+			result.Stats.RelationshipsCreated++
+
+			// If there's more chain to process, continue with target as new source
+			if remainder != "" && (strings.HasPrefix(remainder, "-[") || strings.HasPrefix(remainder, "<-[")) {
+				currentPattern = "(" + targetContent + ")" + remainder
+			} else {
+				currentPattern = ""
 			}
 		}
-
-		// Parse relationship type and properties
-		relType, relProps := e.parseRelationshipTypeAndProps(relStr)
-
-		// Extract relationship variable if present (e.g., "r:TYPE" -> "r")
-		relVar := ""
-		if colonIdx := strings.Index(relStr, ":"); colonIdx > 0 {
-			relVar = strings.TrimSpace(relStr[:colonIdx])
-		} else if !strings.Contains(relStr, "{") {
-			// No colon and no props - entire string might be variable
-			relVar = strings.TrimSpace(relStr)
-		}
-
-		// Handle direction
-		var startNode, endNode *storage.Node
-		if isReverse {
-			startNode, endNode = targetNode, sourceNode
-		} else {
-			startNode, endNode = sourceNode, targetNode
-		}
-
-		// Create the relationship
-		edge := &storage.Edge{
-			ID:         storage.EdgeID(e.generateID()),
-			Type:       relType,
-			StartNode:  startNode.ID,
-			EndNode:    endNode.ID,
-			Properties: relProps,
-		}
-
-		if err := e.storage.CreateEdge(edge); err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to create relationship: %w", err)
-		}
-
-		if relVar != "" {
-			createdEdges[relVar] = edge
-		}
-		result.Stats.RelationshipsCreated++
 	}
 
 	// Handle RETURN clause
@@ -485,13 +565,14 @@ func (e *StorageExecutor) splitCreatePatterns(pattern string) []string {
 
 // parseCreateRelPatternWithVars parses patterns like (varA)-[r:TYPE {props}]->(varB)
 // where varA and varB are variable references (not full node definitions)
-// Returns: sourceVar, relContent, targetVar, isReverse, error
-func (e *StorageExecutor) parseCreateRelPatternWithVars(pattern string) (string, string, string, bool, error) {
+// Returns: sourceVar, relContent, targetVar, isReverse, remainder, error
+// remainder is any content after the target node (for chained patterns)
+func (e *StorageExecutor) parseCreateRelPatternWithVars(pattern string) (string, string, string, bool, string, error) {
 	pattern = strings.TrimSpace(pattern)
 
 	// Find the first node: (varA)
 	if !strings.HasPrefix(pattern, "(") {
-		return "", "", "", false, fmt.Errorf("invalid relationship pattern: must start with (")
+		return "", "", "", false, "", fmt.Errorf("invalid relationship pattern: must start with (")
 	}
 
 	// Find end of first node
@@ -509,7 +590,7 @@ func (e *StorageExecutor) parseCreateRelPatternWithVars(pattern string) (string,
 		}
 	}
 	if firstNodeEnd < 0 {
-		return "", "", "", false, fmt.Errorf("invalid relationship pattern: unmatched parenthesis")
+		return "", "", "", false, "", fmt.Errorf("invalid relationship pattern: unmatched parenthesis")
 	}
 
 	sourceVar := strings.TrimSpace(pattern[1:firstNodeEnd])
@@ -526,7 +607,7 @@ func (e *StorageExecutor) parseCreateRelPatternWithVars(pattern string) (string,
 		isReverse = true
 		relStart = 3 // Skip "<-["
 	} else {
-		return "", "", "", false, fmt.Errorf("invalid relationship pattern: expected -[ or <-[, got: %s", rest[:min(20, len(rest))])
+		return "", "", "", false, "", fmt.Errorf("invalid relationship pattern: expected -[ or <-[, got: %s", rest[:min(20, len(rest))])
 	}
 
 	// Find matching ] considering nested brackets in properties
@@ -556,7 +637,7 @@ func (e *StorageExecutor) parseCreateRelPatternWithVars(pattern string) (string,
 		}
 	}
 	if relEnd < 0 {
-		return "", "", "", false, fmt.Errorf("invalid relationship pattern: unmatched bracket")
+		return "", "", "", false, "", fmt.Errorf("invalid relationship pattern: unmatched bracket")
 	}
 
 	relContent := rest[relStart:relEnd]
@@ -566,12 +647,12 @@ func (e *StorageExecutor) parseCreateRelPatternWithVars(pattern string) (string,
 	var secondNodeStart int
 	if isReverse {
 		if !strings.HasPrefix(afterRel, "-(") {
-			return "", "", "", false, fmt.Errorf("invalid relationship pattern: expected -( after ]")
+			return "", "", "", false, "", fmt.Errorf("invalid relationship pattern: expected -( after ]")
 		}
 		secondNodeStart = 2
 	} else {
 		if !strings.HasPrefix(afterRel, "->(") {
-			return "", "", "", false, fmt.Errorf("invalid relationship pattern: expected ->( after ]")
+			return "", "", "", false, "", fmt.Errorf("invalid relationship pattern: expected ->( after ]")
 		}
 		secondNodeStart = 3
 	}
@@ -592,12 +673,13 @@ func (e *StorageExecutor) parseCreateRelPatternWithVars(pattern string) (string,
 		}
 	}
 	if secondNodeEnd < 0 {
-		return "", "", "", false, fmt.Errorf("invalid relationship pattern: unmatched parenthesis for second node")
+		return "", "", "", false, "", fmt.Errorf("invalid relationship pattern: unmatched parenthesis for second node")
 	}
 
 	targetVar := strings.TrimSpace(afterRel[secondNodeStart:secondNodeEnd])
+	remainder := strings.TrimSpace(afterRel[secondNodeEnd+1:])
 
-	return sourceVar, relContent, targetVar, isReverse, nil
+	return sourceVar, relContent, targetVar, isReverse, remainder, nil
 }
 
 // splitNodePatterns splits a CREATE pattern into individual node patterns
