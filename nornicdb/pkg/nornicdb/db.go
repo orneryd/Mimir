@@ -140,6 +140,7 @@ import (
 
 	featureflags "github.com/orneryd/nornicdb/pkg/config"
 	"github.com/orneryd/nornicdb/pkg/cypher"
+	cyantlr "github.com/orneryd/nornicdb/pkg/cypher/antlr"
 	"github.com/orneryd/nornicdb/pkg/decay"
 	"github.com/orneryd/nornicdb/pkg/embed"
 	"github.com/orneryd/nornicdb/pkg/encryption"
@@ -431,7 +432,7 @@ type DB struct {
 	decay          *decay.Manager
 	inference      *inference.Engine
 	cypherExecutor cypher.CypherExecutor
-	gpuManager     interface{}           // *gpu.Manager - interface to avoid circular import
+	gpuManager     interface{} // *gpu.Manager - interface to avoid circular import
 
 	// Search service (uses pre-computed embeddings from Mimir)
 	searchService *search.Service
@@ -803,13 +804,15 @@ func Open(dataDir string, config *Config) (*DB, error) {
 	}
 
 	// Wire up plugin function lookup for Cypher executor
-	cypher.PluginFunctionLookup = func(name string) (interface{}, bool) {
+	pluginLookupFn := func(name string) (interface{}, bool) {
 		fn, found := GetPluginFunction(name)
 		if !found {
 			return nil, false
 		}
 		return fn.Handler, true
 	}
+	cypher.PluginFunctionLookup = pluginLookupFn
+	cyantlr.FunctionLookup = pluginLookupFn
 
 	// Configure parallel execution
 	parallelCfg := cypher.ParallelConfig{

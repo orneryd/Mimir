@@ -4,8 +4,10 @@ package antlr
 
 import (
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/antlr4-go/antlr/v4"
 )
@@ -16,6 +18,10 @@ type ExpressionEvaluator struct {
 	variables map[string]interface{}
 	row       map[string]interface{} // Current row context for property lookups
 }
+
+// FunctionLookup is a callback to find custom/plugin functions by name
+// Returns the function implementation and true if found
+var FunctionLookup func(name string) (interface{}, bool)
 
 // NewExpressionEvaluator creates a new expression evaluator
 func NewExpressionEvaluator(params, variables map[string]interface{}) *ExpressionEvaluator {
@@ -138,8 +144,14 @@ func (e *ExpressionEvaluator) evaluateComparison(comp IComparisonExpressionConte
 	signs := comp.AllComparisonSigns()
 
 	// If no comparison signs, this might be a standalone boolean expression
-	// like "n.name CONTAINS 'li'" or "n.email IS NULL"
+	// like "n.name CONTAINS 'li'" or "n.email IS NULL" or "(nested AND expression)"
 	if len(signs) == 0 {
+		// Check if this is a parenthesized expression that needs recursive evaluation
+		if parentExpr := e.findParenthesizedExprInAddSub(adds[0]); parentExpr != nil {
+			// Recursively evaluate the inner expression as a boolean
+			return e.EvaluateWhere(parentExpr)
+		}
+
 		// Check if this is an atomic expression with string/list/null predicates
 		atomic := e.findAtomicInAddSub(adds[0])
 		if atomic != nil {
@@ -198,6 +210,36 @@ func (e *ExpressionEvaluator) findAtomicInAddSub(add IAddSubExpressionContext) I
 	}
 
 	return unarys[0].AtomicExpression()
+}
+
+// findParenthesizedExprInAddSub walks down to find a parenthesized expression that contains a nested boolean
+func (e *ExpressionEvaluator) findParenthesizedExprInAddSub(add IAddSubExpressionContext) IExpressionContext {
+	atomic := e.findAtomicInAddSub(add)
+	if atomic == nil {
+		return nil
+	}
+
+	propOrLabel := atomic.PropertyOrLabelExpression()
+	if propOrLabel == nil {
+		return nil
+	}
+
+	propExpr := propOrLabel.PropertyExpression()
+	if propExpr == nil {
+		return nil
+	}
+
+	atom := propExpr.Atom()
+	if atom == nil {
+		return nil
+	}
+
+	paren := atom.ParenthesizedExpression()
+	if paren == nil {
+		return nil
+	}
+
+	return paren.Expression()
 }
 
 // evaluateComparisonSign evaluates a comparison sign from AST tokens
@@ -366,8 +408,71 @@ func (e *ExpressionEvaluator) evaluateAtomic(atomic IAtomicExpressionContext) in
 	baseVal := e.evaluatePropertyOrLabel(propOrLabel)
 
 	// Check for NullExpression (IS NULL / IS NOT NULL)
-	// These are handled in evaluateAtomicAsBool for WHERE clauses
-	// For value evaluation, we just return the base value
+	// Returns boolean true/false for the null check
+	nullExprs := atomic.AllNullExpression()
+	if len(nullExprs) > 0 {
+		for _, nullExpr := range nullExprs {
+			isNot := nullExpr.NOT() != nil
+			if isNot {
+				// IS NOT NULL - true if value is not null
+				return baseVal != nil
+			} else {
+				// IS NULL - true if value is null
+				return baseVal == nil
+			}
+		}
+	}
+
+	// Check for StringExpression (STARTS WITH, ENDS WITH, CONTAINS)
+	strExprs := atomic.AllStringExpression()
+	if len(strExprs) > 0 {
+		for _, strExpr := range strExprs {
+			prefix := strExpr.StringExpPrefix()
+			if prefix == nil {
+				continue
+			}
+			operand := strExpr.PropertyOrLabelExpression()
+			if operand == nil {
+				continue
+			}
+			operandVal := e.evaluatePropertyOrLabel(operand)
+
+			baseStr, baseOk := baseVal.(string)
+			operandStr, operandOk := operandVal.(string)
+			if !baseOk || !operandOk {
+				return false
+			}
+
+			if prefix.STARTS() != nil {
+				return strings.HasPrefix(baseStr, operandStr)
+			} else if prefix.ENDS() != nil {
+				return strings.HasSuffix(baseStr, operandStr)
+			} else if prefix.CONTAINS() != nil {
+				return strings.Contains(baseStr, operandStr)
+			}
+		}
+	}
+
+	// Check for ListExpression (IN list)
+	listExprs := atomic.AllListExpression()
+	if len(listExprs) > 0 {
+		for _, listExpr := range listExprs {
+			if listExpr.IN() != nil {
+				listPropOrLabel := listExpr.PropertyOrLabelExpression()
+				if listPropOrLabel != nil {
+					listVal := e.evaluatePropertyOrLabel(listPropOrLabel)
+					if list, ok := listVal.([]interface{}); ok {
+						for _, item := range list {
+							if e.valuesEqual(baseVal, item) {
+								return true
+							}
+						}
+					}
+					return false
+				}
+			}
+		}
+	}
 
 	return baseVal
 }
@@ -714,9 +819,497 @@ func (e *ExpressionEvaluator) evaluateFunctionInvocation(funcInvoc IFunctionInvo
 		return &AggregationMarker{FuncName: "COLLECT", Args: args}
 	}
 
-	// Other functions - evaluate based on name
-	// For now, return nil for unknown functions
+	// Build full function name (may have multiple parts like "apoc.coll.sum")
+	var funcNameParts []string
+	for _, sym := range symbols {
+		funcNameParts = append(funcNameParts, sym.GetText())
+	}
+	funcName := strings.Join(funcNameParts, ".")
+
+	// Try to call plugin/custom function
+	if FunctionLookup != nil {
+		if fn, found := FunctionLookup(funcName); found {
+			return e.callPluginFunction(fn, args)
+		}
+	}
+
+	// Built-in functions
+	return e.evaluateBuiltInFunction(funcName, args)
+}
+
+// callPluginFunction calls a plugin function with the given arguments
+func (e *ExpressionEvaluator) callPluginFunction(fn interface{}, args []interface{}) interface{} {
+	// fn should be a function that takes []interface{} and returns interface{}
+	switch f := fn.(type) {
+	case func([]interface{}) interface{}:
+		return f(args)
+	case func(...interface{}) interface{}:
+		return f(args...)
+	}
+
+	// Use reflection for other function signatures
+	fnValue := reflect.ValueOf(fn)
+	if fnValue.Kind() != reflect.Func {
+		return nil
+	}
+
+	fnType := fnValue.Type()
+	numIn := fnType.NumIn()
+
+	// Build argument values
+	inArgs := make([]reflect.Value, numIn)
+	for i := 0; i < numIn; i++ {
+		paramType := fnType.In(i)
+
+		var arg interface{}
+		if i < len(args) {
+			arg = args[i]
+		}
+
+		// Convert arg to the expected type
+		argValue := convertToType(arg, paramType)
+		if !argValue.IsValid() {
+			argValue = reflect.Zero(paramType)
+		}
+		inArgs[i] = argValue
+	}
+
+	// Call the function
+	results := fnValue.Call(inArgs)
+	if len(results) > 0 {
+		return results[0].Interface()
+	}
 	return nil
+}
+
+// convertToType converts a value to the specified reflect.Type
+func convertToType(val interface{}, targetType reflect.Type) reflect.Value {
+	if val == nil {
+		return reflect.Zero(targetType)
+	}
+
+	srcValue := reflect.ValueOf(val)
+	srcType := srcValue.Type()
+
+	// If types match directly
+	if srcType == targetType || srcType.AssignableTo(targetType) {
+		return srcValue
+	}
+
+	// Convertible types
+	if srcType.ConvertibleTo(targetType) {
+		return srcValue.Convert(targetType)
+	}
+
+	// Handle numeric conversions
+	switch targetType.Kind() {
+	case reflect.Float64:
+		switch v := val.(type) {
+		case int64:
+			return reflect.ValueOf(float64(v))
+		case int:
+			return reflect.ValueOf(float64(v))
+		case float32:
+			return reflect.ValueOf(float64(v))
+		case float64:
+			return reflect.ValueOf(v)
+		}
+	case reflect.Int64:
+		switch v := val.(type) {
+		case float64:
+			return reflect.ValueOf(int64(v))
+		case int:
+			return reflect.ValueOf(int64(v))
+		case int64:
+			return reflect.ValueOf(v)
+		}
+	case reflect.Int:
+		switch v := val.(type) {
+		case float64:
+			return reflect.ValueOf(int(v))
+		case int64:
+			return reflect.ValueOf(int(v))
+		case int:
+			return reflect.ValueOf(v)
+		}
+	}
+
+	return reflect.Zero(targetType)
+}
+
+// evaluateBuiltInFunction evaluates built-in functions by name
+func (e *ExpressionEvaluator) evaluateBuiltInFunction(name string, args []interface{}) interface{} {
+	nameLower := strings.ToLower(name)
+
+	switch nameLower {
+	case "tostring":
+		if len(args) > 0 {
+			return fmt.Sprintf("%v", args[0])
+		}
+	case "tointeger", "toint":
+		if len(args) > 0 {
+			return e.toInt64(args[0])
+		}
+	case "tofloat":
+		if len(args) > 0 {
+			return e.toFloat64(args[0])
+		}
+	case "toboolean":
+		if len(args) > 0 {
+			return e.toBool(args[0])
+		}
+	case "size", "length":
+		if len(args) > 0 {
+			return e.size(args[0])
+		}
+	case "head":
+		if len(args) > 0 {
+			if list, ok := args[0].([]interface{}); ok && len(list) > 0 {
+				return list[0]
+			}
+		}
+	case "tail":
+		if len(args) > 0 {
+			if list, ok := args[0].([]interface{}); ok && len(list) > 1 {
+				return list[1:]
+			}
+		}
+	case "last":
+		if len(args) > 0 {
+			if list, ok := args[0].([]interface{}); ok && len(list) > 0 {
+				return list[len(list)-1]
+			}
+		}
+	case "reverse":
+		if len(args) > 0 {
+			if list, ok := args[0].([]interface{}); ok {
+				reversed := make([]interface{}, len(list))
+				for i, v := range list {
+					reversed[len(list)-1-i] = v
+				}
+				return reversed
+			}
+		}
+	case "range":
+		if len(args) >= 2 {
+			start := int(e.toFloat64(args[0]))
+			end := int(e.toFloat64(args[1]))
+			step := 1
+			if len(args) >= 3 {
+				step = int(e.toFloat64(args[2]))
+			}
+			if step == 0 {
+				step = 1
+			}
+			var result []interface{}
+			if step > 0 {
+				for i := start; i <= end; i += step {
+					result = append(result, int64(i))
+				}
+			} else {
+				for i := start; i >= end; i += step {
+					result = append(result, int64(i))
+				}
+			}
+			return result
+		}
+	case "coalesce":
+		for _, arg := range args {
+			if arg != nil {
+				return arg
+			}
+		}
+	case "abs":
+		if len(args) > 0 {
+			v := e.toFloat64(args[0])
+			if v < 0 {
+				v = -v
+			}
+			return maybeInt64(v)
+		}
+	case "ceil":
+		if len(args) > 0 {
+			return int64(e.toFloat64(args[0]) + 0.999999999)
+		}
+	case "floor":
+		if len(args) > 0 {
+			return int64(e.toFloat64(args[0]))
+		}
+	case "round":
+		if len(args) > 0 {
+			v := e.toFloat64(args[0])
+			return int64(v + 0.5)
+		}
+	case "trim":
+		if len(args) > 0 {
+			return strings.TrimSpace(fmt.Sprintf("%v", args[0]))
+		}
+	case "ltrim":
+		if len(args) > 0 {
+			return strings.TrimLeft(fmt.Sprintf("%v", args[0]), " \t\n\r")
+		}
+	case "rtrim":
+		if len(args) > 0 {
+			return strings.TrimRight(fmt.Sprintf("%v", args[0]), " \t\n\r")
+		}
+	case "toupper":
+		if len(args) > 0 {
+			return strings.ToUpper(fmt.Sprintf("%v", args[0]))
+		}
+	case "tolower":
+		if len(args) > 0 {
+			return strings.ToLower(fmt.Sprintf("%v", args[0]))
+		}
+	case "replace":
+		if len(args) >= 3 {
+			s := fmt.Sprintf("%v", args[0])
+			old := fmt.Sprintf("%v", args[1])
+			new := fmt.Sprintf("%v", args[2])
+			return strings.ReplaceAll(s, old, new)
+		}
+	case "substring":
+		if len(args) >= 2 {
+			s := fmt.Sprintf("%v", args[0])
+			start := int(e.toFloat64(args[1]))
+			if start < 0 {
+				start = 0
+			}
+			if start >= len(s) {
+				return ""
+			}
+			if len(args) >= 3 {
+				length := int(e.toFloat64(args[2]))
+				if start+length > len(s) {
+					length = len(s) - start
+				}
+				return s[start : start+length]
+			}
+			return s[start:]
+		}
+	case "left":
+		if len(args) >= 2 {
+			s := fmt.Sprintf("%v", args[0])
+			n := int(e.toFloat64(args[1]))
+			if n >= len(s) {
+				return s
+			}
+			return s[:n]
+		}
+	case "right":
+		if len(args) >= 2 {
+			s := fmt.Sprintf("%v", args[0])
+			n := int(e.toFloat64(args[1]))
+			if n >= len(s) {
+				return s
+			}
+			return s[len(s)-n:]
+		}
+	case "split":
+		if len(args) >= 2 {
+			s := fmt.Sprintf("%v", args[0])
+			sep := fmt.Sprintf("%v", args[1])
+			parts := strings.Split(s, sep)
+			result := make([]interface{}, len(parts))
+			for i, p := range parts {
+				result[i] = p
+			}
+			return result
+		}
+	// APOC-like collection functions
+	case "apoc.coll.sum":
+		if len(args) > 0 {
+			if list, ok := args[0].([]interface{}); ok {
+				sum := float64(0)
+				for _, v := range list {
+					sum += e.toFloat64(v)
+				}
+				return maybeInt64(sum)
+			}
+		}
+	case "apoc.coll.avg":
+		if len(args) > 0 {
+			if list, ok := args[0].([]interface{}); ok && len(list) > 0 {
+				sum := float64(0)
+				for _, v := range list {
+					sum += e.toFloat64(v)
+				}
+				return sum / float64(len(list))
+			}
+		}
+	case "apoc.coll.min":
+		if len(args) > 0 {
+			if list, ok := args[0].([]interface{}); ok && len(list) > 0 {
+				min := e.toFloat64(list[0])
+				for _, v := range list[1:] {
+					val := e.toFloat64(v)
+					if val < min {
+						min = val
+					}
+				}
+				return maybeInt64(min)
+			}
+		}
+	case "apoc.coll.max":
+		if len(args) > 0 {
+			if list, ok := args[0].([]interface{}); ok && len(list) > 0 {
+				max := e.toFloat64(list[0])
+				for _, v := range list[1:] {
+					val := e.toFloat64(v)
+					if val > max {
+						max = val
+					}
+				}
+				return maybeInt64(max)
+			}
+		}
+	case "apoc.coll.reverse":
+		if len(args) > 0 {
+			if list, ok := args[0].([]interface{}); ok {
+				reversed := make([]interface{}, len(list))
+				for i, v := range list {
+					reversed[len(list)-1-i] = v
+				}
+				return reversed
+			}
+		}
+
+	// Graph element functions
+	case "type":
+		// type(relationship) - returns the type of a relationship
+		if len(args) > 0 {
+			if relMap, ok := args[0].(map[string]interface{}); ok {
+				if t, ok := relMap["_type"]; ok {
+					return t
+				}
+			}
+		}
+		return nil
+
+	case "id":
+		// id(node) or id(relationship) - returns the internal ID
+		if len(args) > 0 {
+			if nodeMap, ok := args[0].(map[string]interface{}); ok {
+				if id, ok := nodeMap["_nodeId"]; ok {
+					return id
+				}
+				if id, ok := nodeMap["_edgeId"]; ok {
+					return id
+				}
+			}
+		}
+		return nil
+
+	case "labels":
+		// labels(node) - returns labels of a node
+		if len(args) > 0 {
+			if nodeMap, ok := args[0].(map[string]interface{}); ok {
+				if labels, ok := nodeMap["_labels"]; ok {
+					return labels
+				}
+			}
+		}
+		return nil
+
+	case "keys":
+		// keys(map or node) - returns keys of a map/node properties
+		if len(args) > 0 {
+			if m, ok := args[0].(map[string]interface{}); ok {
+				var keys []interface{}
+				for k := range m {
+					// Skip internal properties
+					if !strings.HasPrefix(k, "_") {
+						keys = append(keys, k)
+					}
+				}
+				return keys
+			}
+		}
+		return nil
+
+	case "properties":
+		// properties(node or relationship) - returns properties as map
+		if len(args) > 0 {
+			if m, ok := args[0].(map[string]interface{}); ok {
+				props := make(map[string]interface{})
+				for k, v := range m {
+					// Skip internal properties
+					if !strings.HasPrefix(k, "_") {
+						props[k] = v
+					}
+				}
+				return props
+			}
+		}
+		return nil
+
+	case "timestamp":
+		// timestamp() - returns current timestamp in milliseconds
+		return time.Now().UnixMilli()
+
+	case "date":
+		// date() - returns current date as string
+		return time.Now().Format("2006-01-02")
+
+	case "datetime":
+		// datetime() - returns current datetime as string
+		return time.Now().Format(time.RFC3339)
+
+	case "exists":
+		// exists(property) - returns true if property exists and is not null
+		if len(args) > 0 {
+			return args[0] != nil
+		}
+		return false
+	}
+
+	return nil
+}
+
+// toInt64 converts a value to int64
+func (e *ExpressionEvaluator) toInt64(val interface{}) int64 {
+	switch v := val.(type) {
+	case int64:
+		return v
+	case int:
+		return int64(v)
+	case float64:
+		return int64(v)
+	case float32:
+		return int64(v)
+	case string:
+		if i, err := strconv.ParseInt(v, 10, 64); err == nil {
+			return i
+		}
+	}
+	return 0
+}
+
+// toBool converts a value to bool
+func (e *ExpressionEvaluator) toBool(val interface{}) bool {
+	switch v := val.(type) {
+	case bool:
+		return v
+	case string:
+		return strings.ToLower(v) == "true"
+	case int64:
+		return v != 0
+	case float64:
+		return v != 0
+	}
+	return false
+}
+
+// size returns the size/length of a value
+func (e *ExpressionEvaluator) size(val interface{}) int64 {
+	switch v := val.(type) {
+	case []interface{}:
+		return int64(len(v))
+	case string:
+		return int64(len(v))
+	case map[string]interface{}:
+		return int64(len(v))
+	}
+	return 0
 }
 
 // Evaluate evaluates any expression and returns its value

@@ -57,6 +57,9 @@ type ASTExecutor struct {
 	variables   map[string]interface{} // Variable bindings during execution
 	result      *ExecuteResult
 	matchedRows []map[string]interface{} // Current matched rows
+
+	// Query optimization hints
+	matchLimit int // If >0, early terminate MATCH cross product at this limit
 }
 
 // NewASTExecutor creates a new AST-first executor
@@ -224,6 +227,33 @@ func (e *ASTExecutor) executeMultiPartQuery(query cyantlr.IMultiPartQContext) er
 		return nil
 	}
 
+	// Pre-analyze: Check if the first WITH clause has a LIMIT
+	// This allows us to optimize MATCH cross products
+	e.matchLimit = 0 // Reset
+	withClauses := query.AllWithSt()
+	if len(withClauses) > 0 {
+		firstWith := withClauses[0]
+		if firstWith != nil {
+			if projBody := firstWith.ProjectionBody(); projBody != nil {
+				if limit := projBody.LimitSt(); limit != nil {
+					if limitExpr := limit.Expression(); limitExpr != nil {
+						eval := cyantlr.NewExpressionEvaluator(e.params, e.variables)
+						if limitVal := eval.Evaluate(limitExpr); limitVal != nil {
+							switch v := limitVal.(type) {
+							case int64:
+								e.matchLimit = int(v)
+							case float64:
+								e.matchLimit = int(v)
+							case int:
+								e.matchLimit = v
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
 	// Multi-part queries have: reading/updating statements, then WITH, repeated, then final single part
 	// Execute all reading statements first
 	for _, reading := range query.AllReadingStatement() {
@@ -231,6 +261,9 @@ func (e *ASTExecutor) executeMultiPartQuery(query cyantlr.IMultiPartQContext) er
 			return err
 		}
 	}
+
+	// Reset matchLimit after MATCH completes
+	e.matchLimit = 0
 
 	// Execute all updating statements
 	for _, updating := range query.AllUpdatingStatement() {
@@ -240,7 +273,7 @@ func (e *ASTExecutor) executeMultiPartQuery(query cyantlr.IMultiPartQContext) er
 	}
 
 	// Execute WITH clauses in sequence
-	for _, with := range query.AllWithSt() {
+	for _, with := range withClauses {
 		if err := e.executeWith(with); err != nil {
 			return err
 		}
@@ -336,17 +369,78 @@ func (e *ASTExecutor) executeMatch(match cyantlr.IMatchStContext) error {
 		return nil
 	}
 
-	// Execute pattern matching
-	matchedRows, err := e.matchPattern(pattern, isOptional)
-	if err != nil {
-		return err
-	}
+	var matchedRows []map[string]interface{}
+	var err error
 
-	// Apply WHERE filter if present
-	if where := patternWhere.Where(); where != nil {
-		matchedRows, err = e.filterByWhere(matchedRows, where)
+	// If there are existing matched rows (e.g., from UNWIND), execute match for EACH row
+	// This allows UNWIND variables to be used in MATCH property filters
+	if len(e.matchedRows) > 0 {
+		var allResults []map[string]interface{}
+
+		for _, existingRow := range e.matchedRows {
+			// Set up variables from the existing row for property resolution
+			savedVars := make(map[string]interface{})
+			for k, v := range e.variables {
+				savedVars[k] = v
+			}
+			for k, v := range existingRow {
+				e.variables[k] = v
+			}
+
+			// Execute pattern matching with current row's context
+			// Use matchLimit hint if available (from WITH LIMIT lookahead)
+			rowResults, matchErr := e.matchPatternWithLimit(pattern, isOptional, e.matchLimit)
+			if matchErr != nil {
+				// Restore variables
+				e.variables = savedVars
+				return matchErr
+			}
+
+			// Apply WHERE filter if present
+			if where := patternWhere.Where(); where != nil {
+				rowResults, matchErr = e.filterByWhere(rowResults, where)
+				if matchErr != nil {
+					e.variables = savedVars
+					return matchErr
+				}
+			}
+
+			// Merge existing row data with match results
+			for _, matchRow := range rowResults {
+				combined := make(map[string]interface{})
+				for k, v := range existingRow {
+					combined[k] = v
+				}
+				for k, v := range matchRow {
+					combined[k] = v
+				}
+				allResults = append(allResults, combined)
+			}
+
+			// If optional match and no results, keep the existing row with nulls
+			if isOptional && len(rowResults) == 0 {
+				allResults = append(allResults, existingRow)
+			}
+
+			// Restore variables
+			e.variables = savedVars
+		}
+
+		matchedRows = allResults
+	} else {
+		// No existing rows - execute match normally
+		// Use matchLimit hint if available (from WITH LIMIT lookahead)
+		matchedRows, err = e.matchPatternWithLimit(pattern, isOptional, e.matchLimit)
 		if err != nil {
 			return err
+		}
+
+		// Apply WHERE filter if present
+		if where := patternWhere.Where(); where != nil {
+			matchedRows, err = e.filterByWhere(matchedRows, where)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -357,30 +451,72 @@ func (e *ASTExecutor) executeMatch(match cyantlr.IMatchStContext) error {
 		matchedRows = []map[string]interface{}{}
 	}
 
-	if e.matchedRows == nil {
-		e.matchedRows = matchedRows
-	} else {
-		// Join with existing matches (for multiple MATCH)
-		e.matchedRows = e.joinMatches(e.matchedRows, matchedRows)
-	}
+	e.matchedRows = matchedRows
 
 	return nil
 }
 
 // matchPattern executes pattern matching from AST
 func (e *ASTExecutor) matchPattern(pattern cyantlr.IPatternContext, isOptional bool) ([]map[string]interface{}, error) {
-	var results []map[string]interface{}
+	return e.matchPatternWithLimit(pattern, isOptional, 0) // 0 = no limit
+}
 
-	// Pattern contains pattern parts
-	for _, part := range pattern.AllPatternPart() {
-		partResults, err := e.matchPatternPart(part)
+// matchPatternWithLimit executes pattern matching with optional early termination
+// limit of 0 means no limit
+func (e *ASTExecutor) matchPatternWithLimit(pattern cyantlr.IPatternContext, isOptional bool, limit int) ([]map[string]interface{}, error) {
+	allParts := pattern.AllPatternPart()
+	if len(allParts) == 0 {
+		if isOptional {
+			return []map[string]interface{}{{}}, nil
+		}
+		return nil, nil
+	}
+
+	// Start with results from first pattern part
+	results, err := e.matchPatternPart(allParts[0])
+	if err != nil {
+		if isOptional {
+			return []map[string]interface{}{{}}, nil
+		}
+		return nil, err
+	}
+
+	// Apply limit early if only one pattern part
+	if limit > 0 && len(results) > limit {
+		results = results[:limit]
+	}
+
+	// For subsequent pattern parts, do a cross product with early termination
+	for i := 1; i < len(allParts); i++ {
+		partResults, err := e.matchPatternPart(allParts[i])
 		if err != nil {
 			if isOptional {
 				continue
 			}
 			return nil, err
 		}
-		results = append(results, partResults...)
+
+		// Cross product with early termination if limit is set
+		var combined []map[string]interface{}
+	crossProduct:
+		for _, existingRow := range results {
+			for _, newRow := range partResults {
+				combinedRow := make(map[string]interface{})
+				for k, v := range existingRow {
+					combinedRow[k] = v
+				}
+				for k, v := range newRow {
+					combinedRow[k] = v
+				}
+				combined = append(combined, combinedRow)
+
+				// Early termination if we have enough results
+				if limit > 0 && len(combined) >= limit {
+					break crossProduct
+				}
+			}
+		}
+		results = combined
 	}
 
 	if len(results) == 0 && isOptional {
@@ -490,6 +626,9 @@ func (e *ASTExecutor) extractProperties(propsCtx cyantlr.IPropertiesContext) map
 		return result
 	}
 
+	// Use proper AST-based expression evaluator for property values
+	eval := cyantlr.NewExpressionEvaluator(e.params, e.variables)
+
 	// MapLit contains map pairs
 	if mapLit := propsCtx.MapLit(); mapLit != nil {
 		for _, pair := range mapLit.AllMapPair() {
@@ -499,7 +638,7 @@ func (e *ASTExecutor) extractProperties(propsCtx cyantlr.IPropertiesContext) map
 			}
 			if key != "" {
 				if exprCtx := pair.Expression(); exprCtx != nil {
-					result[key] = e.evaluateExpression(exprCtx)
+					result[key] = eval.Evaluate(exprCtx)
 				}
 			}
 		}
@@ -563,13 +702,29 @@ func (e *ASTExecutor) findNodes(labels []string, props map[string]interface{}) (
 	var result []*storage.Node
 
 	if len(labels) > 0 {
-		// Find by label
-		for _, label := range labels {
-			nodes, err := e.storage.GetNodesByLabel(label)
-			if err != nil {
-				return nil, err
+		// Find nodes that have ALL specified labels
+		// Start with nodes matching first label
+		firstNodes, err := e.storage.GetNodesByLabel(labels[0])
+		if err != nil {
+			return nil, err
+		}
+
+		if len(labels) == 1 {
+			result = firstNodes
+		} else {
+			// Filter to nodes that have ALL labels
+			for _, node := range firstNodes {
+				hasAllLabels := true
+				for _, label := range labels[1:] {
+					if !e.nodeHasLabel(node, label) {
+						hasAllLabels = false
+						break
+					}
+				}
+				if hasAllLabels {
+					result = append(result, node)
+				}
 			}
-			result = append(result, nodes...)
 		}
 	} else {
 		// Get all nodes - returns []*Node, no error
@@ -588,6 +743,16 @@ func (e *ASTExecutor) findNodes(labels []string, props map[string]interface{}) (
 	}
 
 	return result, nil
+}
+
+// nodeHasLabel checks if a node has a specific label
+func (e *ASTExecutor) nodeHasLabel(node *storage.Node, label string) bool {
+	for _, l := range node.Labels {
+		if l == label {
+			return true
+		}
+	}
+	return false
 }
 
 // nodeMatchesProps checks if node has all required properties
@@ -648,6 +813,35 @@ func (e *ASTExecutor) nodeToMap(node *storage.Node) map[string]interface{} {
 	return result
 }
 
+// getNodeFromVariable retrieves a storage.Node from a variable name if it exists
+func (e *ASTExecutor) getNodeFromVariable(varName string) *storage.Node {
+	if varName == "" {
+		return nil
+	}
+
+	varVal, ok := e.variables[varName]
+	if !ok {
+		return nil
+	}
+
+	nodeMap, ok := varVal.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	nodeID, ok := nodeMap["_nodeId"].(string)
+	if !ok {
+		return nil
+	}
+
+	node, err := e.storage.GetNode(storage.NodeID(nodeID))
+	if err != nil {
+		return nil
+	}
+
+	return node
+}
+
 // executeCreate handles CREATE clause
 func (e *ASTExecutor) executeCreate(create cyantlr.ICreateStContext) error {
 	if create == nil {
@@ -659,10 +853,28 @@ func (e *ASTExecutor) executeCreate(create cyantlr.ICreateStContext) error {
 		return nil
 	}
 
-	// Create nodes/relationships from pattern
-	for _, part := range pattern.AllPatternPart() {
-		if err := e.createPatternPart(part); err != nil {
-			return err
+	// If there are matched rows from a preceding MATCH, iterate over them
+	// This allows CREATE (a)-[:KNOWS]->(b) where a and b come from MATCH
+	if len(e.matchedRows) > 0 {
+		for _, row := range e.matchedRows {
+			// Populate e.variables with this row's bindings
+			for k, v := range row {
+				e.variables[k] = v
+			}
+
+			// Create nodes/relationships from pattern for this row
+			for _, part := range pattern.AllPatternPart() {
+				if err := e.createPatternPart(part); err != nil {
+					return err
+				}
+			}
+		}
+	} else {
+		// No preceding MATCH - just create the pattern
+		for _, part := range pattern.AllPatternPart() {
+			if err := e.createPatternPart(part); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -689,23 +901,36 @@ func (e *ASTExecutor) createPatternElem(elem cyantlr.IPatternElemContext) error 
 		return nil
 	}
 
-	// Create first node
+	// Get first node
 	nodePattern := elem.NodePattern()
 	if nodePattern == nil {
 		return nil
 	}
 
 	nodeVar, labels, props := e.extractNodePattern(nodePattern)
-	node, err := e.createNode(labels, props)
-	if err != nil {
-		return err
+
+	// Check if variable already exists (from MATCH) - reuse it
+	var node *storage.Node
+	var err error
+	if nodeVar != "" {
+		if existingNode := e.getNodeFromVariable(nodeVar); existingNode != nil {
+			node = existingNode
+		}
 	}
 
-	// Store in variables if named
-	if nodeVar != "" {
-		e.variables[nodeVar] = e.nodeToMap(node)
+	// Create new node only if not reusing an existing one
+	if node == nil {
+		node, err = e.createNode(labels, props)
+		if err != nil {
+			return err
+		}
+		e.result.Stats.NodesCreated++
+
+		// Store in variables if named
+		if nodeVar != "" {
+			e.variables[nodeVar] = e.nodeToMap(node)
+		}
 	}
-	e.result.Stats.NodesCreated++
 
 	// Create relationships in chains
 	lastNode := node
@@ -760,16 +985,30 @@ func (e *ASTExecutor) createChain(startNode *storage.Node, chain cyantlr.IPatter
 		return startNode, nil
 	}
 
-	// Create end node
+	// Check if end node variable already exists (from MATCH)
 	endVar, endLabels, endProps := e.extractNodePattern(endNodePattern)
-	endNode, err := e.createNode(endLabels, endProps)
-	if err != nil {
-		return nil, err
-	}
-	e.result.Stats.NodesCreated++
 
+	var endNode *storage.Node
+	var err error
+
+	// Reuse existing node if variable exists
 	if endVar != "" {
-		e.variables[endVar] = e.nodeToMap(endNode)
+		if existingNode := e.getNodeFromVariable(endVar); existingNode != nil {
+			endNode = existingNode
+		}
+	}
+
+	// Create new node only if not reusing
+	if endNode == nil {
+		endNode, err = e.createNode(endLabels, endProps)
+		if err != nil {
+			return nil, err
+		}
+		e.result.Stats.NodesCreated++
+
+		if endVar != "" {
+			e.variables[endVar] = e.nodeToMap(endNode)
+		}
 	}
 
 	// Extract relationship info and create
