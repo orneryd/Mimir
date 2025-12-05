@@ -30,20 +30,51 @@
 ## 🐳 Get Started in 30 Seconds
 
 ```bash
-# Apple Silicon (M1/M2/M3)
+# Apple Silicon (M1/M2/M3) with bge-m3 embedding model + heimdall
 docker pull timothyswt/nornicdb-arm64-metal-bge-heimdall:latest
 docker run -d -p 7474:7474 -p 7687:7687 -v nornicdb-data:/data \
   timothyswt/nornicdb-arm64-metal-bge-heimdall
 
-# NVIDIA GPU (Linux)
+
+# Apple Silicon (M1/M2/M3) with bge-m3 embedding model
+docker pull timothyswt/nornicdb-arm64-metal-bge:latest
+docker run -d -p 7474:7474 -p 7687:7687 -v nornicdb-data:/data \
+  timothyswt/nornicdb-arm64-metal-bge
+
+# Apple Silicon (M1/M2/M3) BYOM
+docker pull timothyswt/nornicdb-arm64-metal:latest
+docker run -d -p 7474:7474 -p 7687:7687 -v nornicdb-data:/data \
+  timothyswt/nornicdb-arm64-metal
+
+# Apple Silicon (M1/M2/M3) BYOM + no UI 
+docker pull timothyswt/nornicdb-arm64-metal-headless:latest
+docker run -d -p 7474:7474 -p 7687:7687 -v nornicdb-data:/data \
+  timothyswt/nornicdb-arm64-headless
+
+# NVIDIA GPU (Windows/Linux) with bge-m3 embedding model + heimdall
+docker pull timothyswt/nornicdb-amd64-cuda-bge-heimdall:latest
+docker run -d -p 7474:7474 -p 7687:7687 -v nornicdb-data:/data \
+  timothyswt/nornicdb-amd64-cuda-bge-heimdall
+
+# NVIDIA GPU (Windows/Linux) with bge-m3 embedding model
 docker pull timothyswt/nornicdb-amd64-cuda-bge:latest
 docker run -d --gpus all -p 7474:7474 -p 7687:7687 -v nornicdb-data:/data \
   timothyswt/nornicdb-amd64-cuda-bge
 
-# CPU Only (Any Platform)
+# NVIDIA GPU (Windows/Linux) BYOM
+docker pull timothyswt/nornicdb-amd64-cuda:latest
+docker run -d --gpus all -p 7474:7474 -p 7687:7687 -v nornicdb-data:/data \
+  timothyswt/nornicdb-amd64-cuda
+
+# CPU Only (Windows/Linux) BYOM
 docker pull timothyswt/nornicdb-amd64-cpu:latest
 docker run -d -p 7474:7474 -p 7687:7687 -v nornicdb-data:/data \
   timothyswt/nornicdb-amd64-cpu
+
+# CPU Only (Windows/Linux) BYOM + no UI
+docker pull timothyswt/nornicdb-amd64-headless:latest
+docker run -d --gpus all -p 7474:7474 -p 7687:7687 -v nornicdb-data:/data \
+  timothyswt/nornicdb-amd64-cpu-headless
 ```
 
 **Open [http://localhost:7474](http://localhost:7474)** — Admin UI with AI assistant ready to query your data.
