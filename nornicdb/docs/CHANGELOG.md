@@ -4,13 +4,72 @@ All notable changes to NornicDB will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [1.0.0] - 2025-12-03
-
 ### 🎉 First Stable Release
 
 NornicDB v1.0.0 marks the first production-ready release of the cognitive graph database.
 
+## [1.0.0] - 2025-12-05
+
+### Added
+
+- **Auto-TLP (Automatic Temporal Link Prediction)** - Automatic relationship inference
+  - Embedding similarity-based edge creation
+  - Co-access pattern detection
+  - Temporal proximity association
+  - Transitive inference (A→B + B→C suggests A→C)
+  - Feature flag: `NORNICDB_AUTO_TLP_ENABLED`
+
+- **Heimdall QC for Auto-TLP** (Experimental) - LLM quality control for inferred edges
+  - Batch review of TLP suggestions before edge creation
+  - Optional augmentation mode (Heimdall can suggest additional edges)
+  - Stateless one-shot calls sharing KV cache with Bifrost
+  - Fail-open behavior (approve on error, log, continue)
+  - Feature flags: `NORNICDB_AUTO_TLP_LLM_QC_ENABLED`, `NORNICDB_AUTO_TLP_LLM_AUGMENT_ENABLED`
+
+- **Edge Decay System** - Automatic cleanup of unused auto-generated edges
+  - Configurable decay rates and grace periods
+  - Reinforcement on re-access
+  - Background decay process
+  - Feature flag: `NORNICDB_EDGE_DECAY_ENABLED` (enabled by default)
+
+- **K-Means GPU Clustering** - GPU-accelerated clustering for embeddings
+  - Metal shader implementation for Apple Silicon
+  - Atomic operations for cluster assignment
+  - Integration with semantic search
+  - Feature flag: `NORNICDB_GPU_CLUSTERING_ENABLED`
+
+- **Find Similar Inline Expansion** - UI feature for semantic search
+  - Click "Find Similar" to discover related nodes
+  - Real-time embedding count display
+  - Integrated with vector search
+
+- **Thread-Safe Implicit Transactions** - Concurrency fixes
+  - Proper locking for implicit transactions
+  - Unique constraint enforcement during concurrent writes
+  - No performance impact on normal operations
+
+### Changed
+
+- **BM25 Full-Text Indexing** - Now indexes complete node representation
+  - All properties and fields included in BM25 index
+  - Better search coverage for hybrid queries
+
+### Fixed
+
+- WAL log size compaction and auto-compaction on startup
+- Orphaned embeddings in GPU memory
+- Race condition in embedding regeneration
+- Query parsing for complex Cypher patterns
+- Windows build configurations
+
+### Documentation
+
+- Auto-TLP feature documentation
+- Heimdall QC proposal (RFC)
+- Feature flags reference updated
+- Migration notice for gob encoding change
+
+---
 ### Added
 
 - **Heimdall AI Assistant** - Built-in SLM for natural language database interaction
@@ -228,12 +287,13 @@ NornicDB v1.0.0 marks the first production-ready release of the cognitive graph 
 
 ## Version History
 
+- **1.0.1** (2025-12-05) - Auto-TLP, Heimdall QC, Edge Decay, GPU K-Means
 - **1.0.0** (2025-12-03) - 🎉 First stable release with Heimdall AI
 - **0.1.4** (2025-12-01) - Documentation reorganization
 - **0.1.3** (2025-11-25) - Complete API documentation
 - **0.1.2** (2025-11-20) - GPU acceleration and ML features
 - **0.1.1** (2025-11-15) - Hybrid search and indexing
-- **0.1.0** (2025-11-01) - Initial release
+- **0.1.0** (2025-11-01) - Initial build
 
 ## Links
 
