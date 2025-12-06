@@ -368,18 +368,58 @@ auto_links:
 
 ## Building
 
+### Native Binary
+
 ```bash
-# Native binary
+# Basic build
 make build
 
-# Docker images
-make build-arm64-metal      # Base (BYOM)
-make build-arm64-metal-bge  # With model
-make build-amd64-cuda       # NVIDIA base
-make build-amd64-cuda-bge   # NVIDIA with model
+# Headless (no UI)
+make build-headless
+
+# With local LLM support
+make build-localllm
+```
+
+### Docker Images
+
+```bash
+# Download models for Heimdall builds (automatic if missing)
+make download-models        # BGE-M3 + Qwen2.5-0.5B (~750MB)
+make check-models          # Verify models present
+
+# ARM64 (Apple Silicon)
+make build-arm64-metal                  # Base (BYOM)
+make build-arm64-metal-bge              # With BGE embeddings
+make build-arm64-metal-bge-heimdall     # With BGE + Heimdall AI
+make build-arm64-metal-headless         # Headless (no UI)
+
+# AMD64 CUDA (NVIDIA GPU)
+make build-amd64-cuda                   # Base (BYOM)
+make build-amd64-cuda-bge               # With BGE embeddings
+make build-amd64-cuda-bge-heimdall      # With BGE + Heimdall AI
+make build-amd64-cuda-headless          # Headless (no UI)
+
+# AMD64 CPU-only
+make build-amd64-cpu                    # Minimal
+make build-amd64-cpu-headless           # Minimal headless
+
+# Build all variants for your architecture
+make build-all
 
 # Deploy to registry
-make deploy-all             # Both variants for your arch
+make deploy-all             # Build + push all variants
+```
+
+### Cross-Compilation
+
+```bash
+# Build for other platforms from macOS
+make cross-linux-amd64     # Linux x86_64
+make cross-linux-arm64     # Linux ARM64
+make cross-rpi             # Raspberry Pi 4/5
+make cross-windows         # Windows (CPU-only)
+make cross-all             # All platforms
 ```
 
 ## Roadmap

@@ -68,6 +68,13 @@ LLAMA_CUDA := $(REGISTRY)/llama-cuda-libs:b4785
 # Dockerfiles
 DOCKER_DIR := docker
 
+# Model URLs and paths
+MODELS_DIR := models
+BGE_MODEL := $(MODELS_DIR)/bge-m3.gguf
+QWEN_MODEL := $(MODELS_DIR)/qwen2.5-0.5b-instruct-q4_k_m.gguf
+BGE_URL := https://huggingface.co/gpustack/bge-m3-GGUF/resolve/main/bge-m3-Q4_K_M.gguf
+QWEN_URL := https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf
+
 .PHONY: build-arm64-metal build-arm64-metal-bge build-arm64-metal-bge-heimdall build-arm64-metal-headless
 .PHONY: build-amd64-cuda build-amd64-cuda-bge build-amd64-cuda-bge-heimdall build-amd64-cuda-headless
 .PHONY: build-amd64-cpu build-amd64-cpu-headless
@@ -81,6 +88,68 @@ DOCKER_DIR := docker
 .PHONY: deploy-all deploy-arm64-all deploy-amd64-all
 .PHONY: build-llama-cuda push-llama-cuda deploy-llama-cuda
 .PHONY: build build-localllm build-headless build-localllm-headless test clean images help
+.PHONY: download-models download-bge download-qwen check-models
+
+# ==============================================================================
+# Model Downloads (Heimdall prerequisites)
+# ==============================================================================
+
+# Create models directory if it doesn't exist
+$(MODELS_DIR):
+	@mkdir -p $(MODELS_DIR)
+
+# Download BGE embedding model if missing
+download-bge: $(MODELS_DIR)
+	@if [ ! -f "$(BGE_MODEL)" ]; then \
+		echo "╔══════════════════════════════════════════════════════════════╗"; \
+		echo "║ Downloading BGE-M3 embedding model...                        ║"; \
+		echo "╚══════════════════════════════════════════════════════════════╝"; \
+		echo "Source: $(BGE_URL)"; \
+		echo "Target: $(BGE_MODEL)"; \
+		echo "Size: ~400MB (this may take a few minutes)"; \
+		curl -L --progress-bar "$(BGE_URL)" -o "$(BGE_MODEL)"; \
+		echo "✓ Downloaded $(BGE_MODEL)"; \
+	else \
+		echo "✓ BGE model already exists: $(BGE_MODEL)"; \
+	fi
+
+# Download Qwen LLM model if missing
+download-qwen: $(MODELS_DIR)
+	@if [ ! -f "$(QWEN_MODEL)" ]; then \
+		echo "╔══════════════════════════════════════════════════════════════╗"; \
+		echo "║ Downloading Qwen2.5-0.5B-Instruct model...                   ║"; \
+		echo "╚══════════════════════════════════════════════════════════════╝"; \
+		echo "Source: $(QWEN_URL)"; \
+		echo "Target: $(QWEN_MODEL)"; \
+		echo "Size: ~350MB (this may take a few minutes)"; \
+		curl -L --progress-bar "$(QWEN_URL)" -o "$(QWEN_MODEL)"; \
+		echo "✓ Downloaded $(QWEN_MODEL)"; \
+	else \
+		echo "✓ Qwen model already exists: $(QWEN_MODEL)"; \
+	fi
+
+# Download both models if missing
+download-models: download-bge download-qwen
+	@echo ""
+	@echo "╔══════════════════════════════════════════════════════════════╗"
+	@echo "║ ✓ All Heimdall models ready                                  ║"
+	@echo "╚══════════════════════════════════════════════════════════════╝"
+
+# Check if models exist (without downloading)
+check-models:
+	@echo "Checking Heimdall models..."
+	@if [ -f "$(BGE_MODEL)" ]; then \
+		echo "✓ BGE model: $(BGE_MODEL)"; \
+	else \
+		echo "✗ BGE model missing: $(BGE_MODEL)"; \
+		echo "  Run: make download-bge"; \
+	fi
+	@if [ -f "$(QWEN_MODEL)" ]; then \
+		echo "✓ Qwen model: $(QWEN_MODEL)"; \
+	else \
+		echo "✗ Qwen model missing: $(QWEN_MODEL)"; \
+		echo "  Run: make download-qwen"; \
+	fi
 
 # ==============================================================================
 # Build (local only, no push)
@@ -98,16 +167,10 @@ build-arm64-metal-bge:
 	@echo "╚══════════════════════════════════════════════════════════════╝"
 	docker build $(DOCKER_BUILD_FLAGS) --platform linux/arm64 --build-arg EMBED_MODEL=true -t $(IMAGE_ARM64_BGE) -f $(DOCKER_DIR)/Dockerfile.arm64-metal .
 
-build-arm64-metal-bge-heimdall:
-	@echo "Building: $(IMAGE_ARM64_BGE_HEIMDALL) [BGE + Heimdall]"
-	@echo "Checking for required models..."
-ifeq ($(OS),Windows_NT)
-	@if not exist models\bge-m3.gguf (echo ERROR: models/bge-m3.gguf not found && exit /b 1)
-	@if not exist models\qwen2.5-0.5b-instruct-q4_k_m.gguf (echo ERROR: models/qwen2.5-0.5b-instruct-q4_k_m.gguf not found && exit /b 1)
-else
-	@test -f models/bge-m3.gguf || (echo "ERROR: models/bge-m3.gguf not found" && exit 1)
-	@test -f models/qwen2.5-0.5b-instruct-q4_k_m.gguf || (echo "ERROR: models/qwen2.5-0.5b-instruct-q4_k_m.gguf not found" && exit 1)
-endif
+build-arm64-metal-bge-heimdall: download-models
+	@echo "╔══════════════════════════════════════════════════════════════╗"
+	@echo "║ Building: $(IMAGE_ARM64_BGE_HEIMDALL) [BGE + Heimdall]"
+	@echo "╚══════════════════════════════════════════════════════════════╝"
 	docker build $(DOCKER_BUILD_FLAGS) --platform linux/arm64 -t $(IMAGE_ARM64_BGE_HEIMDALL) -f $(DOCKER_DIR)/Dockerfile.arm64-metal-heimdall .
 
 build-arm64-metal-headless:
@@ -128,16 +191,10 @@ build-amd64-cuda-bge:
 	@echo "╚══════════════════════════════════════════════════════════════╝"
 	docker build $(DOCKER_BUILD_FLAGS) --platform linux/amd64 --build-arg EMBED_MODEL=true -t $(IMAGE_AMD64_BGE) -f $(DOCKER_DIR)/Dockerfile.amd64-cuda .
 
-build-amd64-cuda-bge-heimdall:
-	@echo "Building: $(IMAGE_AMD64_BGE_HEIMDALL) [BGE + Heimdall]"
-	@echo "Checking for required models..."
-ifeq ($(OS),Windows_NT)
-	@if not exist models\bge-m3.gguf (echo ERROR: models/bge-m3.gguf not found && exit /b 1)
-	@if not exist models\qwen2.5-0.5b-instruct-q4_k_m.gguf (echo ERROR: models/qwen2.5-0.5b-instruct-q4_k_m.gguf not found && exit /b 1)
-else
-	@test -f models/bge-m3.gguf || (echo "ERROR: models/bge-m3.gguf not found" && exit 1)
-	@test -f models/qwen2.5-0.5b-instruct-q4_k_m.gguf || (echo "ERROR: models/qwen2.5-0.5b-instruct-q4_k_m.gguf not found" && exit 1)
-endif
+build-amd64-cuda-bge-heimdall: download-models
+	@echo "╔══════════════════════════════════════════════════════════════╗"
+	@echo "║ Building: $(IMAGE_AMD64_BGE_HEIMDALL) [BGE + Heimdall]"
+	@echo "╚══════════════════════════════════════════════════════════════╝"
 	docker build $(DOCKER_BUILD_FLAGS) --platform linux/amd64 -t $(IMAGE_AMD64_BGE_HEIMDALL) -f $(DOCKER_DIR)/Dockerfile.amd64-cuda-heimdall .
 
 build-amd64-cuda-headless:
@@ -494,6 +551,12 @@ clean:
 
 help:
 	@echo "NornicDB Build System (detected arch: $(HOST_ARCH))"
+	@echo ""
+	@echo "Model Downloads (Heimdall prerequisites):"
+	@echo "  make download-models         Download both BGE + Qwen models"
+	@echo "  make download-bge            Download BGE embedding model (~400MB)"
+	@echo "  make download-qwen           Download Qwen LLM model (~350MB)"
+	@echo "  make check-models            Check which models are present"
 	@echo ""
 	@echo "Local Development:"
 	@echo "  make build                   Build native binary with UI"

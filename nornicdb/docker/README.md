@@ -2,19 +2,31 @@
 
 ## Image Variants
 
-| Image | Description | Use When |
-|-------|-------------|----------|
-| `nornicdb-arm64-metal` | Base image (~50MB) | BYOM - bring your own models |
-| `nornicdb-arm64-metal-bge` | With BGE-M3 (~1.6GB) | Ready for embeddings immediately |
-| `nornicdb-arm64-metal-bge-heimdall` | With BGE-M3 + Heimdall (~2.0GB) | **Full cognitive features** - single-click deploy |
-| `nornicdb-amd64-cuda` | Base image (~3GB) | BYOM - bring your own models |
-| `nornicdb-amd64-cuda-bge` | With BGE-M3 (~4.5GB) | Ready for embeddings immediately |
+### ARM64 (Apple Silicon)
 
-### 🛡️ Heimdall Build (NEW)
+| Image | Size | Description | Use When |
+|-------|------|-------------|----------|
+| `nornicdb-arm64-metal` | ~148MB | Base image | BYOM - bring your own models |
+| `nornicdb-arm64-metal-bge` | ~586MB | With BGE-M3 | Ready for embeddings immediately |
+| `nornicdb-arm64-metal-bge-heimdall` | ~1.1GB | With BGE-M3 + Heimdall | **Full cognitive features** - single-click deploy |
+| `nornicdb-arm64-metal-headless` | ~148MB | Headless (no UI) | API-only, embedded deployments |
 
-The `nornicdb-arm64-metal-bge-heimdall` image is "batteries included":
-- **BGE-M3** for vector search/embeddings
-- **Qwen2.5-0.5B-Instruct** for Heimdall (cognitive guardian)
+### AMD64 (Intel/AMD)
+
+| Image | Size | Description | Use When |
+|-------|------|-------------|----------|
+| `nornicdb-amd64-cuda` | ~3GB | CUDA base | NVIDIA GPU, BYOM |
+| `nornicdb-amd64-cuda-bge` | ~4.5GB | CUDA + BGE-M3 | NVIDIA GPU, ready for embeddings |
+| `nornicdb-amd64-cuda-bge-heimdall` | ~5GB | CUDA + BGE + Heimdall | **Full cognitive features with GPU** |
+| `nornicdb-amd64-cuda-headless` | ~2.9GB | CUDA headless | API-only with GPU |
+| `nornicdb-amd64-cpu` | ~500MB | CPU-only | No GPU required, minimal |
+| `nornicdb-amd64-cpu-headless` | ~500MB | CPU-only headless | API-only, smallest footprint |
+
+### 🛡️ Heimdall Build
+
+The Heimdall images (`*-bge-heimdall`) are "batteries included":
+- **BGE-M3** (~400MB) for vector search/embeddings
+- **Qwen2.5-0.5B-Instruct** (~350MB) for Heimdall (cognitive guardian)
 - **Bifrost** chat interface enabled by default
 
 Heimdall provides:
@@ -23,14 +35,22 @@ Heimdall provides:
 - Memory curation (summarization, deduplication)
 - Natural language interaction via Bifrost
 
+**Models are automatically downloaded during build** - no manual setup required!
+
 ---
 
 ## ARM64 Metal (Apple Silicon)
 
 ### Prerequisites
 - Docker Desktop for Mac
-- `models/bge-m3.gguf` file (for BGE variants)
-- `models/qwen2.5-1.5b-instruct-q4_k_m.gguf` file (for Heimdall variant)
+- Make (for build commands)
+- curl (for automatic model downloads)
+
+**Note:** Models are automatically downloaded during Heimdall builds. You can also pre-download:
+```bash
+make download-models  # Downloads BGE-M3 + Qwen2.5-0.5B (~750MB total)
+make check-models     # Verify models present
+```
 
 ### Build & Deploy Base Image
 ```bash
@@ -67,11 +87,11 @@ make deploy-arm64-metal-bge
 ```bash
 cd nornicdb
 
-# Ensure both model files exist
-ls -la models/bge-m3.gguf
-ls -la models/qwen2.5-1.5b-instruct-q4_k_m.gguf
+# Build automatically downloads models if missing (~750MB)
+make build-arm64-metal-bge-heimdall
 
-# Build (includes both models - batteries included!)
+# Or manually download first
+make download-models
 make build-arm64-metal-bge-heimdall
 
 # Push to registry
@@ -79,6 +99,17 @@ make push-arm64-metal-bge-heimdall
 
 # Or build + push in one command
 make deploy-arm64-metal-bge-heimdall
+```
+
+### Build & Deploy Headless Image (API-only)
+```bash
+cd nornicdb
+
+# Build headless variant (no UI)
+make build-arm64-metal-headless
+
+# Or build + push
+make deploy-arm64-metal-headless
 ```
 
 **Running the Heimdall image:**
@@ -142,6 +173,30 @@ make push-amd64-cuda-bge
 
 # Or build + push in one command
 make deploy-amd64-cuda-bge
+```
+
+### Build & Deploy Heimdall Image (full cognitive features)
+```bash
+cd nornicdb
+
+# Build automatically downloads models if missing (~750MB)
+make build-amd64-cuda-bge-heimdall
+
+# Or build + push in one command
+make deploy-amd64-cuda-bge-heimdall
+```
+
+### Build & Deploy CPU-Only Images (no GPU)
+```bash
+cd nornicdb
+
+# CPU-only variant (embeddings disabled by default)
+make build-amd64-cpu
+make deploy-amd64-cpu
+
+# CPU-only headless
+make build-amd64-cpu-headless
+make deploy-amd64-cpu-headless
 ```
 
 ---
@@ -281,13 +336,26 @@ See [APOC Plugin Guide](../docs/user-guides/APOC_PLUGINS.md) for creating custom
 
 ## Environment Variables
 
+### Core Settings
+
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `NORNICDB_DATA_DIR` | `/data` | Data directory |
 | `NORNICDB_HTTP_PORT` | `7474` | HTTP/UI port |
 | `NORNICDB_BOLT_PORT` | `7687` | Bolt protocol port |
 | `NORNICDB_NO_AUTH` | `true` | Disable authentication |
-| `NORNICDB_EMBEDDING_MODEL` | `bge-m3` | Embedding model name |
+| `NORNICDB_HEADLESS` | `false` | Disable web UI |
+
+### Embeddings & AI
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `NORNICDB_EMBEDDING_PROVIDER` | `local` | Embedding provider (local/ollama/openai/none) |
+| `NORNICDB_EMBEDDING_MODEL` | `models/bge-m3.gguf` | Embedding model path |
 | `NORNICDB_MODELS_DIR` | `/app/models` | Models directory |
-| `NORNICDB_EMBEDDING_GPU_LAYERS` | `-1` (CUDA) / `0` (Metal) | GPU layers |
+| `NORNICDB_EMBEDDING_GPU_LAYERS` | `-1` (CUDA) / `0` (Metal) | GPU layers for embeddings |
+| `NORNICDB_HEIMDALL_ENABLED` | `false` | Enable Heimdall AI assistant |
+| `NORNICDB_HEIMDALL_MODEL` | `models/qwen2.5-0.5b-instruct-q4_k_m.gguf` | Heimdall LLM model path |
 | `NORNICDB_PLUGINS_DIR` | `/app/plugins` | APOC plugins directory |
+
+**Note:** In CPU-only images, `NORNICDB_EMBEDDING_PROVIDER` defaults to `none` for optimal performance.

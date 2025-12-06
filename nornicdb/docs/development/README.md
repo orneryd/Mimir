@@ -25,9 +25,25 @@ go mod download
 # Run tests
 go test ./...
 
-# Build
-go build -o nornicdb ./cmd/nornicdb
+# Build native binary
+make build
+
+# Build with Heimdall AI support
+make download-models        # Download required models (~750MB)
+make build-localllm         # Build with local LLM support
+
+# Build Docker images
+make build-arm64-metal-bge-heimdall  # Full featured (auto-downloads models)
+make build-all                        # All variants for your architecture
 ```
+
+**Key Build Targets:**
+- `make build` - Native binary with UI
+- `make build-headless` - API-only (no UI)
+- `make build-localllm` - With local LLM/embeddings
+- `make download-models` - Download Heimdall models (BGE-M3 + Qwen2.5)
+- `make check-models` - Verify model files
+- `make plugins` - Build APOC plugins (Linux/macOS only)
 
 [Complete setup guide →](setup.md)
 
