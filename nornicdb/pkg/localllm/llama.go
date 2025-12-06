@@ -136,7 +136,8 @@ int tokenize(struct llama_model* model, const char* text, int text_len, int32_t*
 int embed(struct llama_context* ctx, int32_t* tokens, int n_tokens, float* out, int n_embd) {
     // Clear memory before each embedding (not persistent for embeddings)
     // KV cache API renamed to "memory" in b7285
-    llama_memory_clear(llama_get_memory(ctx));
+    // Second arg (true) clears the data
+    llama_memory_clear(llama_get_memory(ctx), 1);
 
     // Create batch
     struct llama_batch batch = llama_batch_init(n_tokens, 0, 1);
@@ -207,7 +208,7 @@ struct llama_context* create_gen_context(struct llama_model* model, int n_ctx, i
 
 // Decode a batch of tokens (for generation)
 int gen_decode(struct llama_context* ctx, int32_t* tokens, int n_tokens, int start_pos) {
-    llama_memory_clear(llama_get_memory(ctx));
+    llama_memory_clear(llama_get_memory(ctx), 1);
 
     struct llama_batch batch = llama_batch_init(n_tokens, 0, 1);
     for (int i = 0; i < n_tokens; i++) {
@@ -366,7 +367,7 @@ int safe_gen_decode(struct llama_context* ctx, struct llama_model* model,
     }
 
     // Clear memory for fresh decode
-    llama_memory_clear(llama_get_memory(ctx));
+    llama_memory_clear(llama_get_memory(ctx), 1);
 
     // Create batch
     struct llama_batch batch = llama_batch_init(n_tokens, 0, 1);
@@ -464,7 +465,7 @@ size_t get_model_memory_size(struct llama_model* model) {
 // Reset context state (clear memory, etc.)
 void reset_context(struct llama_context* ctx) {
     if (ctx) {
-        llama_memory_clear(llama_get_memory(ctx));
+        llama_memory_clear(llama_get_memory(ctx), 1);
     }
 }
 */

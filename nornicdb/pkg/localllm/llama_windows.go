@@ -132,7 +132,8 @@ int tokenize(struct llama_model* model, const char* text, int text_len, int32_t*
 int embed(struct llama_context* ctx, int32_t* tokens, int n_tokens, float* out, int n_embd) {
     // Clear memory before each embedding (not persistent for embeddings)
     // KV cache API renamed to "memory" in b7285
-    llama_memory_clear(llama_get_memory(ctx));
+    // Second arg (true) clears the data
+    llama_memory_clear(llama_get_memory(ctx), 1);
 
     // Create batch
     struct llama_batch batch = llama_batch_init(n_tokens, 0, 1);
