@@ -248,7 +248,15 @@ func runServe(cmd *cobra.Command, args []string) error {
 		cache.ConfigureGlobalCache(cfg.Memory.QueryCacheSize, cfg.Memory.QueryCacheTTL)
 	}
 
-	fmt.Printf("🚀 Starting NornicDB v%s (build: %s)\n", version, buildTime)
+	// Display version with commit hash and build timestamp
+	versionInfo := fmt.Sprintf("v%s", version)
+	if commit != "dev" && commit != "" {
+		versionInfo = fmt.Sprintf("v%s-%s", version, commit[:7]) // Short hash
+	}
+	if buildTime != "unknown" && buildTime != "" {
+		versionInfo = fmt.Sprintf("%s (built: %s)", versionInfo, buildTime)
+	}
+	fmt.Printf("🚀 Starting NornicDB %s\n", versionInfo)
 	fmt.Printf("   Data directory:  %s\n", dataDir)
 	fmt.Printf("   Bolt protocol:   bolt://localhost:%d\n", boltPort)
 	fmt.Printf("   HTTP API:        http://localhost:%d\n", httpPort)

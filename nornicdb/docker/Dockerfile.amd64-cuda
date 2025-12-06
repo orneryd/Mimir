@@ -60,15 +60,17 @@ COPY . .
 COPY --from=ui /ui/dist ./ui/dist
 
 # Build with CUDA + localllm (with or without UI based on HEADLESS arg)
-RUN if [ "$HEADLESS" = "true" ]; then \
+RUN COMMIT_HASH=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown") && \
+    BUILD_TIME=$(date -u +%Y%m%d-%H%M%S) && \
+    if [ "$HEADLESS" = "true" ]; then \
       echo "Building headless (no UI)..." && \
       CGO_ENABLED=1 go build -tags "cuda localllm noui" \
-        -ldflags="-s -w -X main.buildTime=$(date -u +%Y%m%d-%H%M%S)" \
+        -ldflags="-s -w -X main.buildTime=${BUILD_TIME} -X main.commit=${COMMIT_HASH}" \
         -o nornicdb ./cmd/nornicdb; \
     else \
       echo "Building with UI..." && \
       CGO_ENABLED=1 go build -tags "cuda localllm" \
-        -ldflags="-s -w -X main.buildTime=$(date -u +%Y%m%d-%H%M%S)" \
+        -ldflags="-s -w -X main.buildTime=${BUILD_TIME} -X main.commit=${COMMIT_HASH}" \
         -o nornicdb ./cmd/nornicdb; \
     fi
 
@@ -90,8 +92,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY --from=builder /build/nornicdb /app/
 COPY --from=builder /build/apoc/built-plugins /app/plugins/
-COPY docker/entrypoint.sh /app/
-RUN chmod +x /app/entrypoint.sh
+COPY docker/entrypoint.sh /app/entrypoint-real.sh
+COPY docker/cuda-fallback-wrapper.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh /app/entrypoint-real.sh
 
 # Model embedding: only copy when EMBED_MODEL=true (uses BuildKit mount to avoid layer bloat)
 ARG EMBED_MODEL=false
