@@ -72,6 +72,10 @@ struct llama_model* load_model(const char* path, int n_gpu_layers) {
     // Memory mapping for low memory usage
     params.use_mmap = 1;
 
+    // Device selection - NULL means use all available devices
+    // (new in b7285, explicit for clarity)
+    params.devices = NULL;
+
     // GPU layer offloading
     // -1 means offload all layers (determined after loading)
     // For now, use a high number that will be clamped by llama.cpp
@@ -103,13 +107,16 @@ struct llama_context* create_context(struct llama_model* model, int n_ctx, int n
     params.embeddings = 1;
     params.pooling_type = LLAMA_POOLING_TYPE_MEAN;
 
-    // Flash attention - major speedup on CUDA
-    #ifdef LLAMA_SUPPORTS_FLASH_ATTN
-    params.flash_attn = 1;
-    #endif
+    // Set attention type for embedding models (non-causal, BERT-style)
+    // Embedding models use bidirectional attention unlike causal LLMs
+    params.attention_type = LLAMA_ATTENTION_TYPE_NON_CAUSAL;
 
-    // Disable features not needed for embeddings
-    params.logits_all = 0;  // We only need the pooled embedding
+    // Flash attention - major speedup on CUDA
+    // Auto-detect best setting based on hardware and model
+    params.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_AUTO;
+
+    // logits_all removed in newer llama.cpp - controlled per-batch now
+    // We set batch.logits[i] = 1 in embed() function instead
 
     return llama_init_from_model(model, params);
 }
@@ -123,8 +130,9 @@ int tokenize(struct llama_model* model, const char* text, int text_len, int32_t*
 
 // Generate embedding with GPU acceleration
 int embed(struct llama_context* ctx, int32_t* tokens, int n_tokens, float* out, int n_embd) {
-    // Clear KV cache before each embedding (not persistent for embeddings)
-    llama_kv_cache_clear(ctx);
+    // Clear memory before each embedding (not persistent for embeddings)
+    // KV cache API renamed to "memory" in b7285
+    llama_memory_clear(llama_get_memory(ctx));
 
     // Create batch
     struct llama_batch batch = llama_batch_init(n_tokens, 0, 1);

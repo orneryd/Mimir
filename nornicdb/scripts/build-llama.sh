@@ -5,8 +5,8 @@
 #   ./scripts/build-llama.sh [version]
 #
 # Examples:
-#   ./scripts/build-llama.sh          # Uses default version (b4535)
-#   ./scripts/build-llama.sh b4600    # Specific version
+#   ./scripts/build-llama.sh          # Uses default version (b7285)
+#   ./scripts/build-llama.sh b8000    # Specific version
 #
 # Output:
 #   lib/llama/libllama_{os}_{arch}.a
@@ -20,7 +20,7 @@
 
 set -euo pipefail
 
-VERSION="${1:-b4535}"
+VERSION="${1:-b7285}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 OUTDIR="$PROJECT_ROOT/lib/llama"
@@ -52,7 +52,7 @@ ARCH=$(uname -m)
 echo "   Platform: ${OS}/${ARCH}"
 
 # Base CMake args for static library
-CMAKE_ARGS="-DLLAMA_STATIC=ON -DBUILD_SHARED_LIBS=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_SERVER=OFF"
+CMAKE_ARGS="-DLLAMA_STATIC=ON -DBUILD_SHARED_LIBS=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_SERVER=OFF -DLLAMA_CURL=OFF"
 
 # GPU-specific configuration
 GPU_SUFFIX=""

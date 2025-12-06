@@ -76,6 +76,10 @@ struct llama_model* load_model(const char* path, int n_gpu_layers) {
     // Memory mapping for low memory usage
     params.use_mmap = 1;
 
+    // Device selection - NULL means use all available devices
+    // (new in b7285, explicit for clarity)
+    params.devices = NULL;
+
     // GPU layer offloading
     // -1 means offload all layers (determined after loading)
     // For now, use a high number that will be clamped by llama.cpp
@@ -107,14 +111,16 @@ struct llama_context* create_context(struct llama_model* model, int n_ctx, int n
     params.embeddings = 1;
     params.pooling_type = LLAMA_POOLING_TYPE_MEAN;
 
-    // Flash attention - major speedup on Metal and CUDA
-    // Note: Some older llama.cpp versions may not have this
-    #ifdef LLAMA_SUPPORTS_FLASH_ATTN
-    params.flash_attn = 1;
-    #endif
+    // Set attention type for embedding models (non-causal, BERT-style)
+    // Embedding models use bidirectional attention unlike causal LLMs
+    params.attention_type = LLAMA_ATTENTION_TYPE_NON_CAUSAL;
 
-    // Disable features not needed for embeddings
-    params.logits_all = 0;  // We only need the pooled embedding
+    // Flash attention - major speedup on Metal and CUDA
+    // Auto-detect best setting based on hardware and model
+    params.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_AUTO;
+
+    // logits_all removed in newer llama.cpp - controlled per-batch now
+    // We set batch.logits[i] = 1 in embed() function instead
 
     return llama_init_from_model(model, params);
 }
@@ -128,8 +134,9 @@ int tokenize(struct llama_model* model, const char* text, int text_len, int32_t*
 
 // Generate embedding with GPU acceleration
 int embed(struct llama_context* ctx, int32_t* tokens, int n_tokens, float* out, int n_embd) {
-    // Clear KV cache before each embedding (not persistent for embeddings)
-    llama_kv_cache_clear(ctx);
+    // Clear memory before each embedding (not persistent for embeddings)
+    // KV cache API renamed to "memory" in b7285
+    llama_memory_clear(llama_get_memory(ctx));
 
     // Create batch
     struct llama_batch batch = llama_batch_init(n_tokens, 0, 1);
@@ -186,19 +193,21 @@ struct llama_context* create_gen_context(struct llama_model* model, int n_ctx, i
 
     // Generation mode: we need logits, not embeddings
     params.embeddings = 0;
-    params.logits_all = 0;  // Only need logits for last token during generation
+
+    // Set attention type for generation (causal)
+    params.attention_type = LLAMA_ATTENTION_TYPE_CAUSAL;
 
     // Flash attention for speed
-    #ifdef LLAMA_SUPPORTS_FLASH_ATTN
-    params.flash_attn = 1;
-    #endif
+    params.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_AUTO;
+
+    // logits_all removed - controlled per-batch now
 
     return llama_init_from_model(model, params);
 }
 
 // Decode a batch of tokens (for generation)
 int gen_decode(struct llama_context* ctx, int32_t* tokens, int n_tokens, int start_pos) {
-    llama_kv_cache_clear(ctx);
+    llama_memory_clear(llama_get_memory(ctx));
 
     struct llama_batch batch = llama_batch_init(n_tokens, 0, 1);
     for (int i = 0; i < n_tokens; i++) {
@@ -280,9 +289,10 @@ int get_vocab_size(struct llama_model* model) {
 // Check if context is healthy (not NULL, has valid state)
 int ctx_is_healthy(struct llama_context* ctx) {
     if (!ctx) return 0;
-    // Try to get KV cache info - if this works, context is alive
-    int32_t n_cells = llama_get_kv_cache_used_cells(ctx);
-    return n_cells >= 0 ? 1 : 0;
+    // Try to get memory info - if this works, context is alive
+    // Memory API renamed from KV cache in b7285
+    llama_memory_t mem = llama_get_memory(ctx);
+    return mem != NULL ? 1 : 0;
 }
 
 // Check if model is healthy
@@ -355,8 +365,8 @@ int safe_gen_decode(struct llama_context* ctx, struct llama_model* model,
         return -106;
     }
 
-    // Clear KV cache for fresh decode
-    llama_kv_cache_clear(ctx);
+    // Clear memory for fresh decode
+    llama_memory_clear(llama_get_memory(ctx));
 
     // Create batch
     struct llama_batch batch = llama_batch_init(n_tokens, 0, 1);
@@ -451,10 +461,10 @@ size_t get_model_memory_size(struct llama_model* model) {
     return (size_t)(n_vocab * n_embd * 4) + (size_t)(n_layer * n_embd * n_embd * 4 * 4);
 }
 
-// Reset context state (clear KV cache, etc.)
+// Reset context state (clear memory, etc.)
 void reset_context(struct llama_context* ctx) {
     if (ctx) {
-        llama_kv_cache_clear(ctx);
+        llama_memory_clear(llama_get_memory(ctx));
     }
 }
 */

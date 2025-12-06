@@ -7,7 +7,7 @@
 # For local builds, use: .\scripts\build-llama-cuda.ps1
 #
 # Build (requires Windows container mode):
-#   docker build -f docker/Dockerfile.llama-cuda-windows -t timothyswt/llama-cuda-libs-windows:b4785 .
+#   docker build -f docker/Dockerfile.llama-cuda-windows -t timothyswt/llama-cuda-libs-windows:7285 .
 #
 # For GitHub Actions:
 #   See .github/workflows/build-llama-windows.yml

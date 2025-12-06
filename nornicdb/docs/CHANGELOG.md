@@ -8,9 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 NornicDB v1.0.0 marks the first production-ready release of the cognitive graph database.
 
-## [1.0.0] - 2025-12-05
+## [1.0.0] - 2025-12-06
 
 ### Added
+
+- **llama.cpp b7285 Update** - Major update to local embedding engine (BREAKING)
+  - Updated from b4535 to b7285 (2,750 commits)
+  - Fixes GGUF model compatibility (`vector::_M_range_check` errors)
+  - New `llama_memory_*` API (renamed from `llama_kv_cache_*`)
+  - Explicit attention types: `NON_CAUSAL` for embeddings, `CAUSAL` for generation
+  - Flash attention enum (`LLAMA_FLASH_ATTN_TYPE_AUTO`)
+  - Docker images now use `:7285` tag for CUDA libraries
+  - Requires rebuilding all platform libraries
 
 - **Auto-TLP (Automatic Temporal Link Prediction)** - Automatic relationship inference
   - Embedding similarity-based edge creation
