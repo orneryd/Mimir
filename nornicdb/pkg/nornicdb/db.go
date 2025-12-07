@@ -428,8 +428,8 @@ type DB struct {
 	wal            *storage.WAL // Write-ahead log for durability
 	decay          *decay.Manager
 	inference      *inference.Engine
-	cypherExecutor *cypher.StorageExecutor
-	gpuManager     interface{} // *gpu.Manager - interface to avoid circular import
+	cypherExecutor cypher.CypherExecutor // Interface for flexible executor selection
+	gpuManager     interface{}           // *gpu.Manager - interface to avoid circular import
 
 	// Search service (uses pre-computed embeddings from Mimir)
 	searchService *search.Service
@@ -789,8 +789,17 @@ func Open(dataDir string, config *Config) (*DB, error) {
 		fmt.Println("⚠️  Using in-memory storage (data will not persist)")
 	}
 
-	// Initialize Cypher executor
-	db.cypherExecutor = cypher.NewStorageExecutor(db.storage)
+	// Initialize Cypher executor based on NORNICDB_EXECUTOR_MODE
+	db.cypherExecutor = cypher.NewCypherExecutor(db.storage)
+	execInfo := cypher.GetExecutorInfo()
+	fmt.Println("")
+	fmt.Println("╔═══════════════════════════════════════════════════════════════════════╗")
+	fmt.Printf("║  🔧 CYPHER EXECUTOR MODE: %-45s║\n", execInfo.Mode)
+	fmt.Printf("║     %-64s║\n", execInfo.Description)
+	fmt.Println("║                                                                       ║")
+	fmt.Println("║  Set NORNICDB_EXECUTOR_MODE to: nornic | antlr | hybrid               ║")
+	fmt.Println("╚═══════════════════════════════════════════════════════════════════════╝")
+	fmt.Println("")
 
 	// Load plugins from configured directory (NORNICDB_PLUGINS_DIR)
 	pluginsDir := os.Getenv("NORNICDB_PLUGINS_DIR")
