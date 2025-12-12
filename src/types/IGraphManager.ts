@@ -187,6 +187,17 @@ export interface IGraphManager {
    */
   getDriver(): any;
 
+  /**
+   * Check if connected to NornicDB (vs Neo4j)
+   * 
+   * NornicDB uses RRF (Reciprocal Rank Fusion) scores which are in a different
+   * range (0.01-0.05) compared to Neo4j's cosine similarity (0-1).
+   * Use this to adjust similarity thresholds accordingly.
+   * 
+   * @returns true if connected to NornicDB, false for Neo4j
+   */
+  getIsNornicDB(): boolean;
+
   // ============================================================================
   // MULTI-AGENT LOCKING
   // ============================================================================

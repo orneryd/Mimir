@@ -1,3 +1,6 @@
+# NORNICDB HAS MOVED! (THE NEW REPO CLICK BELOW) 
+# https://github.com/orneryd/NornicDB 
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/orneryd/Mimir/refs/heads/main/nornicdb/docs/assets/logos/nornicdb-logo.svg" alt="NornicDB Logo" width="200"/>
 </p>

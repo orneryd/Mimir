@@ -139,6 +139,19 @@ export class GraphManager implements IGraphManager {
   }
 
   /**
+   * Check if connected to NornicDB (vs Neo4j)
+   * 
+   * NornicDB uses RRF (Reciprocal Rank Fusion) scores which are in a different
+   * range (0.01-0.05) compared to Neo4j's cosine similarity (0-1).
+   * Use this to adjust similarity thresholds accordingly.
+   * 
+   * @returns true if connected to NornicDB, false for Neo4j
+   */
+  getIsNornicDB(): boolean {
+    return this.isNornicDB;
+  }
+
+  /**
    * Detect whether we're connected to NornicDB or Neo4j
    * 
    * Uses multiple detection methods in priority order:
@@ -612,8 +625,9 @@ export class GraphManager implements IGraphManager {
       };
 
       // Create the node first
+      // Note: Using simple RETURN n instead of map projection for NornicDB compatibility
       const createResult = await session.run(
-        'CREATE (n:Node $props) RETURN n { .*, embedding: null }',
+        'CREATE (n:Node $props) RETURN n',
         { props: nodeProps }
       );
 
@@ -721,7 +735,7 @@ export class GraphManager implements IGraphManager {
     const session = this.driver.session();
     try {
       const result = await session.run(
-        'MATCH (n:Node {id: $id}) RETURN n { .*, embedding: null }',
+        'MATCH (n:Node {id: $id}) RETURN n',
         { id }
       );
 
@@ -806,7 +820,7 @@ export class GraphManager implements IGraphManager {
         `
         MATCH (n:Node {id: $id})
         SET n += $properties
-        RETURN n { .*, embedding: null }
+        RETURN n
         `,
         { id, properties: setProperties }
       );
@@ -1023,7 +1037,7 @@ export class GraphManager implements IGraphManager {
         UNWIND $nodes as node
         CREATE (n:Node)
         SET n = node
-        RETURN n { .*, embedding: null }
+        RETURN n
         `,
         { nodes: preparedNodes }
       );
@@ -1104,7 +1118,7 @@ export class GraphManager implements IGraphManager {
         UNWIND $updates as update
         MATCH (n:Node {id: update.id})
         SET n += update.properties
-        RETURN n { .*, embedding: null }
+        RETURN n
         `,
         { updates: updatesWithTimestamp }
       );
@@ -1231,29 +1245,12 @@ export class GraphManager implements IGraphManager {
         query += filterConditions.join(' AND ');
       }
 
-      // Strip large content at query level: exclude embedding, conditionally strip content
-      query += ` RETURN n {
-        .*, 
-        embedding: null,
-        content: CASE 
-          WHEN size(coalesce(n.content, '')) > 1000 
-          THEN null 
-          ELSE n.content 
-        END,
-        _contentStripped: CASE 
-          WHEN size(coalesce(n.content, '')) > 1000 
-          THEN true 
-          ELSE null 
-        END,
-        _contentLength: CASE 
-          WHEN size(coalesce(n.content, '')) > 1000 
-          THEN size(n.content) 
-          ELSE null 
-        END
-      } as n`;
+      // Use simple RETURN for NornicDB compatibility - content stripping handled in nodeFromRecord
+      query += ` RETURN n`;
 
       const result = await session.run(query, params);
-      return result.records.map(r => this.nodeFromRecord(r.get('n'), undefined, false));
+      // Pass stripContent=true to handle large content in application layer
+      return result.records.map(r => this.nodeFromRecord(r.get('n'), undefined, true));
     } finally {
       await session.close();
     }
@@ -1285,42 +1282,13 @@ export class GraphManager implements IGraphManager {
         `
         MATCH (n)
         WHERE (n.id IN $ids OR n.path IN $ids)
-        RETURN n {
-          .*, 
-          embedding: null,
-          content: CASE 
-            WHEN size(coalesce(n.content, '')) > 1000 
-            THEN null 
-            ELSE n.content 
-          END,
-          text: CASE 
-            WHEN size(coalesce(n.text, '')) > 1000 
-            THEN null 
-            ELSE n.text 
-          END,
-          _contentStripped: CASE 
-            WHEN size(coalesce(n.content, '')) > 1000 OR size(coalesce(n.text, '')) > 1000
-            THEN true 
-            ELSE null 
-          END,
-          _contentLength: CASE 
-            WHEN size(coalesce(n.content, '')) > 1000 THEN size(n.content)
-            WHEN size(coalesce(n.text, '')) > 1000 THEN size(n.text)
-            ELSE null 
-          END,
-          relevantLines: CASE
-            WHEN size(coalesce(n.content, '')) > 1000 AND n.content IS NOT NULL
-            THEN [line IN split(n.content, '\\n') WHERE toLower(line) CONTAINS toLower($query) | line][0..10]
-            WHEN size(coalesce(n.text, '')) > 1000 AND n.text IS NOT NULL
-            THEN [line IN split(n.text, '\\n') WHERE toLower(line) CONTAINS toLower($query) | line][0..10]
-            ELSE null
-          END
-        } as n
+        RETURN n
         `,
         { ids, query }
       );
 
-      return result.records.map(r => this.nodeFromRecord(r.get('n'), undefined, false));
+      // Handle content stripping in application layer for NornicDB compatibility
+      return result.records.map(r => this.nodeFromRecord(r.get('n'), undefined, true));
     } finally {
       await session.close();
     }
@@ -1359,30 +1327,12 @@ export class GraphManager implements IGraphManager {
         `
         MATCH (start:Node {id: $nodeId})-[e:EDGE*1..${depth}]-(neighbor:Node)
         ${edgeType ? 'WHERE ALL(rel IN e WHERE rel.type = $edgeType)' : ''}
-        RETURN DISTINCT neighbor {
-          .*, 
-          embedding: null,
-          content: CASE 
-            WHEN size(coalesce(neighbor.content, '')) > 1000 
-            THEN null 
-            ELSE neighbor.content 
-          END,
-          _contentStripped: CASE 
-            WHEN size(coalesce(neighbor.content, '')) > 1000 
-            THEN true 
-            ELSE null 
-          END,
-          _contentLength: CASE 
-            WHEN size(coalesce(neighbor.content, '')) > 1000 
-            THEN size(neighbor.content) 
-            ELSE null 
-          END
-        } as neighbor
+        RETURN DISTINCT neighbor
         `,
         { nodeId, edgeType }
       );
 
-      return result.records.map(r => this.nodeFromRecord(r.get('neighbor'), undefined, false));
+      return result.records.map(r => this.nodeFromRecord(r.get('neighbor'), undefined, true));
     } finally {
       await session.close();
     }
@@ -1396,25 +1346,7 @@ export class GraphManager implements IGraphManager {
         MATCH path = (start:Node {id: $nodeId})-[e:EDGE*0..${depth}]-(connected:Node)
         WITH nodes(path) as pathNodes, relationships(path) as pathEdges
         UNWIND pathNodes as node
-        WITH collect(DISTINCT node {
-          .*, 
-          embedding: null,
-          content: CASE 
-            WHEN size(coalesce(node.content, '')) > 1000 
-            THEN null 
-            ELSE node.content 
-          END,
-          _contentStripped: CASE 
-            WHEN size(coalesce(node.content, '')) > 1000 
-            THEN true 
-            ELSE null 
-          END,
-          _contentLength: CASE 
-            WHEN size(coalesce(node.content, '')) > 1000 
-            THEN size(node.content) 
-            ELSE null 
-          END
-        }) as allNodes, pathEdges
+        WITH collect(DISTINCT node) as allNodes, pathEdges
         UNWIND pathEdges as edge
         WITH allNodes, collect(DISTINCT edge) as allEdges
         RETURN allNodes, allEdges
@@ -1427,7 +1359,8 @@ export class GraphManager implements IGraphManager {
       }
 
       const record = result.records[0];
-      const nodes = record.get('allNodes').map((n: any) => this.nodeFromRecord(n, undefined, false));
+      // Handle content stripping in application layer for NornicDB compatibility
+      const nodes = record.get('allNodes').map((n: any) => this.nodeFromRecord(n, undefined, true));
       const edges = record.get('allEdges').map((e: any) => 
         this.edgeFromRecord(e, e.start, e.end)
       );
@@ -1620,7 +1553,7 @@ export class GraphManager implements IGraphManager {
             n.lockedAt = $now,
             n.lockExpiresAt = $lockExpiresAt,
             n.version = COALESCE(n.version, 0) + 1
-        RETURN n { .*, embedding: null }
+        RETURN n
         `,
         {
           nodeId,
@@ -1652,7 +1585,7 @@ export class GraphManager implements IGraphManager {
         MATCH (n:Node {id: $nodeId})
         WHERE n.lockedBy = $agentId
         REMOVE n.lockedBy, n.lockedAt, n.lockExpiresAt
-        RETURN n { .*, embedding: null }
+        RETURN n
         `,
         { nodeId, agentId }
       );
@@ -1704,29 +1637,11 @@ export class GraphManager implements IGraphManager {
         params.now = new Date().toISOString();
       }
 
-      // Strip large content at query level
-      cypher += ` RETURN n {
-        .*, 
-        embedding: null,
-        content: CASE 
-          WHEN size(coalesce(n.content, '')) > 1000 
-          THEN null 
-          ELSE n.content 
-        END,
-        _contentStripped: CASE 
-          WHEN size(coalesce(n.content, '')) > 1000 
-          THEN true 
-          ELSE null 
-        END,
-        _contentLength: CASE 
-          WHEN size(coalesce(n.content, '')) > 1000 
-          THEN size(n.content) 
-          ELSE null 
-        END
-      } as n`;
+      // Use simple RETURN for NornicDB compatibility - content stripping handled in nodeFromRecord
+      cypher += ` RETURN n`;
 
       const result = await session.run(cypher, params);
-      return result.records.map(record => this.nodeFromRecord(record.get('n'), undefined, false));
+      return result.records.map(record => this.nodeFromRecord(record.get('n'), undefined, true));
     } finally {
       await session.close();
     }

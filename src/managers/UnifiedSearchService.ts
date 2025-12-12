@@ -76,10 +76,51 @@ export class UnifiedSearchService {
   private driver: Driver;
   private embeddingsService: EmbeddingsService;
   private initialized: boolean = false;
+  private isNornicDB: boolean = false;
+  private providerDetected: boolean = false;
 
   constructor(driver: Driver) {
     this.driver = driver;
     this.embeddingsService = new EmbeddingsService();
+  }
+
+  /**
+   * Detect whether we're connected to NornicDB or Neo4j
+   * NornicDB supports server-side embedding generation for vector queries
+   */
+  private async detectDatabaseProvider(): Promise<void> {
+    if (this.providerDetected) return;
+    
+    // Check for manual override
+    const manualProvider = process.env.MIMIR_DATABASE_PROVIDER?.toLowerCase();
+    if (manualProvider === 'nornicdb') {
+      this.isNornicDB = true;
+      this.providerDetected = true;
+      return;
+    } else if (manualProvider === 'neo4j') {
+      this.isNornicDB = false;
+      this.providerDetected = true;
+      return;
+    }
+
+    // Auto-detect via server metadata
+    const session = this.driver.session();
+    try {
+      const result = await session.run('RETURN 1 as test');
+      const serverAgent = result.summary.server?.agent || '';
+      
+      if (serverAgent.toLowerCase().includes('nornicdb')) {
+        this.isNornicDB = true;
+      } else {
+        this.isNornicDB = false;
+      }
+    } catch (error) {
+      // Default to Neo4j on error
+      this.isNornicDB = false;
+    } finally {
+      await session.close();
+    }
+    this.providerDetected = true;
   }
 
   /**
@@ -113,11 +154,20 @@ export class UnifiedSearchService {
   async initialize(): Promise<void> {
     if (this.initialized) return;
     
+    // Detect database provider first
+    await this.detectDatabaseProvider();
+    
     try {
-      await this.embeddingsService.initialize();
+      // Only initialize client-side embeddings for Neo4j
+      // NornicDB handles embeddings server-side
+      if (!this.isNornicDB) {
+        await this.embeddingsService.initialize();
+      }
       this.initialized = true;
       
-      if (this.embeddingsService.isEnabled()) {
+      if (this.isNornicDB) {
+        console.log('✅ UnifiedSearchService: NornicDB detected - using server-side hybrid search');
+      } else if (this.embeddingsService.isEnabled()) {
         console.log('✅ UnifiedSearchService: Vector search enabled');
       } else {
         console.log('ℹ️  UnifiedSearchService: Vector search disabled, using full-text only');
@@ -208,7 +258,12 @@ export class UnifiedSearchService {
       };
     }
 
-    // Always use RRF hybrid search if embeddings enabled
+    // Use NornicDB's native hybrid search (server-side embeddings + RRF)
+    if (this.isNornicDB) {
+      return await this.nornicDBHybridSearch(query, options);
+    }
+    
+    // Use client-side RRF hybrid search if embeddings enabled (Neo4j)
     if (this.embeddingsService.isEnabled()) {
       return await this.rrfHybridSearch(query, options);
     }
@@ -226,6 +281,146 @@ export class UnifiedSearchService {
       fallback_triggered: false,
       message: 'Vector embeddings disabled. Using full-text search.'
     };
+  }
+
+  /**
+   * NornicDB native hybrid search using server-side embeddings
+   * NornicDB can accept string queries directly and generates embeddings server-side
+   * Returns RRF scores (typically 0.01-0.05 range, not cosine similarity 0-1)
+   */
+  private async nornicDBHybridSearch(query: string, options: UnifiedSearchOptions): Promise<UnifiedSearchResponse> {
+    const session = this.driver.session();
+    const startTime = Date.now();
+    
+    try {
+      const limit = Math.floor(options.limit || 50);
+      // NornicDB RRF scores are much lower than cosine similarity
+      // Good results are typically 0.01-0.05, so use a very low threshold
+      const minSimilarity = options.minSimilarity !== undefined ? options.minSimilarity : 0.005;
+      
+      console.log(`🔍 NornicDB: Hybrid search for "${query}" (min_score: ${minSimilarity}, limit: ${limit})`);
+      
+      // Build type filter if provided
+      let typeFilter = '';
+      const queryParams: any = {
+        searchQuery: query,
+        searchLimit: neo4j.int(limit * 2), // Get more candidates for filtering
+        minScore: minSimilarity,
+        finalLimit: neo4j.int(limit)
+      };
+      
+      if (options.types && Array.isArray(options.types) && options.types.length > 0) {
+        const expandedTypes = options.types.flatMap(type => {
+          if (type === 'file') {
+            return ['file', 'file_chunk'];
+          }
+          return type;
+        });
+        typeFilter = 'AND node.type IN $types';
+        queryParams.types = expandedTypes;
+      }
+
+      // NornicDB accepts string queries directly - it generates embeddings server-side
+      // This uses NornicDB's native hybrid search (vector + BM25 with RRF fusion)
+      // Use parameterized query to prevent Cypher injection attacks
+      const result = await session.run(`
+        CALL db.index.vector.queryNodes('node_embedding_index', $searchLimit, $searchQuery)
+        YIELD node, score
+        WHERE score >= $minScore ${typeFilter}
+        
+        // For FileChunk nodes, get parent File information
+        OPTIONAL MATCH (node)<-[:HAS_CHUNK]-(parentFile:File)
+        
+        RETURN CASE 
+                 WHEN node.type = 'file_chunk' AND parentFile IS NOT NULL 
+                 THEN parentFile.path 
+                 ELSE COALESCE(node.id, node.path)
+               END AS id,
+               node.type AS type,
+               CASE 
+                 WHEN node.type = 'file_chunk' AND parentFile IS NOT NULL 
+                 THEN parentFile.name 
+                 ELSE COALESCE(node.title, node.name)
+               END AS title,
+               node.name AS name,
+               node.description AS description,
+               node.content AS content,
+               node.path AS path,
+               CASE 
+                 WHEN node.type = 'file_chunk' AND parentFile IS NOT NULL 
+                 THEN parentFile.absolute_path 
+                 ELSE node.absolute_path
+               END AS absolute_path,
+               node.text AS chunk_text,
+               node.chunk_index AS chunk_index,
+               score AS similarity,
+               parentFile.path AS parent_file_path,
+               parentFile.absolute_path AS parent_file_absolute_path,
+               parentFile.name AS parent_file_name,
+               parentFile.language AS parent_file_language
+        ORDER BY score DESC
+        LIMIT $finalLimit
+      `, queryParams);
+
+      const results = result.records.map(record => this.formatSearchResult(record, 'vector'));
+      const totalTime = Date.now() - startTime;
+      
+      console.log(`🔍 NornicDB: Found ${results.length} results in ${totalTime}ms`);
+      
+      return {
+        status: 'success',
+        query,
+        results,
+        total_candidates: results.length,
+        returned: results.length,
+        search_method: 'rrf_hybrid',
+        fallback_triggered: false,
+        message: 'NornicDB native hybrid search (server-side embeddings + RRF)',
+        advanced_metrics: {
+          stage1Time: 0,
+          stage2Time: 0,
+          stage3Time: 0,
+          stage4Time: 0,
+          totalTime,
+          candidatesPerMethod: {
+            nornicdb_hybrid: results.length
+          }
+        }
+      };
+      
+    } catch (error: any) {
+      console.error('❌ NornicDB hybrid search error:', error.message);
+      
+      // Fall back to full-text search
+      try {
+        console.log('⚠️  Falling back to full-text search...');
+        const fulltextResults = await this.fullTextSearch(query, options);
+        
+        return {
+          status: 'success',
+          query,
+          results: fulltextResults,
+          total_candidates: fulltextResults.length,
+          returned: fulltextResults.length,
+          search_method: 'fulltext',
+          fallback_triggered: true,
+          message: `NornicDB hybrid search failed: ${error.message}. Fell back to full-text search.`
+        };
+      } catch (fulltextError: any) {
+        return {
+          status: 'success',
+          query,
+          results: [],
+          total_candidates: 0,
+          returned: 0,
+          search_method: 'fulltext',
+          fallback_triggered: true,
+          message: `Search unavailable: ${error.message}`
+        };
+      }
+    } finally {
+      await session.close();
+    }
   }
 
   /**
