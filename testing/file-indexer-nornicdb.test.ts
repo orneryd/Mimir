@@ -50,7 +50,14 @@ vi.mock('../src/indexing/EmbeddingsService.js', () => ({
         chunkIndex: 0
       }
     ])
-  }))
+  })),
+  // Export the standalone function used by FileIndexer for NornicDB metadata enrichment
+  formatMetadataForEmbedding: vi.fn((metadata: any) => {
+    const parts = [`File: ${metadata.relativePath}`];
+    if (metadata.language) parts.push(`Language: ${metadata.language}`);
+    if (metadata.extension) parts.push(`Extension: ${metadata.extension}`);
+    return parts.join(' | ') + '\n\n';
+  })
 }));
 
 // Mock DocumentParser
@@ -231,9 +238,10 @@ describe('FileIndexer - NornicDB Detection', () => {
       fileIndexer = new FileIndexer(mockDriver);
       await fileIndexer.indexFile('/test/file.txt', '/test', true);
       
-      // Verify detection happened
+      // Verify detection happened but embeddings service was NOT initialized
+      // For NornicDB, embeddingsInitialized stays false since initEmbeddings() is never called
       expect((fileIndexer as any).providerDetected).toBe(true);
-      expect((fileIndexer as any).embeddingsInitialized).toBe(true);
+      expect((fileIndexer as any).embeddingsInitialized).toBe(false);
       expect((fileIndexer as any).isNornicDB).toBe(true);
     });
   });
