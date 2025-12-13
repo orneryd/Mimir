@@ -204,7 +204,7 @@ export function Portal() {
   const [vectorSearchSettings, setVectorSearchSettings] = useState<VectorSearchSettings>({
     enabled: true,
     limit: 10,
-    minSimilarity: 0.005,
+    minSimilarity: 0.5,  // Cosine similarity threshold (0-1 range)
     depth: 1,
     types: ['todo', 'memory', 'file', 'file_chunk'],
   });
@@ -1212,7 +1212,7 @@ export function Portal() {
     const defaults: VectorSearchSettings = {
       enabled: true,
       limit: 10,
-      minSimilarity: 0.005,
+      minSimilarity: 0.5,  // Cosine similarity threshold (0-1 range)
       depth: 1,
       types: ['todo', 'memory', 'file', 'file_chunk'],
     };

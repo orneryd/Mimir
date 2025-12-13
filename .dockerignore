@@ -50,3 +50,4 @@ Dockerfile*
 scripts
 deliverables
 docker/llama-cpp/models/*
+nornicdb

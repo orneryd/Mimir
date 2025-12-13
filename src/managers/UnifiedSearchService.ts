@@ -285,8 +285,10 @@ export class UnifiedSearchService {
 
   /**
    * NornicDB native hybrid search using server-side embeddings
-   * NornicDB can accept string queries directly and generates embeddings server-side
-   * Returns RRF scores (typically 0.01-0.05 range, not cosine similarity 0-1)
+   * 
+   * NornicDB can accept string queries directly and generates embeddings server-side,
+   * eliminating the need for client-side embedding generation. Both NornicDB and Neo4j
+   * return cosine similarity (0-1 range) from db.index.vector.queryNodes.
    */
   private async nornicDBHybridSearch(query: string, options: UnifiedSearchOptions): Promise<UnifiedSearchResponse> {
     const session = this.driver.session();
@@ -294,9 +296,8 @@ export class UnifiedSearchService {
     
     try {
       const limit = Math.floor(options.limit || 50);
-      // NornicDB RRF scores are much lower than cosine similarity
-      // Good results are typically 0.01-0.05, so use a very low threshold
-      const minSimilarity = options.minSimilarity !== undefined ? options.minSimilarity : 0.005;
+      // Cosine similarity threshold (0-1 range), same as Neo4j
+      const minSimilarity = options.minSimilarity !== undefined ? options.minSimilarity : 0.5;
       
       console.log(`🔍 NornicDB: Hybrid search for "${query}" (min_score: ${minSimilarity}, limit: ${limit})`);
       

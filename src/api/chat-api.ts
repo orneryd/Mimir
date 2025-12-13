@@ -393,15 +393,14 @@ export function createChatRouter(graphManager: IGraphManager): express.Router {
 
       if (config.semanticSearchEnabled) {
         try {
-          // Adjust min_similarity based on database provider
-          // NornicDB uses RRF scores (0.01-0.05 range) vs Neo4j cosine similarity (0-1 range)
+          // Both NornicDB and Neo4j return cosine similarity (0-1 range)
+          // NornicDB uses 0.5 threshold (server-side embeddings are different)
+          // Neo4j uses 0.75 threshold (client-side mxbai embeddings)
           const isNornicDB = graphManager.getIsNornicDB();
-          const effectiveMinSimilarity = isNornicDB 
-            ? 0.005  // RRF scores are much lower (good results are ~0.01-0.02)
-            : config.minSimilarityThreshold;  // Cosine similarity (0.75 default)
+          const effectiveMinSimilarity = isNornicDB ? 0.5 : config.minSimilarityThreshold;
           
           console.log(`🔍 Performing semantic search for: "${userMessage.substring(0, 100)}..."`);
-          console.log(`   Min similarity: ${effectiveMinSimilarity}${isNornicDB ? ' (NornicDB RRF)' : ''}, Limit: ${config.semanticSearchLimit}`);
+          console.log(`   Min similarity: ${effectiveMinSimilarity}, Limit: ${config.semanticSearchLimit}${isNornicDB ? ' (NornicDB)' : ''}`);
           
           // Use vector search tool
           const searchResult = await handleVectorSearchNodes(

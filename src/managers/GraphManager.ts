@@ -141,9 +141,9 @@ export class GraphManager implements IGraphManager {
   /**
    * Check if connected to NornicDB (vs Neo4j)
    * 
-   * NornicDB uses RRF (Reciprocal Rank Fusion) scores which are in a different
-   * range (0.01-0.05) compared to Neo4j's cosine similarity (0-1).
-   * Use this to adjust similarity thresholds accordingly.
+   * Both NornicDB and Neo4j return cosine similarity (0-1 range) from
+   * db.index.vector.queryNodes. NornicDB additionally supports server-side
+   * embedding generation, allowing string queries without client-side embeddings.
    * 
    * @returns true if connected to NornicDB, false for Neo4j
    */

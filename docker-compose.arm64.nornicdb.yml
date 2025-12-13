@@ -1,59 +1,11 @@
 services:
-  nornicdb:
-    build:
-      context: ./nornicdb
-      dockerfile: docker/Dockerfile.arm64-metal
-      args:
-        EMBED_MODEL: "true"  # Include bge-m3.gguf in image
-      tags:
-        - timothyswt/nornicdb-arm64-metal-bge:latest
-    image: timothyswt/nornicdb-arm64-metal-bge:latest
-    container_name: nornicdb
-    ports:
-      - "7474:7474"  # HTTP API & Browser UI
-      - "7687:7687"  # Bolt protocol (Neo4j compatible)
-    volumes:
-      - ./data/nornicdb:/data
-      - ./data/nornicdb/export:/data/export  # For loading Mimir exports
-      - ./nornicdb/models:/app/models  # Mount models directory (fallback if not embedded)
-    environment:
-      - NORNICDB_DATA_DIR=/data
-      - NORNICDB_HTTP_PORT=7474
-      - NORNICDB_BOLT_PORT=7687
-      # - NORNICDB_EMBEDDING_URL=http://llama-server:8080
-      # - NORNICDB_EMBEDDING_MODEL=bge-m3
-      # - NORNICDB_EMBEDDING_DIM=1024
-      # # Authentication (disabled by default for dev)
-      - NORNICDB_NO_AUTH=${NORNICDB_NO_AUTH:-true}
-      - NORNICDB_ADMIN_PASSWORD=${NEO4J_PASSWORD:-password}
-      # Load export data on startup (disabled - starting fresh)
-      - NORNICDB_LOAD_EXPORT=
-      # Badger memory tuning (reduce memory footprint)
-      - GOGC=50
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "wget --spider -q http://localhost:7474/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-    # No external dependencies - uses local embedding model
-    networks:
-      - mcp_network
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-        reservations:
-          memory: 512M
-
   copilot-api:
     image: timothyswt/copilot-api-arm64:latest
     container_name: copilot_api_server
     ports:
-      - "4141:4141"  # Fixed: copilot-api listens on 4141, not 3000
+      - "4141:4141" # Fixed: copilot-api listens on 4141, not 3000
     volumes:
-      - ./copilot-data:/root/.local/share/copilot-api  # Persist GitHub token
+      - ./copilot-data:/root/.local/share/copilot-api # Persist GitHub token
     environment:
       - NODE_ENV=production
       # Remove PORT=3000, the app uses 4141 by default
@@ -67,93 +19,76 @@ services:
       start_period: 15s
     networks:
       - mcp_network
-
-  # llama.cpp server - OpenAI-compatible embeddings (ARM64 compatible)
-  llama-server:
-    image: timothyswt/llama-cpp-server-arm64-mxbai:latest
-    container_name: llama_server
-    ports:
-      - "11434:8080"  # External 11434 -> Internal 8080 (llama.cpp default)
-    # Note: Model is bundled in the image (nomic-embed-text, 261MB)
-    # No volumes needed unless you want to add additional models
+  # Vision-Language server for multimodal embeddings (images + text)
+  # Uncomment to enable image embeddings, or swap with llama-server above
+  llama-vl-server:
+    image: timothyswt/llama-cpp-server-arm64-qwen2.5-vl-2b:latest
+    container_name: llama_vl_server
+    # ports:
+    #   - "11436:8080"  # Different external port: 11435 -> Internal 8080
+    environment:
+     # Server Configuration
+      - LLAMA_ARG_HOST=127.0.0.1
+      - LLAMA_ARG_PORT=8080
+      - LLAMA_ARG_CTX_SIZE=8192
+      - LLAMA_ARG_N_PARALLEL=4
+      
+      # Embeddings-specific
+      - LLAMA_ARG_EMBEDDINGS=true
+      - LLAMA_ARG_POOLING=mean
+      
+      # Performance
+      - LLAMA_ARG_THREADS=-1
+      - LLAMA_ARG_NO_MMAP=false
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
     networks:
       - mcp_network
- 
-  # Vision-Language server for multimodal embeddings (images + text)
-  # Uncomment to enable image embeddings, or swap with llama-server above
-  # llama-vl-server:
-  #   image: timothyswt/llama-cpp-server-arm64-qwen2.5-vl-7b:latest
-  #   container_name: llama_vl_server
-  #   ports:
-  #     - "11435:8080"  # Different external port: 11435 -> Internal 8080
-  #   environment:
-  #    # Server Configuration
-  #     - LLAMA_ARG_HOST=0.0.0.0
-  #     - LLAMA_ARG_PORT=8080
-  #     - LLAMA_ARG_CTX_SIZE=8192
-  #     - LLAMA_ARG_N_PARALLEL=4
-      
-  #     # Embeddings-specific
-  #     - LLAMA_ARG_EMBEDDINGS=true
-  #     - LLAMA_ARG_POOLING=mean
-      
-  #     # Performance
-  #     - LLAMA_ARG_THREADS=-1
-  #     - LLAMA_ARG_NO_MMAP=false
-  #   restart: unless-stopped
-  #   healthcheck:
-  #     test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-  #     interval: 30s
-  #     timeout: 10s
-  #     retries: 3
-  #     start_period: 30s
-  #   networks:
-  #     - mcp_network
+    # Uncomment if you have GPU support (NVIDIA)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
   mimir-server:
     build:
       context: .
       dockerfile: Dockerfile
       tags:
-        - timothyswt/mimir-server:${VERSION:-1.0.0}
         - timothyswt/mimir-server:latest
     image: timothyswt/mimir-server:latest
     container_name: mimir_server
     restart: unless-stopped
     environment:
       # Database Configuration
-      - NEO4J_URI=bolt://nornicdb:7687
+      - NEO4J_URI=bolt://host.docker.internal:7687
       - NEO4J_USER=admin
-      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-admin}
-      
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-password}
+
       # Server Configuration
       - NODE_ENV=production
       - PORT=3000
       # - NODE_TLS_REJECT_UNAUTHORIZED=${NODE_TLS_REJECT_UNAUTHORIZED:-1}
-      
+
       # Workspace Configuration
       - WORKSPACE_ROOT=/workspace
       - HOST_WORKSPACE_ROOT=${HOST_WORKSPACE_ROOT:-~/src}  # Pass through from host
       - HOST_HOME=${HOME}  # Host's home directory for expanding ~ in HOST_WORKSPACE_ROOT
-      
+
       # LLM API Configuration
       - MIMIR_DEFAULT_PROVIDER=${MIMIR_DEFAULT_PROVIDER:-copilot}
       - MIMIR_LLM_API=${MIMIR_LLM_API:-http://copilot-api:4141}
       - MIMIR_LLM_API_PATH=${MIMIR_LLM_API_PATH:-/v1/chat/completions}
       - MIMIR_LLM_API_MODELS_PATH=${MIMIR_LLM_API_MODELS_PATH:-/v1/models}
       - MIMIR_LLM_API_KEY=${MIMIR_LLM_API_KEY:-dummy-key}
-      
-      # PCTX Integration (Code Mode for 90-98% token reduction)
-      - PCTX_URL=${PCTX_URL:-http://host.docker.internal:8080}
-      - PCTX_ENABLED=${PCTX_ENABLED:-false} 
 
-      
       # Provider and Model Configuration (100% dynamic - no config file needed)
       - MIMIR_DEFAULT_MODEL=${MIMIR_DEFAULT_MODEL:-gpt-4.1}
 
@@ -161,27 +96,25 @@ services:
       - MIMIR_PM_MODEL=${MIMIR_PM_MODEL:-}
       - MIMIR_WORKER_MODEL=${MIMIR_WORKER_MODEL:-}
       - MIMIR_QC_MODEL=${MIMIR_QC_MODEL:-}
-      
+
       # Context Window Configuration
       - MIMIR_DEFAULT_CONTEXT_WINDOW=${MIMIR_DEFAULT_CONTEXT_WINDOW:-128000}
-      
-      # Embeddings API Configuration
       - MIMIR_EMBEDDINGS_PROVIDER=${MIMIR_EMBEDDINGS_PROVIDER:-openai}
       - MIMIR_EMBEDDINGS_API=${MIMIR_EMBEDDINGS_API:-http://llama-server:8080}
       - MIMIR_EMBEDDINGS_API_PATH=${MIMIR_EMBEDDINGS_API_PATH:-/v1/embeddings}
       - MIMIR_EMBEDDINGS_API_MODELS_PATH=${MIMIR_EMBEDDINGS_API_MODELS_PATH:-/v1/models}
       - MIMIR_EMBEDDINGS_API_KEY=${MIMIR_EMBEDDINGS_API_KEY:-dummy-key}
-      # Embeddings Configuration
+      # Embeddings Configuration (llama.cpp uses OpenAI-compatible format)
       - MIMIR_EMBEDDINGS_ENABLED=${MIMIR_EMBEDDINGS_ENABLED:-true}
-      - MIMIR_EMBEDDINGS_MODEL=${MIMIR_EMBEDDINGS_MODEL:-bge-m3}
+      - MIMIR_EMBEDDINGS_MODEL=${MIMIR_EMBEDDINGS_MODEL:-mxbai-embed-large}
       - MIMIR_EMBEDDINGS_DIMENSIONS=${MIMIR_EMBEDDINGS_DIMENSIONS:-1024}
       - MIMIR_EMBEDDINGS_CHUNK_SIZE=${MIMIR_EMBEDDINGS_CHUNK_SIZE:-768}
-      - MIMIR_EMBEDDINGS_CHUNK_OVERLAP=${MIMIR_EMBEDDINGS_CHUNK_OVERLAP:-100}
-      - MIMIR_EMBEDDINGS_DELAY_MS=${MIMIR_EMBEDDINGS_DELAY_MS:-0}
+      - MIMIR_EMBEDDINGS_CHUNK_OVERLAP=${MIMIR_EMBEDDINGS_CHUNK_OVERLAP:-10}
+      - MIMIR_EMBEDDINGS_DELAY_MS=${MIMIR_EMBEDDINGS_DELAY_MS:-100}
       - MIMIR_EMBEDDINGS_MAX_RETRIES=${MIMIR_EMBEDDINGS_MAX_RETRIES:-3}
       # Image/VL Embeddings Configuration (Vision-Language models)
       # Image Embeddings Control (disabled by default for safety)
-      - MIMIR_EMBEDDINGS_IMAGES=${MIMIR_EMBEDDINGS_IMAGES:-false}  # Default: disabled
+      - MIMIR_EMBEDDINGS_IMAGES=${MIMIR_EMBEDDINGS_IMAGES:-true}  # Default: disabled
       - MIMIR_EMBEDDINGS_IMAGES_DESCRIBE_MODE=${MIMIR_EMBEDDINGS_IMAGES_DESCRIBE_MODE:-true}  # Default: VL description mode
       # Qwen2.5-VL Configuration (for llama.cpp server)
       - MIMIR_EMBEDDINGS_VL_PROVIDER=${MIMIR_EMBEDDINGS_VL_PROVIDER:-llama.cpp}
@@ -196,14 +129,14 @@ services:
       - MIMIR_EMBEDDINGS_VL_TIMEOUT=${MIMIR_EMBEDDINGS_VL_TIMEOUT:-180000}  # 3 minutes (VL processing is slow)
       # Indexing Configuration
       - MIMIR_INDEXING_THREADS=${MIMIR_INDEXING_THREADS:-1}
-      
+
       # Feature Flags
       - MIMIR_FEATURE_PM_MODEL_SUGGESTIONS=${MIMIR_FEATURE_PM_MODEL_SUGGESTIONS:-true}
       - MIMIR_AUTO_INDEX_DOCS=${MIMIR_AUTO_INDEX_DOCS:-true}
-      
+
       # Agent Execution Limits
       - MIMIR_AGENT_RECURSION_LIMIT=${MIMIR_AGENT_RECURSION_LIMIT:-100}
-      
+
       # Security Configuration
       - MIMIR_ENABLE_SECURITY=${MIMIR_ENABLE_SECURITY:-false}
       - MIMIR_DEV_USER_ADMIN=${MIMIR_DEV_USER_ADMIN}
@@ -225,6 +158,26 @@ services:
       - MIMIR_PARALLEL_EXECUTION=${MIMIR_PARALLEL_EXECUTION:-false}
       - MIMIR_INSTALL_DIR=${MIMIR_INSTALL_DIR:-/app}
       - MIMIR_AGENTS_DIR=${MIMIR_AGENTS_DIR:-/app/docs/agents}
+      # Embeddings API Configuration
+
+      # - MIMIR_EMBEDDINGS_PROVIDER=${MIMIR_EMBEDDINGS_PROVIDER:-openai}
+      # - MIMIR_EMBEDDINGS_API=${MIMIR_EMBEDDINGS_API:-http://llama-server:8080}
+      # - MIMIR_EMBEDDINGS_API_PATH=${MIMIR_EMBEDDINGS_API_PATH:-/v1/embeddings}
+      # - MIMIR_EMBEDDINGS_API_MODELS_PATH=${MIMIR_EMBEDDINGS_API_MODELS_PATH:-/v1/models}
+      # - MIMIR_EMBEDDINGS_API_KEY=${MIMIR_EMBEDDINGS_API_KEY:-dummy-key}
+      # Embeddings Configuration
+      # - MIMIR_EMBEDDINGS_ENABLED=${MIMIR_EMBEDDINGS_ENABLED:-true}
+      # - MIMIR_EMBEDDINGS_MODEL=${MIMIR_EMBEDDINGS_MODEL:-bge-m3}
+      # - MIMIR_EMBEDDINGS_DIMENSIONS=${MIMIR_EMBEDDINGS_DIMENSIONS:-1024}
+      # - MIMIR_EMBEDDINGS_CHUNK_SIZE=${MIMIR_EMBEDDINGS_CHUNK_SIZE:-768}
+      # - MIMIR_EMBEDDINGS_CHUNK_OVERLAP=${MIMIR_EMBEDDINGS_CHUNK_OVERLAP:-100}
+      # - MIMIR_EMBEDDINGS_DELAY_MS=${MIMIR_EMBEDDINGS_DELAY_MS:-0}
+      # - MIMIR_EMBEDDINGS_MAX_RETRIES=${MIMIR_EMBEDDINGS_MAX_RETRIES:-3}
+
+
+      # PCTX Integration (Code Mode for 90-98% token reduction)
+      - PCTX_URL=${PCTX_URL:-http://host.docker.internal:8080}
+      - PCTX_ENABLED=${PCTX_ENABLED:-false}
 
     volumes:
       - ./data:/app/data
@@ -239,20 +192,16 @@ services:
       retries: 3
       start_period: 10s
     depends_on:
-      nornicdb:
-        condition: service_healthy
+      # neo4j:
+      #   condition: service_healthy
       copilot-api:
         condition: service_healthy
-      llama-server:
-        condition: service_healthy
-      # llama-vl-server:
+      # llama-server:
       #   condition: service_healthy
+      llama-vl-server:
+        condition: service_healthy
     networks:
       - mcp_network
-
-volumes:
-  open-webui:
-  ollama_models:
 
 networks:
   mcp_network:
