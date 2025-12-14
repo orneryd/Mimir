@@ -1129,12 +1129,6 @@ Review the QC verification history and worker output in the graph node for detai
  * Pre-fetch task context from graph and format for agent prompt
  */
 async function fetchTaskContext(taskId: string, agentType: 'worker' | 'qc'): Promise<string> {
-  // TODO: Re-enable task context pre-fetch once DB connection stability is fixed
-  // Issue: MCP call to get_task_context hangs when Neo4j connection is unstable
-  // Fix: Add timeout to fetch call, or make context fetch truly optional
-  // Note: Agent still has context from prompt injection, so this is enhancement only
-  return '';
-  
   const MCP_SERVER_URL = process.env.MCP_SERVER_URL || 'http://localhost:3000/mcp';
   
   try {
@@ -1235,24 +1229,71 @@ async function fetchTaskContext(taskId: string, agentType: 'worker' | 'qc'): Pro
 }
 
 /**
+ * Helper to wrap a promise with a timeout
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number, operation: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => 
+      setTimeout(() => reject(new Error(`${operation} timed out after ${ms}ms`)), ms)
+    )
+  ]);
+}
+
+/**
  * Create task node in graph for tracking (idempotent)
+ * Has 5 second timeout to prevent hanging on DB issues
  */
 async function createGraphNode(taskId: string, properties: Record<string, any>): Promise<void> {
-  // TODO: Re-enable graph node creation once DB connection stability is fixed
-  // Issue: graphManager.getNode() and graphManager.addNode() hang when Neo4j connection is unstable
-  // Fix: Add connection timeout, retry logic, or make graph operations truly non-blocking
-  // console.log(`💾 Skipping graph node creation for: ${taskId} (non-blocking)`);
-  return;
+  const TIMEOUT_MS = 5000;
+  
+  try {
+    const graphManager = await withTimeout(getGraphManager(), TIMEOUT_MS, 'getGraphManager');
+    
+    try {
+      // Try to get existing node first
+      const existing = await withTimeout(graphManager.getNode(taskId), TIMEOUT_MS, 'getNode');
+      
+      if (existing) {
+        console.log(`♻️  Task node ${taskId} already exists, updating instead`);
+        await withTimeout(graphManager.updateNode(taskId, properties), TIMEOUT_MS, 'updateNode');
+        return;
+      }
+    } catch (error: any) {
+      // Node doesn't exist or timed out, try to create it
+      if (!error.message?.includes('timed out')) {
+        // Node doesn't exist, continue to create
+      } else {
+        console.warn(`⚠️  Graph getNode timed out for ${taskId}, skipping graph node creation`);
+        return;
+      }
+    }
+    
+    // Create new node
+    console.log(`💾 Creating task node: ${taskId}`);
+    await withTimeout(graphManager.addNode('todo', {
+      id: taskId,
+      ...properties,
+    }), TIMEOUT_MS, 'addNode');
+    console.log(`✅ Task node created: ${taskId}`);
+  } catch (error: any) {
+    console.warn(`⚠️  Graph operation failed for ${taskId}: ${error.message} - continuing without graph node`);
+    // Don't throw - log and continue (allows execution to proceed even if graph fails)
+  }
 }
 
 /**
  * Update task node in graph
  */
 async function updateGraphNode(taskId: string, properties: Record<string, any>): Promise<void> {
-  // TODO: Re-enable graph node updates once DB connection stability is fixed
-  // Issue: graphManager.updateNode() hangs when Neo4j connection is unstable
-  // Fix: Add connection timeout, retry logic, or make graph operations truly non-blocking
-  return;
+  const TIMEOUT_MS = 5000;
+  
+  try {
+    const graphManager = await withTimeout(getGraphManager(), TIMEOUT_MS, 'getGraphManager');
+    await withTimeout(graphManager.updateNode(taskId, properties), TIMEOUT_MS, 'updateNode');
+  } catch (error: any) {
+    console.warn(`⚠️  Failed to update graph node: ${error.message}`);
+  }
 }
 
 /**

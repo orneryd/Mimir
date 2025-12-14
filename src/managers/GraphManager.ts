@@ -626,10 +626,9 @@ export class GraphManager implements IGraphManager {
 
       // Create the node first
       // Note: Using simple RETURN n instead of map projection for NornicDB compatibility
-      const createResult = await session.run(
-        'CREATE (n:Node $props) RETURN n',
-        { props: nodeProps }
-      );
+      const query = 'CREATE (n:Node $props) RETURN n';
+      
+      const createResult = await session.run(query, { props: nodeProps });
 
       // Now generate embeddings if enabled and not already provided
       // Skip embedding generation for NornicDB (database handles it natively)
@@ -734,10 +733,9 @@ export class GraphManager implements IGraphManager {
   async getNode(id: string): Promise<Node | null> {
     const session = this.driver.session();
     try {
-      const result = await session.run(
-        'MATCH (n:Node {id: $id}) RETURN n',
-        { id }
-      );
+      const query = 'MATCH (n:Node {id: $id}) RETURN n';
+      
+      const result = await session.run(query, { id });
 
       if (result.records.length === 0) {
         return null;
@@ -816,14 +814,9 @@ export class GraphManager implements IGraphManager {
       // Build SET clauses for each property (flatten nested structures)
       const setProperties = { ...flattenForMCP(properties as Record<string, any>), updated: now };
 
-      const result = await session.run(
-        `
-        MATCH (n:Node {id: $id})
-        SET n += $properties
-        RETURN n
-        `,
-        { id, properties: setProperties }
-      );
+      const query = `MATCH (n:Node {id: $id}) SET n += $properties RETURN n`;
+      
+      const result = await session.run(query, { id, properties: setProperties });
 
       if (result.records.length === 0) {
         throw new Error(`Node not found: ${id}`);
