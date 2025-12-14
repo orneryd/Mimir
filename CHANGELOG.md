@@ -39,3 +39,21 @@ This project adheres to "Keep a Changelog" and follows Semantic Versioning.
 Tagged as `v1.0.1` (annotated tag): "v1.0.1: additional nornicDB enhancements"
 
 For full details, see the commits between `v1.0.0` and `v1.0.1`.
+
+## [1.0.2] - 2025-12-14
+
+### Added
+- Added `CHANGELOG.md` at repository root for release history and guidance.
+
+### Changed
+- `src/api/chat-api.ts`: Use database-aware default for semantic similarity (NornicDB = 0.5, Neo4j = configured default) so server-side embeddings use the correct threshold.
+- `testing/file-indexer-nornicdb.test.ts`: Mock improvements for `EmbeddingsService` exports and corrected expectations to match NornicDB behavior.
+
+### Fixed
+- Unit tests: fixed failing mocks and assertions; all relevant unit tests pass locally (including `file-indexer-nornicdb` tests).
+
+### Misc
+- Small tooling/test cleanup and formatting tweaks made while validating the changes.
+
+---
+
