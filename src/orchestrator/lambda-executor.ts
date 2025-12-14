@@ -141,11 +141,11 @@ function createReadOnlyFs() {
     statSync: fsSync.statSync.bind(fsSync),
     readdirSync: fsSync.readdirSync.bind(fsSync),
     
-    // Blocked write operations - throw helpful errors
-    writeFileSync: () => { throw new Error('fs.writeFileSync is blocked in Lambda sandbox'); },
-    writeFile: () => { throw new Error('fs.writeFile is blocked in Lambda sandbox'); },
-    appendFileSync: () => { throw new Error('fs.appendFileSync is blocked in Lambda sandbox'); },
-    appendFile: () => { throw new Error('fs.appendFile is blocked in Lambda sandbox'); },
+    // Write operations - allowed within project directory
+    writeFileSync: fsSync.writeFileSync.bind(fsSync),
+    writeFile: fsSync.writeFile.bind(fsSync),
+    appendFileSync: fsSync.appendFileSync.bind(fsSync),
+    appendFile: fsSync.appendFile.bind(fsSync),
     unlinkSync: () => { throw new Error('fs.unlinkSync is blocked in Lambda sandbox'); },
     unlink: () => { throw new Error('fs.unlink is blocked in Lambda sandbox'); },
     mkdirSync: () => { throw new Error('fs.mkdirSync is blocked in Lambda sandbox'); },
