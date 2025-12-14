@@ -449,9 +449,15 @@ async function executeAgentTask(
       if (depOutputs.lambdaName) {
         // Previous task was a Lambda - inject its output
         console.log(`   📥 Injecting Lambda output from ${depId} into prompt`);
-        if (!modifiedPrompt || modifiedPrompt.trim() === '') {
+        const placeholder = `{Previous task output: ${depId}}`;
+        
+        if (modifiedPrompt.includes(placeholder)) {
+          // Replace placeholder with actual output
+          modifiedPrompt = modifiedPrompt.replace(placeholder, depOutput);
+        } else if (!modifiedPrompt || modifiedPrompt.trim() === '') {
           modifiedPrompt = depOutput;
         } else {
+          // Prepend output if no placeholder found
           modifiedPrompt = `[Previous Lambda Output (${depOutputs.lambdaName})]\n${depOutput}\n\n[Task Prompt]\n${modifiedPrompt}`;
         }
       } else {

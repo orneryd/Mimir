@@ -579,6 +579,9 @@ async function executeJSLambda(
       // The unified input object
       __input: input,
       
+      // Convenience: expose tasks array directly for simpler lambda scripts
+      tasks: input.tasks,
+      
       // Module support
       module: { exports: {} },
       exports: {},
@@ -597,8 +600,30 @@ async function executeJSLambda(
     // Lambda timeout in milliseconds (30 seconds)
     const LAMBDA_TIMEOUT_MS = 30000;
     
+    // Check if the script is an inline script with return statement (not a module export)
+    const hasInlineReturn = /^\s*(let|const|var|\/\/|\/\*|if|try|for|while|switch|function\s+\w)/.test(jsCode.trim()) 
+      && jsCode.includes('return ') 
+      && !jsCode.includes('module.exports');
+    
     // Wrap script to handle different export conventions with proper async timeout
-    const wrappedScript = `
+    const wrappedScript = hasInlineReturn ? `
+      (async function() {
+        try {
+          // Inline script with return - wrap in function to capture return value
+          const __inlineFn = async function() {
+            ${jsCode}
+          };
+          const resultOrPromise = __inlineFn();
+          if (resultOrPromise && typeof resultOrPromise.then === 'function') {
+            __pendingPromise = resultOrPromise;
+          } else {
+            __result = resultOrPromise;
+          }
+        } catch (err) {
+          __error = err.message || String(err);
+        }
+      })();
+    ` : `
       (async function() {
         try {
           ${jsCode}

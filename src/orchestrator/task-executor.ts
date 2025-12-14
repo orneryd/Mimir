@@ -16,6 +16,11 @@ import { CancellationError, type CancellationToken } from './cancellation.js';
 import path from 'path';
 import crypto from 'crypto';
 import fs from 'fs/promises';
+import { fileURLToPath } from 'url';
+
+// ES module equivalent of __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 
 // Module-level GraphManager instance (initialized on first use)
@@ -650,7 +655,9 @@ export async function generatePreamble(
       if (result.records.length > 0) {
         const content = result.records[0].get('content');
         const nodeId = result.records[0].get('id');
-        const usedCount = result.records[0].get('usedCount') || 0;
+        const rawUsedCount = result.records[0].get('usedCount') || 0;
+        // TODO: Remove BigInt cast once NornicDB returns integers as Number instead of BigInt
+        const usedCount = typeof rawUsedCount === 'bigint' ? Number(rawUsedCount) : (rawUsedCount?.toNumber?.() || rawUsedCount || 0);
         
         // Update usedCount and lastUsed
         await graphManager.updateNode(nodeId, {
@@ -1122,6 +1129,12 @@ Review the QC verification history and worker output in the graph node for detai
  * Pre-fetch task context from graph and format for agent prompt
  */
 async function fetchTaskContext(taskId: string, agentType: 'worker' | 'qc'): Promise<string> {
+  // TODO: Re-enable task context pre-fetch once DB connection stability is fixed
+  // Issue: MCP call to get_task_context hangs when Neo4j connection is unstable
+  // Fix: Add timeout to fetch call, or make context fetch truly optional
+  // Note: Agent still has context from prompt injection, so this is enhancement only
+  return '';
+  
   const MCP_SERVER_URL = process.env.MCP_SERVER_URL || 'http://localhost:3000/mcp';
   
   try {
@@ -1225,46 +1238,21 @@ async function fetchTaskContext(taskId: string, agentType: 'worker' | 'qc'): Pro
  * Create task node in graph for tracking (idempotent)
  */
 async function createGraphNode(taskId: string, properties: Record<string, any>): Promise<void> {
-  const graphManager = await getGraphManager();
-  
-  try {
-    // Try to get existing node first
-    const existing = await graphManager.getNode(taskId);
-    
-    if (existing) {
-      console.log(`♻️  Task node ${taskId} already exists, updating instead`);
-      await graphManager.updateNode(taskId, properties);
-      return;
-    }
-  } catch (error) {
-    // Node doesn't exist, create it
-  }
-  
-  // Create new node
-  console.log(`💾 Creating task node: ${taskId}`);
-  try {
-    await graphManager.addNode('todo', {
-      id: taskId,
-      ...properties,
-    });
-    console.log(`✅ Task node created: ${taskId}`);
-  } catch (error: any) {
-    console.error(`❌ Failed to create graph node ${taskId}:`, error.message);
-    // Don't throw - log and continue (allows execution to proceed even if graph fails)
-  }
+  // TODO: Re-enable graph node creation once DB connection stability is fixed
+  // Issue: graphManager.getNode() and graphManager.addNode() hang when Neo4j connection is unstable
+  // Fix: Add connection timeout, retry logic, or make graph operations truly non-blocking
+  // console.log(`💾 Skipping graph node creation for: ${taskId} (non-blocking)`);
+  return;
 }
 
 /**
  * Update task node in graph
  */
 async function updateGraphNode(taskId: string, properties: Record<string, any>): Promise<void> {
-  try {
-    const graphManager = await getGraphManager();
-    
-    await graphManager.updateNode(taskId, properties);
-  } catch (error: any) {
-    console.warn(`⚠️  Failed to update graph node: ${error.message}`);
-  }
+  // TODO: Re-enable graph node updates once DB connection stability is fixed
+  // Issue: graphManager.updateNode() hangs when Neo4j connection is unstable
+  // Fix: Add connection timeout, retry logic, or make graph operations truly non-blocking
+  return;
 }
 
 /**
@@ -1557,6 +1545,8 @@ export async function executeTask(
   console.log(`⏱️  Estimated Duration: ${task.estimatedDuration}`);
   console.log('='.repeat(80) + '\n');
   
+  console.log(`[DEBUG] Task prompt length: ${task.prompt?.length || 0} chars`);
+  
   const startTime = Date.now();
   const maxRetries = task.maxRetries || 2;
   let attemptNumber = 1;
@@ -1570,6 +1560,8 @@ export async function executeTask(
   if (!task.qcRole || !qcPreambleContent) {
     throw new Error(`Task ${task.id} missing QC configuration. QC is now mandatory for all tasks. Please regenerate chain-output.md with QC roles.`);
   }
+  
+  console.log(`[DEBUG] QC check passed, creating graph node...`);
   
   // Create initial task node in graph for tracking
   await createGraphNode(task.id, {
@@ -1587,6 +1579,8 @@ export async function executeTask(
     files: [], // Will be populated by context manager if needed
     dependencies: [], // Will be populated by context manager if needed
   });
+  
+  console.log(`[DEBUG] Graph node created, starting worker loop...`);
   
   // Worker → QC → Retry loop
   while (attemptNumber <= maxRetries) {
@@ -1772,6 +1766,7 @@ ${task.prompt}`;
       }
       
       // PHASE 2: Worker Execution Start
+      console.log(`[DEBUG] Building worker prompt complete, starting worker execution...`);
       const workerStartTime = new Date().toISOString();
       await updateGraphNode(task.id, {
         status: 'worker_executing',
