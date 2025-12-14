@@ -93,19 +93,19 @@ const BLOCKED_MODULES = new Set([
  */
 function createSandboxedRequire() {
   return function sandboxedRequire(moduleName: string): any {
+    // Special case: provide read-only fs subset (check BEFORE blocked modules)
+    if (moduleName === 'fs' || moduleName === 'fs/promises') {
+      return createReadOnlyFs();
+    }
+    
     // Check if it's a blocked builtin
     if (BLOCKED_MODULES.has(moduleName)) {
       throw new Error(`Module "${moduleName}" is blocked in Lambda sandbox for security`);
     }
     
-    // Allow safe builtins
+    // Allow safe builtins - use projectRequire (ESM doesn't have global require)
     if (ALLOWED_BUILTINS.has(moduleName)) {
-      return require(moduleName);
-    }
-    
-    // Special case: provide read-only fs subset
-    if (moduleName === 'fs' || moduleName === 'fs/promises') {
-      return createReadOnlyFs();
+      return projectRequire(moduleName);
     }
     
     // Try to load from node_modules
@@ -116,7 +116,7 @@ function createSandboxedRequire() {
       if (err.code === 'ERR_MODULE_NOT_FOUND' || err.code === 'MODULE_NOT_FOUND') {
         // Check if it's a Node.js builtin
         try {
-          require.resolve(moduleName);
+          projectRequire.resolve(moduleName);
           // It exists as a builtin but wasn't in our allowed list
           throw new Error(`Node.js builtin "${moduleName}" is not allowed in Lambda sandbox`);
         } catch {

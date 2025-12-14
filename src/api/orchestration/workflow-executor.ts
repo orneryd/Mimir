@@ -385,6 +385,13 @@ async function executeTransformerTask(
     
     // Check for cancellation after Lambda execution
     cancellationToken.throwIfCancelled();
+    
+    // Log lambda result for debugging
+    if (!lambdaResult.success) {
+      console.log(`   ❌ Lambda failed: ${lambdaResult.error}`);
+    } else {
+      console.log(`   ✅ Lambda succeeded (${lambdaResult.output.length} chars output)`);
+    }
   } else {
     // No script - pass through
     lambdaResult = createPassThroughResult(lambdaInput);
@@ -431,22 +438,34 @@ async function executeAgentTask(
   // Check for cancellation before starting
   cancellationToken.throwIfCancelled();
   
-  // Check if there's Lambda output to inject into prompt
+  // Check if there's dependency output to inject into prompt
   let modifiedPrompt = task.prompt;
   
   for (const depId of task.dependencies) {
     const depOutputs = taskOutputs.get(depId);
-    if (depOutputs && depOutputs.lambdaName) {
-      // Previous task was a Lambda - inject its output as the prompt
-      console.log(`   📥 Injecting Lambda output from ${depId} into prompt`);
-      const lambdaOutput = depOutputs.workerOutputs.join('\n\n');
+    if (depOutputs) {
+      const depOutput = depOutputs.workerOutputs.join('\n\n');
       
-      // If current prompt is empty, use lambda output directly
-      // Otherwise, prepend lambda output to existing prompt
-      if (!modifiedPrompt || modifiedPrompt.trim() === '') {
-        modifiedPrompt = lambdaOutput;
+      if (depOutputs.lambdaName) {
+        // Previous task was a Lambda - inject its output
+        console.log(`   📥 Injecting Lambda output from ${depId} into prompt`);
+        if (!modifiedPrompt || modifiedPrompt.trim() === '') {
+          modifiedPrompt = depOutput;
+        } else {
+          modifiedPrompt = `[Previous Lambda Output (${depOutputs.lambdaName})]\n${depOutput}\n\n[Task Prompt]\n${modifiedPrompt}`;
+        }
       } else {
-        modifiedPrompt = `[Previous Lambda Output (${depOutputs.lambdaName})]\n${lambdaOutput}\n\n[Task Prompt]\n${modifiedPrompt}`;
+        // Previous task was an agent - substitute placeholder or prepend output
+        console.log(`   📥 Injecting agent output from ${depId} into prompt`);
+        const placeholder = `{Previous task output: ${depId}}`;
+        
+        if (modifiedPrompt.includes(placeholder)) {
+          // Replace placeholder with actual output
+          modifiedPrompt = modifiedPrompt.replace(placeholder, depOutput);
+        } else {
+          // Prepend output if no placeholder found
+          modifiedPrompt = `[Previous Task Output (${depId})]\n${depOutput}\n\n[Task Prompt]\n${modifiedPrompt}`;
+        }
       }
     }
   }
