@@ -1129,7 +1129,7 @@ services:
 
 **Getting Started:**
 - 🧠 [Memory Guide](docs/guides/MEMORY_GUIDE.md) - How to use the memory system
-- 🕸️ [Knowledge Graph Guide](docs/guides/knowledge-graph.md) - Understanding graph relationships
+- 🕸️ [Knowledge Graph Guide](docs/guides/KNOWLEDGE_GRAPH.md) - Understanding graph relationships
 - 🐳 [Docker Deployment](docs/guides/DOCKER_DEPLOYMENT_GUIDE.md) - Production deployment
 - 🎨 **[Portal UI User Guide](docs/UI_USER_GUIDE.md) - Complete web interface tutorial** ⭐
 - 🔌 **[Model Provider Guide](docs/guides/MIMIR_AS_MODEL_PROVIDER.md) - Use Mimir in Cursor, Continue.dev, and more** 🆕
