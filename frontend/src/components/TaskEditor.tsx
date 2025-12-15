@@ -65,45 +65,76 @@ export function TaskEditor() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-300 mb-1">Lambda Script</label>
+            <label className="block text-xs font-medium text-gray-300 mb-1">Lambda Language</label>
             <select
-              value={localTask.lambdaId || ''}
-              onChange={(e) => updateTransformerTask({ lambdaId: e.target.value || undefined })}
+              value={localTask.lambdaLanguage || 'javascript'}
+              onChange={(e) => updateTransformerTask({ lambdaLanguage: e.target.value as 'javascript' | 'typescript' | 'python' })}
               className="w-full px-3 py-2 bg-norse-shadow border-2 border-norse-rune rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-violet-500 text-sm text-gray-100"
             >
-              <option value="">None (pass-through)</option>
-              {lambdas.map(lambda => (
-                <option key={lambda.id} value={lambda.id}>
-                  {lambda.name} ({lambda.language})
-                </option>
-              ))}
+              <option value="javascript">JavaScript</option>
+              <option value="typescript">TypeScript</option>
+              <option value="python">Python</option>
             </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-300 mb-1">Lambda Name</label>
+            <input
+              type="text"
+              value={localTask.lambdaName || ''}
+              onChange={(e) => updateTransformerTask({ lambdaName: e.target.value || undefined })}
+              className="w-full px-3 py-2 bg-norse-shadow border-2 border-norse-rune rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-violet-500 text-sm text-gray-100"
+              placeholder="my-transformer-lambda"
+            />
             <p className="text-xs text-gray-400 mt-1">
-              Select a lambda script or leave empty for pass-through (no-op)
+              Identifier for logging (e.g., split-batch-1)
             </p>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-300 mb-1">Input Mapping (JSONPath)</label>
-            <input
-              type="text"
-              value={localTask.inputMapping || ''}
-              onChange={(e) => updateTransformerTask({ inputMapping: e.target.value || undefined })}
+            <label className="block text-xs font-medium text-gray-300 mb-1">Lambda Script</label>
+            <textarea
+              value={localTask.lambdaScript || ''}
+              onChange={(e) => updateTransformerTask({ lambdaScript: e.target.value || undefined })}
+              rows={10}
               className="w-full px-3 py-2 bg-norse-shadow border-2 border-norse-rune rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-violet-500 text-sm text-gray-100 font-mono"
-              placeholder="$.data.results"
+              placeholder={`// Access upstream outputs via tasks array:\nconst output = tasks[0].transformerOutput || tasks[0].workerOutput || '';\nconst data = JSON.parse(output);\nreturn JSON.stringify(data);`}
+              spellCheck={false}
             />
+            <p className="text-xs text-gray-400 mt-1">
+              Inline script code. Use <code className="text-violet-400">tasks[0].transformerOutput</code> or <code className="text-violet-400">tasks[0].workerOutput</code> to access upstream data.
+            </p>
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-gray-300 mb-1">Output Mapping</label>
-            <input
-              type="text"
-              value={localTask.outputMapping || ''}
-              onChange={(e) => updateTransformerTask({ outputMapping: e.target.value || undefined })}
-              className="w-full px-3 py-2 bg-norse-shadow border-2 border-norse-rune rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-violet-500 text-sm text-gray-100 font-mono"
-              placeholder="$.transformedData"
-            />
-          </div>
+          <details className="text-xs">
+            <summary className="text-gray-400 cursor-pointer hover:text-gray-300">Or select from library...</summary>
+            <div className="mt-2">
+              <select
+                value={localTask.lambdaId || ''}
+                onChange={(e) => {
+                  const selectedLambda = lambdas.find(l => l.id === e.target.value);
+                  if (selectedLambda) {
+                    updateTransformerTask({ 
+                      lambdaId: selectedLambda.id,
+                      lambdaScript: selectedLambda.script,
+                      lambdaLanguage: selectedLambda.language,
+                      lambdaName: selectedLambda.name
+                    });
+                  } else {
+                    updateTransformerTask({ lambdaId: undefined });
+                  }
+                }}
+                className="w-full px-3 py-2 bg-norse-shadow border-2 border-norse-rune rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-violet-500 text-sm text-gray-100"
+              >
+                <option value="">None (use inline script above)</option>
+                {lambdas.map(lambda => (
+                  <option key={lambda.id} value={lambda.id}>
+                    {lambda.name} ({lambda.language})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </details>
 
           {/* Parallel Group for Transformer */}
           <div>

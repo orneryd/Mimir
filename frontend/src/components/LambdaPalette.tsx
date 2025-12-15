@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useDrag } from 'react-dnd';
 import { usePlanStore } from '../store/planStore';
 import { Lambda } from '../types/task';
-import { GripVertical, Plus, Eye, Trash2, Code2, ChevronDown, ChevronRight } from 'lucide-react';
+import { GripVertical, Plus, Eye, Trash2, Code2, ChevronDown, ChevronRight, Search } from 'lucide-react';
 import { CreateModal } from './CreateModal';
 
 interface DraggableLambdaProps {
@@ -168,6 +168,18 @@ export function LambdaPalette() {
   const [viewingLambda, setViewingLambda] = useState<Lambda | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);  // Collapsed by default
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Filter lambdas by search query
+  const filteredLambdas = useMemo(() => {
+    if (!searchQuery.trim()) return lambdas;
+    const query = searchQuery.toLowerCase();
+    return lambdas.filter(lambda => 
+      lambda.name.toLowerCase().includes(query) ||
+      lambda.description.toLowerCase().includes(query) ||
+      lambda.language.toLowerCase().includes(query)
+    );
+  }, [lambdas, searchQuery]);
 
   return (
     <div 
@@ -206,18 +218,32 @@ export function LambdaPalette() {
 
       {/* Expandable Content */}
       <div 
-        className={`flex-1 min-h-0 overflow-hidden transition-all duration-300 ${
+        className={`flex-1 min-h-0 flex flex-col transition-all duration-300 ${
           isExpanded ? 'opacity-100' : 'opacity-0 h-0'
         }`}
       >
-        <div className="h-full overflow-y-auto px-4 pb-4">
-          <p className="text-xs text-gray-500 mb-3">
-            Drag lambdas onto Transformer nodes to add data transformation logic.
-          </p>
+        {/* Search Input */}
+        <div className="px-4 pb-2 flex-shrink-0">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
+            <input
+              type="text"
+              placeholder="Search lambdas..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 bg-norse-shadow border border-norse-rune rounded-lg text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500 focus:border-violet-500"
+            />
+          </div>
+        </div>
 
-          {/* Lambda List */}
+        <p className="text-xs text-gray-500 px-4 mb-2 flex-shrink-0">
+          Drag lambdas onto Transformer nodes to add data transformation logic.
+        </p>
+
+        {/* Lambda List - Scrollable */}
+        <div className="flex-1 overflow-y-auto px-4 pb-4">
           <div className="space-y-2">
-            {lambdas.map((lambda) => (
+            {filteredLambdas.map((lambda) => (
               <DraggableLambda
                 key={lambda.id}
                 lambda={lambda}
@@ -226,6 +252,13 @@ export function LambdaPalette() {
               />
             ))}
           </div>
+
+          {filteredLambdas.length === 0 && lambdas.length > 0 && (
+            <div className="text-center py-6 text-gray-500">
+              <Search className="w-10 h-10 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">No lambdas match "{searchQuery}"</p>
+            </div>
+          )}
 
           {lambdas.length === 0 && (
             <div className="text-center py-6 text-gray-500">

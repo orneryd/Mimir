@@ -114,10 +114,15 @@ export function ImportWorkflowModal({ isOpen, onClose }: ImportWorkflowModalProp
         }
       });
 
-      // Count lambdas
+      // Count lambdas (from explicit array + inline scripts on transformers)
       if (data.lambdas && Array.isArray(data.lambdas)) {
         lambdaCount = data.lambdas.length;
       }
+      // Also count inline lambdas from transformer tasks
+      const inlineLambdaCount = data.tasks.filter(
+        (t: any) => t.taskType === 'transformer' && t.lambdaScript
+      ).length;
+      lambdaCount += inlineLambdaCount;
 
       // Count parallel groups
       if (data.parallelGroups && Array.isArray(data.parallelGroups)) {
@@ -159,20 +164,64 @@ export function ImportWorkflowModal({ isOpen, onClose }: ImportWorkflowModalProp
       // Clear existing tasks
       clearTasks();
 
-      // Import lambdas first (so they're available for tasks)
+      // Import lambdas - merge explicit lambdas array with inline scripts from tasks
+      // Build a map of lambdaName -> script from transformer tasks
+      const inlineScripts = new Map<string, { script: string; language: string; title: string; description: string }>();
+      data.tasks.forEach(task => {
+        if (task.taskType === 'transformer' && task.lambdaScript) {
+          const key = task.lambdaName || task.id;
+          inlineScripts.set(key, {
+            script: task.lambdaScript,
+            language: task.lambdaLanguage || 'javascript',
+            title: task.title || task.lambdaName || task.id,
+            description: task.description || `Lambda for ${task.title || task.id}`,
+          });
+        }
+      });
+      
+      // Track which lambdas we've added (to avoid duplicates)
+      const addedLambdaIds = new Set<string>();
+      
+      // 1. From explicit lambdas array - merge with inline scripts if available
+      // Skip lambdas that have no script and no matching inline script (stale entries)
       if (data.lambdas && Array.isArray(data.lambdas)) {
         data.lambdas.forEach(lambda => {
+          const inline = inlineScripts.get(lambda.id);
+          const script = lambda.script || inline?.script || '';
+          
+          // Skip if no script available (stale lambda entry with no matching task)
+          if (!script) {
+            console.log(`Skipping lambda "${lambda.id}" - no script found`);
+            return;
+          }
+          
           addLambda({
             id: lambda.id,
             name: lambda.name,
-            description: lambda.description || '',
-            language: lambda.language || 'typescript',
-            script: lambda.script || '',
+            description: lambda.description || inline?.description || '',
+            language: lambda.language || inline?.language || 'javascript',
+            script,
             version: lambda.version || '1.0',
             created: lambda.created || new Date().toISOString(),
           });
+          addedLambdaIds.add(lambda.id);
         });
       }
+      
+      // 2. Add any inline lambdas not already in the lambdas array
+      inlineScripts.forEach((inline, key) => {
+        if (!addedLambdaIds.has(key)) {
+          addLambda({
+            id: key,
+            name: inline.title,
+            description: inline.description,
+            language: inline.language as 'javascript' | 'typescript' | 'python',
+            script: inline.script,
+            version: '1.0',
+            created: new Date().toISOString(),
+          });
+        }
+      });
 
       // Import agent templates if provided
       if (data.agentTemplates && Array.isArray(data.agentTemplates)) {
