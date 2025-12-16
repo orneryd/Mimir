@@ -613,7 +613,7 @@ export class GraphManager implements IGraphManager {
 
       // Create the node first
       const createResult = await session.run(
-        'CREATE (n:Node $props) RETURN n { .*, embedding: null }',
+        'CREATE (n:Node $props) RETURN n { .*, embedding: null } AS n',
         { props: nodeProps }
       );
 
@@ -721,7 +721,7 @@ export class GraphManager implements IGraphManager {
     const session = this.driver.session();
     try {
       const result = await session.run(
-        'MATCH (n:Node {id: $id}) RETURN n { .*, embedding: null }',
+        'MATCH (n:Node {id: $id}) RETURN n { .*, embedding: null } AS n',
         { id }
       );
 
@@ -806,7 +806,7 @@ export class GraphManager implements IGraphManager {
         `
         MATCH (n:Node {id: $id})
         SET n += $properties
-        RETURN n { .*, embedding: null }
+        RETURN n { .*, embedding: null } AS n
         `,
         { id, properties: setProperties }
       );
@@ -1023,7 +1023,7 @@ export class GraphManager implements IGraphManager {
         UNWIND $nodes as node
         CREATE (n:Node)
         SET n = node
-        RETURN n { .*, embedding: null }
+        RETURN n { .*, embedding: null } AS n
         `,
         { nodes: preparedNodes }
       );
@@ -1104,7 +1104,7 @@ export class GraphManager implements IGraphManager {
         UNWIND $updates as update
         MATCH (n:Node {id: update.id})
         SET n += update.properties
-        RETURN n { .*, embedding: null }
+        RETURN n { .*, embedding: null } AS n
         `,
         { updates: updatesWithTimestamp }
       );
@@ -1559,16 +1559,16 @@ export class GraphManager implements IGraphManager {
     // Handle map projection (plain object) vs node object (with .properties)
     const props = record.properties || record;
     
-    // Extract system properties
-    const { id, type, created, updated, ...userProperties } = props;
+    // Extract system properties and embedding (don't return embedding to clients)
+    const { id, type, created, updated, embedding, ...userProperties } = props;
     
-    // Note: embedding is already stripped at the database level in all queries
     // Keep metadata about embeddings (has_embedding, embedding_dimensions, embedding_model)
+    // but strip the actual embedding vector
     
     return {
       id,
       type,
-      properties: userProperties,  // All other properties (content already stripped at query level if needed)
+      properties: userProperties,
       created,
       updated
     };
@@ -1620,7 +1620,7 @@ export class GraphManager implements IGraphManager {
             n.lockedAt = $now,
             n.lockExpiresAt = $lockExpiresAt,
             n.version = COALESCE(n.version, 0) + 1
-        RETURN n { .*, embedding: null }
+        RETURN n { .*, embedding: null } AS n
         `,
         {
           nodeId,
@@ -1652,7 +1652,7 @@ export class GraphManager implements IGraphManager {
         MATCH (n:Node {id: $nodeId})
         WHERE n.lockedBy = $agentId
         REMOVE n.lockedBy, n.lockedAt, n.lockExpiresAt
-        RETURN n { .*, embedding: null }
+        RETURN n { .*, embedding: null } AS n
         `,
         { nodeId, agentId }
       );
